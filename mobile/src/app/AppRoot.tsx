@@ -1,15 +1,7 @@
 import { useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
-import {
-  CormorantGaramond_700Bold,
-  CormorantGaramond_700Bold_Italic,
-} from '@expo-google-fonts/cormorant-garamond';
-import {
-  SpaceGrotesk_400Regular,
-  SpaceGrotesk_500Medium,
-  SpaceGrotesk_600SemiBold,
-} from '@expo-google-fonts/space-grotesk';
+import { Sora_400Regular, Sora_500Medium, Sora_700Bold } from '@expo-google-fonts/sora';
 import { DarkTheme, NavigationContainer } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
 import { StatusBar } from 'expo-status-bar';
@@ -17,7 +9,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { Typography } from '../components/Typography';
 import { envValidation } from '../lib/env';
-import { colors } from '../lib/theme/tokens';
+import { colors } from '../theme/tokens';
 import { MissingEnvScreen } from '../screens/MissingEnvScreen';
 import { AuthGate } from './navigation/AuthGate';
 
@@ -25,11 +17,11 @@ const navigationTheme = {
   ...DarkTheme,
   colors: {
     ...DarkTheme.colors,
-    background: colors.backgroundTop,
-    border: colors.border,
-    card: colors.backgroundBottom,
+    background: colors.bgHomeEnd,
+    border: colors.borderSoft,
+    card: colors.bgHomeStart,
     notification: colors.danger,
-    primary: colors.auroraPrimary,
+    primary: colors.accentMintStart,
     text: colors.textPrimary,
   },
 };
@@ -37,18 +29,16 @@ const navigationTheme = {
 export function AppRoot() {
   const [continueWithoutOptionalEnv, setContinueWithoutOptionalEnv] = useState(false);
   const [fontsLoaded] = useFonts({
-    CormorantGaramond_700Bold,
-    CormorantGaramond_700Bold_Italic,
-    SpaceGrotesk_400Regular,
-    SpaceGrotesk_500Medium,
-    SpaceGrotesk_600SemiBold,
+    Sora_400Regular,
+    Sora_500Medium,
+    Sora_700Bold,
   });
 
   if (!fontsLoaded) {
     return (
       <View style={styles.loadingContainer}>
         <StatusBar style="light" />
-        <ActivityIndicator color={colors.auroraPrimary} size="large" />
+        <ActivityIndicator color={colors.accentMintStart} size="large" />
         <Typography color={colors.textSecondary}>Loading cosmic UI...</Typography>
       </View>
     );
@@ -83,7 +73,7 @@ export function AppRoot() {
 const styles = StyleSheet.create({
   loadingContainer: {
     alignItems: 'center',
-    backgroundColor: colors.backgroundTop,
+    backgroundColor: colors.bgHomeStart,
     flex: 1,
     gap: 12,
     justifyContent: 'center',

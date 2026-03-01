@@ -1,36 +1,93 @@
 import type { ReactNode } from 'react';
 import { Text, type TextProps } from 'react-native';
 
-import { colors, typography } from '../lib/theme/tokens';
+import { colors, typography } from '../theme/tokens';
 
-type TypographyVariant = 'hero' | 'title' | 'bodyLg' | 'body' | 'caption';
+type TypographyVariant =
+  | 'H1'
+  | 'H2'
+  | 'Body'
+  | 'Caption'
+  | 'Label'
+  | 'Metric'
+  | 'hero'
+  | 'title'
+  | 'bodyLg'
+  | 'body'
+  | 'caption';
+type TypographyWeight = 'regular' | 'medium' | 'bold' | 'semibold' | 'display';
 
 interface TypographyProps extends TextProps {
   children: ReactNode;
   color?: string;
   variant?: TypographyVariant;
-  weight?: 'regular' | 'semibold' | 'display';
+  weight?: TypographyWeight;
 }
 
 const variantStyleMap = {
-  hero: { fontSize: typography.size.hero, lineHeight: typography.lineHeight.hero },
-  title: { fontSize: typography.size.title, lineHeight: typography.lineHeight.title },
-  bodyLg: { fontSize: typography.size.bodyLg, lineHeight: typography.lineHeight.bodyLg },
-  body: { fontSize: typography.size.body, lineHeight: typography.lineHeight.body },
-  caption: { fontSize: typography.size.caption, lineHeight: typography.lineHeight.caption },
+  H1: {
+    fontSize: typography.size.h1,
+    letterSpacing: typography.tracking.tight,
+    lineHeight: typography.lineHeight.h1,
+  },
+  H2: {
+    fontSize: typography.size.h2,
+    lineHeight: typography.lineHeight.h2,
+  },
+  Body: {
+    fontSize: typography.size.body,
+    lineHeight: typography.lineHeight.body,
+  },
+  Caption: {
+    fontSize: typography.size.caption,
+    lineHeight: typography.lineHeight.caption,
+  },
+  Label: {
+    fontSize: typography.size.label,
+    letterSpacing: typography.tracking.wide,
+    lineHeight: typography.lineHeight.label,
+    textTransform: 'uppercase' as const,
+  },
+  Metric: {
+    fontSize: typography.size.metric,
+    lineHeight: typography.lineHeight.metric,
+  },
+  hero: {
+    fontSize: typography.size.h1,
+    letterSpacing: typography.tracking.tight,
+    lineHeight: typography.lineHeight.h1,
+  },
+  title: {
+    fontSize: typography.size.h2,
+    lineHeight: typography.lineHeight.h2,
+  },
+  bodyLg: {
+    fontSize: typography.size.bodyLg,
+    lineHeight: typography.lineHeight.bodyLg,
+  },
+  body: {
+    fontSize: typography.size.body,
+    lineHeight: typography.lineHeight.body,
+  },
+  caption: {
+    fontSize: typography.size.caption,
+    lineHeight: typography.lineHeight.caption,
+  },
 } as const;
 
 const weightStyleMap = {
-  regular: typography.family.body,
-  semibold: typography.family.bodySemibold,
-  display: typography.family.display,
+  regular: typography.family.regular,
+  medium: typography.family.medium,
+  bold: typography.family.bold,
+  semibold: typography.family.medium,
+  display: typography.family.bold,
 } as const;
 
 export function Typography({
   children,
   color = colors.textPrimary,
   style,
-  variant = 'body',
+  variant = 'Body',
   weight = 'regular',
   ...textProps
 }: TypographyProps) {

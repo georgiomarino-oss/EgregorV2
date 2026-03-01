@@ -1,6 +1,7 @@
-import ambientAnimation from '../../assets/lottie/cosmic-ambient.json';
+﻿import ambientAnimation from '../../assets/lottie/cosmic-ambient.json';
 import { useState } from 'react';
 import {
+  Image,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -9,12 +10,14 @@ import {
   View,
 } from 'react-native';
 
-import { AppButton } from '../components/Buttons';
+import logoV1 from '../../assets/brand/logo-v1.png';
+import { Button } from '../components/Button';
 import { CosmicBackground } from '../components/CosmicBackground';
 import { SurfaceCard } from '../components/SurfaceCard';
 import { Typography } from '../components/Typography';
 import { supabase } from '../lib/supabase';
-import { colors, radii, spacing, typography } from '../lib/theme/tokens';
+import { figmaV2Reference } from '../theme/figma-v2-reference';
+import { colors, radii, spacing, typography } from '../theme/tokens';
 
 type AuthMode = 'signIn' | 'signUp';
 
@@ -75,7 +78,7 @@ export function AuthScreen() {
   };
 
   return (
-    <CosmicBackground ambientSource={ambientAnimation}>
+    <CosmicBackground ambientSource={ambientAnimation} variant="auth">
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.keyboardAvoiding}
@@ -85,44 +88,35 @@ export function AuthScreen() {
           keyboardShouldPersistTaps="handled"
         >
           <View style={styles.header}>
-            <Typography variant="hero" weight="display">
-              Egregor v2
+            <Image resizeMode="contain" source={logoV1} style={styles.logo} />
+            <Typography variant="H1" weight="bold">
+              Enter the collective field
             </Typography>
-            <Typography color={colors.textSecondary} style={styles.subtitle}>
-              Gather intention. Share prayer. Manifest together.
+            <Typography color={colors.textSecondary} style={styles.subtitle} variant="Body">
+              Sign in to join live healing rooms and personalized solo rituals.
             </Typography>
           </View>
 
-          <SurfaceCard style={styles.card}>
-            <View style={styles.modeRow}>
-              <AppButton
-                onPress={() => setMode('signIn')}
-                title="Sign In"
-                variant={isSignIn ? 'primary' : 'secondary'}
-              />
-              <AppButton
-                onPress={() => setMode('signUp')}
-                title="Sign Up"
-                variant={isSignIn ? 'secondary' : 'primary'}
-              />
-            </View>
-
+          <SurfaceCard radius="xl" style={styles.card} variant="authForm">
             <View style={styles.form}>
+              <Typography variant="Label">Email</Typography>
               <TextInput
                 autoCapitalize="none"
                 autoComplete="email"
                 keyboardType="email-address"
                 onChangeText={setEmail}
-                placeholder="Email"
+                placeholder="you@example.com"
                 placeholderTextColor={colors.textSecondary}
                 style={styles.input}
                 value={email}
               />
+
+              <Typography variant="Label">Password</Typography>
               <TextInput
                 autoCapitalize="none"
                 autoComplete="password"
                 onChangeText={setPassword}
-                placeholder="Password"
+                placeholder="••••••••"
                 placeholderTextColor={colors.textSecondary}
                 secureTextEntry
                 style={styles.input}
@@ -130,17 +124,36 @@ export function AuthScreen() {
               />
             </View>
 
+            <View style={styles.modeRow}>
+              <SurfaceCard radius="sm" style={styles.modeCard} variant="homeStatSmall">
+                <Typography color={colors.textSecondary} variant="Label">
+                  Mode
+                </Typography>
+                <Typography variant="H2" weight="bold">
+                  {isSignIn ? 'Sign in' : 'Sign up'}
+                </Typography>
+              </SurfaceCard>
+              <SurfaceCard radius="sm" style={styles.modeCard} variant="homeStatSmall">
+                <Typography color={colors.textSecondary} variant="Label">
+                  State
+                </Typography>
+                <Typography variant="H2" weight="bold">
+                  {loading ? 'Working' : 'Ready'}
+                </Typography>
+              </SurfaceCard>
+            </View>
+
             {message ? (
-              <Typography color={colors.textSecondary} style={styles.message} variant="caption">
+              <Typography color={colors.textSecondary} style={styles.message} variant="Caption">
                 {message}
               </Typography>
             ) : null}
 
-            <AppButton
-              loading={loading}
-              onPress={onSubmit}
-              title={isSignIn ? 'Enter Circle' : 'Create Account'}
-              variant="primary"
+            <Button loading={loading} onPress={onSubmit} title={isSignIn ? 'Sign in' : 'Sign up'} />
+            <Button
+              onPress={() => setMode(isSignIn ? 'signUp' : 'signIn')}
+              title={isSignIn ? 'Create account' : 'Back to sign in'}
+              variant="secondary"
             />
           </SurfaceCard>
         </ScrollView>
@@ -154,27 +167,37 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   form: {
-    gap: spacing.sm,
-  },
-  header: {
     gap: spacing.xs,
   },
+  header: {
+    gap: spacing.sm,
+  },
   input: {
-    backgroundColor: 'rgba(14, 22, 48, 0.86)',
-    borderColor: colors.border,
+    backgroundColor: figmaV2Reference.inputs.auth.background,
+    borderColor: figmaV2Reference.inputs.auth.border,
     borderRadius: radii.sm,
     borderWidth: 1,
-    color: colors.textPrimary,
-    fontFamily: typography.family.body,
+    color: figmaV2Reference.inputs.auth.text,
+    fontFamily: typography.family.regular,
     fontSize: typography.size.body,
-    minHeight: 50,
+    minHeight: 42,
     paddingHorizontal: spacing.md,
   },
   keyboardAvoiding: {
     flex: 1,
   },
+  logo: {
+    height: 54,
+    marginBottom: spacing.xs,
+    width: 220,
+  },
   message: {
     paddingHorizontal: spacing.xs,
+  },
+  modeCard: {
+    flex: 1,
+    gap: spacing.xs,
+    paddingVertical: spacing.sm,
   },
   modeRow: {
     flexDirection: 'row',
@@ -183,9 +206,10 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     justifyContent: 'center',
-    padding: spacing.lg,
+    padding: spacing.xl,
+    paddingBottom: spacing.xxxl,
   },
   subtitle: {
-    maxWidth: 420,
+    maxWidth: 460,
   },
 });

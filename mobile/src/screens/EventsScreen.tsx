@@ -1,23 +1,73 @@
 ﻿import ambientAnimation from '../../assets/lottie/cosmic-ambient.json';
+import globeFallbackAnimation from '../../assets/lottie/globe-fallback.json';
 import { useEffect, useMemo, useState } from 'react';
+import { ScrollView, StyleSheet, View } from 'react-native';
 
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useNavigation } from '@react-navigation/native';
 import Constants from 'expo-constants';
 import * as Location from 'expo-location';
+import LottieView from 'lottie-react-native';
 
+import type { EventsStackParamList } from '../app/navigation/types';
+import { Button } from '../components/Button';
 import { CosmicBackground } from '../components/CosmicBackground';
+import { SurfaceCard } from '../components/SurfaceCard';
+import { Typography } from '../components/Typography';
 import { clientEnv } from '../lib/env';
-import { DevClientMapboxPlaceholder } from './events/DevClientMapboxPlaceholder';
-import { ExpoGoEventsFallback } from './events/ExpoGoEventsFallback';
-import { sampleEvents, samplePresenceUsers } from './events/data';
+import { colors, eventMarkerColors, spacing } from '../theme/tokens';
 import { loadMapboxModule } from './events/loadMapboxModule';
 
-interface MinimalCoords {
+type EventsNavigation = NativeStackNavigationProp<EventsStackParamList, 'EventsHome'>;
+
+interface EventItem {
+  id: string;
   latitude: number;
   longitude: number;
+  startsAt: string;
+  status: 'live' | 'scheduled';
+  title: string;
+}
+
+interface PresenceUser {
+  id: string;
+  latitude: number;
+  longitude: number;
+  name: string;
+}
+
+const sampleEvents: EventItem[] = [
+  {
+    id: 'event-1',
+    latitude: 40.4168,
+    longitude: -3.7038,
+    startsAt: 'Live now',
+    status: 'live',
+    title: 'Madrid - Emergency response room',
+  },
+  {
+    id: 'event-2',
+    latitude: 28.6139,
+    longitude: 77.209,
+    startsAt: 'Live in 11 min',
+    status: 'scheduled',
+    title: 'Delhi - Night calm wave',
+  },
+];
+
+const samplePresenceUsers: PresenceUser[] = [
+  { id: 'user-1', latitude: 52.52, longitude: 13.405, name: 'Mina' },
+  { id: 'user-2', latitude: -23.5505, longitude: -46.6333, name: 'Ravi' },
+  { id: 'user-3', latitude: 37.7749, longitude: -122.4194, name: 'Elena' },
+];
+
+function Dot({ color }: { color: string }) {
+  return <View style={[styles.dot, { backgroundColor: color }]} />;
 }
 
 export function EventsScreen() {
-  const [coords, setCoords] = useState<MinimalCoords | null>(null);
+  const navigation = useNavigation<EventsNavigation>();
+  const [coords, setCoords] = useState<{ latitude: number; longitude: number } | null>(null);
   const [locationMessage, setLocationMessage] = useState('Requesting GPS permission...');
 
   const isExpoGo =
@@ -25,6 +75,7 @@ export function EventsScreen() {
 
   const mapboxModule = useMemo(() => (isExpoGo ? null : loadMapboxModule()), [isExpoGo]);
   const hasMapboxToken = Boolean(clientEnv.mapboxToken);
+  const primaryEventId = sampleEvents[0]?.id;
 
   useEffect(() => {
     if (!mapboxModule || !clientEnv.mapboxToken) {
@@ -87,22 +138,142 @@ export function EventsScreen() {
   }, []);
 
   return (
-    <CosmicBackground ambientSource={ambientAnimation}>
-      {isExpoGo ? (
-        <ExpoGoEventsFallback
-          events={sampleEvents}
-          locationMessage={locationMessage}
-          presenceUsers={samplePresenceUsers}
-          userLocation={coords}
-        />
-      ) : (
-        <DevClientMapboxPlaceholder
-          events={sampleEvents}
-          hasMapboxModule={Boolean(mapboxModule)}
-          hasMapboxToken={hasMapboxToken}
-          presenceUsers={samplePresenceUsers}
-        />
-      )}
+    <CosmicBackground ambientSource={ambientAnimation} variant="events">
+      <ScrollView contentContainerStyle={styles.content}>
+        <Typography variant="H1" weight="bold">
+          Earth in prayer
+        </Typography>
+        <Typography color={eventMarkerColors.user}>{locationMessage}</Typography>
+        <Typography color={eventMarkerColors.user} variant="Caption">
+          {coords
+            ? `You: ${coords.latitude.toFixed(3)}, ${coords.longitude.toFixed(3)}`
+            : 'Your location is not available yet.'}
+        </Typography>
+
+        <SurfaceCard radius="xl" style={styles.section} variant="eventRoomCurrent">
+          <Typography color={eventMarkerColors.live} variant="Label">
+            Live Globe
+          </Typography>
+
+          {isExpoGo ? (
+            <View style={styles.globeWrap}>
+              <LottieView
+                autoPlay
+                loop
+                source={globeFallbackAnimation}
+                style={styles.globeAnimation}
+              />
+            </View>
+          ) : (
+            <SurfaceCard radius="md" style={styles.devCard}>
+              <Typography variant="Body">Dev build map hook ready.</Typography>
+              <Typography color={hasMapboxToken ? eventMarkerColors.user : eventMarkerColors.live}>
+                {`Mapbox token: ${hasMapboxToken ? 'configured' : 'missing'}`}
+              </Typography>
+              <Typography color={mapboxModule ? eventMarkerColors.user : eventMarkerColors.live}>
+                {`Mapbox module: ${mapboxModule ? 'loaded' : 'not loaded'}`}
+              </Typography>
+            </SurfaceCard>
+          )}
+
+          {sampleEvents.map((event) => (
+            <SurfaceCard key={event.id} radius="sm" style={styles.feedCard} variant="homeAlert">
+              <View style={styles.eventRow}>
+                <View style={styles.rowLead}>
+                  <Dot
+                    color={
+                      event.status === 'live' ? eventMarkerColors.live : eventMarkerColors.scheduled
+                    }
+                  />
+                  <Typography variant="H2" weight="bold">
+                    {event.title}
+                  </Typography>
+                </View>
+                <Typography color={colors.textSecondary} variant="Caption">
+                  {event.startsAt}
+                </Typography>
+              </View>
+            </SurfaceCard>
+          ))}
+
+          <View style={styles.row}>
+            <Dot color={eventMarkerColors.live} />
+            <Typography variant="Caption">Live events</Typography>
+            <Dot color={eventMarkerColors.scheduled} />
+            <Typography variant="Caption">Scheduled</Typography>
+            <Dot color={eventMarkerColors.user} />
+            <Typography variant="Caption">Users</Typography>
+          </View>
+
+          <Button
+            onPress={() => {
+              if (primaryEventId) {
+                navigation.navigate('EventDetails', { eventId: primaryEventId });
+                return;
+              }
+
+              navigation.navigate('EventDetails');
+            }}
+            title="Open map event timeline"
+            variant="primary"
+          />
+
+          {samplePresenceUsers.map((user) => (
+            <Typography color={eventMarkerColors.user} key={user.id} variant="Caption">
+              {`USER • ${user.name} (${user.latitude.toFixed(2)}, ${user.longitude.toFixed(2)})`}
+            </Typography>
+          ))}
+        </SurfaceCard>
+      </ScrollView>
     </CosmicBackground>
   );
 }
+
+const styles = StyleSheet.create({
+  content: {
+    gap: spacing.sm,
+    padding: spacing.xl,
+    paddingBottom: spacing.xxxl,
+  },
+  devCard: {
+    gap: spacing.xs,
+  },
+  dot: {
+    borderRadius: 999,
+    height: 10,
+    width: 10,
+  },
+  eventRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    justifyContent: 'space-between',
+  },
+  feedCard: {
+    gap: spacing.xs,
+    paddingVertical: spacing.sm,
+  },
+  globeAnimation: {
+    height: 232,
+    width: '100%',
+  },
+  globeWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 232,
+  },
+  row: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+  },
+  rowLead: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexShrink: 1,
+    gap: spacing.xs,
+  },
+  section: {
+    gap: spacing.sm,
+  },
+});

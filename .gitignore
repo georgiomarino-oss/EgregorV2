@@ -4,6 +4,7 @@
 # Expo
 mobile/.expo/
 mobile/dist/
+supabase/.temp/
 
 # Environment files (never commit secrets)
 **/.env

@@ -4,17 +4,18 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 
 import type { User } from '@supabase/supabase-js';
 
-import { AppButton } from '../components/Buttons';
+import { Button } from '../components/Button';
 import { CosmicBackground } from '../components/CosmicBackground';
 import { SurfaceCard } from '../components/SurfaceCard';
 import { Typography } from '../components/Typography';
 import { supabase } from '../lib/supabase';
-import { colors, spacing } from '../lib/theme/tokens';
+import { colors, spacing } from '../theme/tokens';
 
 const placeholderStats = [
-  { label: 'Current streak', value: '3 days' },
-  { label: 'Minutes prayed', value: '148 min' },
-  { label: 'Events joined', value: '5' },
+  { label: 'Circle members', value: '29' },
+  { label: 'Event rooms joined this week', value: '16' },
+  { label: 'Solo completion streak', value: '5 days' },
+  { label: 'High contrast mode', value: 'On' },
 ] as const;
 
 export function ProfileScreen() {
@@ -68,55 +69,42 @@ export function ProfileScreen() {
   };
 
   return (
-    <CosmicBackground ambientSource={ambientAnimation}>
+    <CosmicBackground ambientSource={ambientAnimation} variant="profile">
       <ScrollView contentContainerStyle={styles.content}>
-        <Typography variant="hero" weight="display">
-          Profile
+        <Typography variant="H1" weight="bold">
+          Trust and progress
         </Typography>
         <Typography color={colors.textSecondary}>
-          MVP recommendation: progress metrics + preferences + privacy controls + sign out.
+          Profile doubles as retention center: progress, connection, and easy controls.
         </Typography>
 
-        <SurfaceCard style={styles.section}>
-          <Typography variant="title" weight="display">
-            Account
+        <SurfaceCard radius="xl" style={styles.section} variant="profileImpact">
+          <Typography variant="Metric" weight="bold">
+            +38%
           </Typography>
-          <Typography
-            color={colors.textSecondary}
-          >{`Email: ${user?.email ?? 'Loading...'}`}</Typography>
+          <Typography color={colors.textSecondary} variant="Label">
+            Weekly collective impact change
+          </Typography>
+          <Button onPress={() => null} title="Edit ritual and accessibility" variant="sky" />
+          <Typography color={colors.textSecondary} variant="Caption">
+            {`Account: ${user?.email ?? 'Loading...'}`}
+          </Typography>
         </SurfaceCard>
 
-        <SurfaceCard style={styles.section}>
-          <Typography variant="title" weight="display">
-            Progress Snapshot
-          </Typography>
+        <View style={styles.statsList}>
           {placeholderStats.map((item) => (
-            <View key={item.label} style={styles.statRow}>
-              <Typography color={colors.textSecondary}>{item.label}</Typography>
-              <Typography weight="semibold">{item.value}</Typography>
-            </View>
+            <SurfaceCard key={item.label} radius="sm" style={styles.statRow} variant="profileRow">
+              <Typography variant="Body">{item.label}</Typography>
+              <Typography variant="Body" weight="bold">
+                {item.value}
+              </Typography>
+            </SurfaceCard>
           ))}
-        </SurfaceCard>
+        </View>
 
-        <SurfaceCard style={styles.section}>
-          <Typography variant="title" weight="display">
-            Preferences (Placeholder)
-          </Typography>
-          <Typography color={colors.textSecondary}>Voice: Calm Guide</Typography>
-          <Typography color={colors.textSecondary}>
-            Accessibility: Larger captions + reduced motion
-          </Typography>
-          <Typography color={colors.textSecondary}>
-            Privacy: Presence visible only during joined events
-          </Typography>
-          {error ? <Typography color={colors.danger}>{error}</Typography> : null}
-          <AppButton
-            loading={loadingSignOut}
-            onPress={onSignOut}
-            title="Sign Out"
-            variant="secondary"
-          />
-        </SurfaceCard>
+        {error ? <Typography color={colors.danger}>{error}</Typography> : null}
+
+        <Button loading={loadingSignOut} onPress={onSignOut} title="Sign out" variant="secondary" />
       </ScrollView>
     </CosmicBackground>
   );
@@ -125,8 +113,8 @@ export function ProfileScreen() {
 const styles = StyleSheet.create({
   content: {
     gap: spacing.md,
-    padding: spacing.lg,
-    paddingBottom: spacing.xxl,
+    padding: spacing.xl,
+    paddingBottom: spacing.xxxl,
   },
   section: {
     gap: spacing.sm,
@@ -135,5 +123,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
+    paddingVertical: spacing.sm,
+  },
+  statsList: {
+    gap: spacing.xs,
   },
 });

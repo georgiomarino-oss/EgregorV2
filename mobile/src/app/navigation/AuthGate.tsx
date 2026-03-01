@@ -5,7 +5,7 @@ import type { Session } from '@supabase/supabase-js';
 
 import { Typography } from '../../components/Typography';
 import { supabase } from '../../lib/supabase';
-import { colors } from '../../lib/theme/tokens';
+import { colors } from '../../theme/tokens';
 import { RootNavigator } from './RootNavigator';
 
 export function AuthGate() {
@@ -47,7 +47,7 @@ export function AuthGate() {
   if (initializing) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator color={colors.auroraPrimary} size="large" />
+        <ActivityIndicator color={colors.accentMintStart} size="large" />
         <Typography style={styles.loadingText}>Syncing your circle...</Typography>
       </View>
     );
@@ -59,7 +59,7 @@ export function AuthGate() {
 const styles = StyleSheet.create({
   loadingContainer: {
     alignItems: 'center',
-    backgroundColor: colors.backgroundTop,
+    backgroundColor: colors.bgHomeStart,
     flex: 1,
     gap: 12,
     justifyContent: 'center',

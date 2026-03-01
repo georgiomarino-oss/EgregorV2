@@ -1,57 +1,81 @@
-import ambientAnimation from '../../assets/lottie/cosmic-ambient.json';
+﻿import ambientAnimation from '../../assets/lottie/cosmic-ambient.json';
 import { ScrollView, StyleSheet, View } from 'react-native';
 
-import { AppButton } from '../components/Buttons';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+
+import type { CommunityStackParamList } from '../app/navigation/types';
+import { Button } from '../components/Button';
 import { CosmicBackground } from '../components/CosmicBackground';
 import { SurfaceCard } from '../components/SurfaceCard';
 import { Typography } from '../components/Typography';
-import { colors, spacing } from '../lib/theme/tokens';
+import { colors, spacing } from '../theme/tokens';
 
-const discoveryItems = [
-  'Nearby circles: groups within 50km with active hosts',
-  'Open rooms: join live manifestation sessions in one tap',
-  'Light feed: short text updates, event invites, and gratitude posts',
-] as const;
+type CommunityNavigation = NativeStackNavigationProp<CommunityStackParamList, 'CommunityHome'>;
 
 export function CommunityScreen() {
+  const navigation = useNavigation<CommunityNavigation>();
+
   return (
-    <CosmicBackground ambientSource={ambientAnimation}>
+    <CosmicBackground ambientSource={ambientAnimation} variant="home">
       <ScrollView contentContainerStyle={styles.content}>
-        <Typography variant="hero" weight="display">
-          Community
+        <Typography variant="H1" weight="bold">
+          Global pulse
         </Typography>
         <Typography color={colors.textSecondary}>
-          MVP recommendation: circles + lightweight feed + room discovery to boost participation.
+          Live awareness feed with fast path into active healing rooms.
         </Typography>
 
-        <SurfaceCard style={styles.section}>
-          <Typography variant="title" weight="display">
-            MVP Blueprint
+        <SurfaceCard radius="xl" style={styles.section} variant="homeStat">
+          <Typography variant="Metric" weight="bold">
+            1,942
           </Typography>
-          {discoveryItems.map((item) => (
-            <Typography key={item} color={colors.textSecondary}>
-              {`- ${item}`}
-            </Typography>
-          ))}
+          <Typography color={colors.textSecondary} variant="Label">
+            Active participants in this hour
+          </Typography>
+
+          <View style={styles.row}>
+            <SurfaceCard radius="md" style={styles.metricCard} variant="homeStatSmall">
+              <Typography color={colors.textSecondary} variant="Label">
+                Live events
+              </Typography>
+              <Typography variant="H2" weight="bold">
+                14
+              </Typography>
+            </SurfaceCard>
+            <SurfaceCard radius="md" style={styles.metricCard} variant="homeStatSmall">
+              <Typography color={colors.textSecondary} variant="Label">
+                Countries
+              </Typography>
+              <Typography variant="H2" weight="bold">
+                31
+              </Typography>
+            </SurfaceCard>
+          </View>
+
+          <Button
+            onPress={() => navigation.navigate('CommunityHome')}
+            title="Join strongest live room"
+            variant="primary"
+          />
         </SurfaceCard>
 
-        <SurfaceCard style={styles.section}>
-          <Typography variant="title" weight="display">
-            Suggested Data Model
+        <SurfaceCard radius="sm" style={styles.feedCard} variant="homeAlert">
+          <Typography variant="H2" weight="bold">
+            Fast rise detected: Lisbon flood response
           </Typography>
-          <View style={styles.codeBlock}>
-            <Typography variant="caption">circles(id, name, geo, privacy, host_id)</Typography>
-            <Typography variant="caption">circle_members(circle_id, user_id, role)</Typography>
-            <Typography variant="caption">
-              posts(id, circle_id, user_id, body, created_at)
-            </Typography>
-            <Typography variant="caption">rooms(id, circle_id, status, starts_at)</Typography>
-          </View>
-          <AppButton
-            onPress={() => null}
-            title="Join Open Room (Placeholder)"
-            variant="secondary"
-          />
+          <Typography color={colors.textSecondary}>
+            +83 joins in 5 min. Estimated coherence window: now
+          </Typography>
+        </SurfaceCard>
+
+        <SurfaceCard radius="sm" style={styles.feedCard} variant="homeAlert">
+          <Typography variant="H2" weight="bold">
+            Your circle room opens in 9 min
+          </Typography>
+          <Typography color={colors.textSecondary}>
+            24 waiting. You are host in this session.
+          </Typography>
         </SurfaceCard>
       </ScrollView>
     </CosmicBackground>
@@ -59,16 +83,21 @@ export function CommunityScreen() {
 }
 
 const styles = StyleSheet.create({
-  codeBlock: {
-    backgroundColor: 'rgba(7, 13, 29, 0.88)',
-    borderRadius: 12,
-    gap: spacing.xs,
-    padding: spacing.md,
-  },
   content: {
     gap: spacing.md,
-    padding: spacing.lg,
-    paddingBottom: spacing.xxl,
+    padding: spacing.xl,
+    paddingBottom: spacing.xxxl,
+  },
+  feedCard: {
+    gap: spacing.xs,
+  },
+  metricCard: {
+    flex: 1,
+    gap: spacing.xs,
+  },
+  row: {
+    flexDirection: 'row',
+    gap: spacing.sm,
   },
   section: {
     gap: spacing.sm,

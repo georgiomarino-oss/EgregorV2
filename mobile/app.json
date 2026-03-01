@@ -44,7 +44,9 @@
           "locationWhenInUsePermission": "Allow Egregor to show nearby prayer events and presence on the map."
         }
       ],
-      "expo-font"
+      "expo-font",
+      "expo-audio",
+      "expo-asset"
     ],
     "extra": {
       "eas": {

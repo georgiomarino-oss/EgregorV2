@@ -1,11 +1,11 @@
-import ambientAnimation from '../../assets/lottie/cosmic-ambient.json';
+﻿import ambientAnimation from '../../assets/lottie/cosmic-ambient.json';
 import { ScrollView, StyleSheet } from 'react-native';
 
-import { AppButton } from '../components/Buttons';
+import { Button } from '../components/Button';
 import { CosmicBackground } from '../components/CosmicBackground';
 import { SurfaceCard } from '../components/SurfaceCard';
 import { Typography } from '../components/Typography';
-import { colors, spacing } from '../lib/theme/tokens';
+import { colors, spacing } from '../theme/tokens';
 
 interface MissingEnvScreenProps {
   missingOptional: string[];
@@ -21,9 +21,9 @@ export function MissingEnvScreen({
   const hasBlockingIssues = missingRequired.length > 0;
 
   return (
-    <CosmicBackground ambientSource={ambientAnimation}>
+    <CosmicBackground ambientSource={ambientAnimation} variant="auth">
       <ScrollView contentContainerStyle={styles.content}>
-        <Typography variant="hero" weight="display">
+        <Typography variant="H1" weight="bold">
           Missing Environment Values
         </Typography>
         <Typography color={colors.textSecondary}>
@@ -31,7 +31,7 @@ export function MissingEnvScreen({
         </Typography>
 
         <SurfaceCard style={styles.section}>
-          <Typography variant="title" weight="display">
+          <Typography variant="H2" weight="bold">
             Required
           </Typography>
           {missingRequired.length > 0 ? (
@@ -46,7 +46,7 @@ export function MissingEnvScreen({
         </SurfaceCard>
 
         <SurfaceCard style={styles.section}>
-          <Typography variant="title" weight="display">
+          <Typography variant="H2" weight="bold">
             Optional For Expo Go
           </Typography>
           {missingOptional.length > 0 ? (
@@ -56,7 +56,7 @@ export function MissingEnvScreen({
                   {`- ${envKey}`}
                 </Typography>
               ))}
-              <Typography color={colors.textSecondary} variant="caption">
+              <Typography color={colors.textSecondary} variant="Caption">
                 You can continue without optional values in Expo Go fallback mode.
               </Typography>
             </>
@@ -70,7 +70,7 @@ export function MissingEnvScreen({
             Add values to `mobile/.env`, restart Metro, and relaunch the app.
           </Typography>
           {!hasBlockingIssues && missingOptional.length > 0 && onContinueWithoutOptional ? (
-            <AppButton
+            <Button
               onPress={onContinueWithoutOptional}
               title="Continue In Fallback Mode"
               variant="secondary"
@@ -85,8 +85,8 @@ export function MissingEnvScreen({
 const styles = StyleSheet.create({
   content: {
     gap: spacing.md,
-    padding: spacing.lg,
-    paddingBottom: spacing.xxl,
+    padding: spacing.xl,
+    paddingBottom: spacing.xxxl,
   },
   section: {
     gap: spacing.sm,
