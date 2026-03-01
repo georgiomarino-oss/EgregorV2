@@ -2,35 +2,30 @@ import type { ReactNode } from 'react';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import { LinearGradient } from 'expo-linear-gradient';
-import LottieView, { type AnimationObject } from 'lottie-react-native';
 import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
 
 import { cssAngleToLinearPoints } from '../theme/gradient';
-import { figmaV2Reference, type FigmaGradientLayerRecipe } from '../theme/figma-v2-reference';
+import { figmaV2Backgrounds, type BackgroundRecipe } from '../theme/figmaV2Backgrounds';
 
 type CosmicBackgroundVariant = 'auth' | 'home' | 'solo' | 'events' | 'profile';
 
 interface CosmicBackgroundProps {
-  ambientSource?: AnimationObject | { uri: string } | string;
+  ambientSource?: unknown;
   children: ReactNode;
   contentStyle?: StyleProp<ViewStyle>;
   useAmbient?: boolean;
   variant?: CosmicBackgroundVariant;
 }
 
-const recipeByVariant: Record<CosmicBackgroundVariant, FigmaGradientLayerRecipe> = {
-  auth: figmaV2Reference.backgrounds.auth,
-  events: figmaV2Reference.backgrounds.events,
-  home: figmaV2Reference.backgrounds.home,
-  profile: figmaV2Reference.backgrounds.profile,
-  solo: figmaV2Reference.backgrounds.solo,
+const recipeByVariant: Record<CosmicBackgroundVariant, BackgroundRecipe> = {
+  auth: figmaV2Backgrounds.auth,
+  events: figmaV2Backgrounds.events,
+  home: figmaV2Backgrounds.home,
+  profile: figmaV2Backgrounds.profile,
+  solo: figmaV2Backgrounds.solo,
 };
 
-function RadialLayer({ recipe, variant }: { recipe: FigmaGradientLayerRecipe; variant: string }) {
-  if (!recipe.radials?.length) {
-    return null;
-  }
-
+function RadialLayer({ recipe, variant }: { recipe: BackgroundRecipe; variant: string }) {
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
       <Svg height="100%" preserveAspectRatio="none" viewBox="0 0 605.34 806" width="100%">
@@ -75,34 +70,26 @@ function RadialLayer({ recipe, variant }: { recipe: FigmaGradientLayerRecipe; va
 }
 
 export function CosmicBackground({
-  ambientSource,
+  ambientSource: _ambientSource,
   children,
   contentStyle,
-  useAmbient = true,
+  useAmbient: _useAmbient = true,
   variant = 'home',
 }: CosmicBackgroundProps) {
   const recipe = recipeByVariant[variant];
-  const linearPoints = recipe.linear
-    ? cssAngleToLinearPoints(recipe.linear.angleDeg)
-    : cssAngleToLinearPoints(180);
+  const linearPoints = cssAngleToLinearPoints(recipe.linear.angleDeg);
 
   return (
     <View style={styles.container}>
       <LinearGradient
-        colors={recipe.linear?.colors ?? figmaV2Reference.backgrounds.home.linear.colors}
+        colors={recipe.linear.colors}
         end={linearPoints.end}
-        locations={recipe.linear?.locations ?? figmaV2Reference.backgrounds.home.linear.locations}
+        locations={recipe.linear.locations}
         start={linearPoints.start}
         style={StyleSheet.absoluteFill}
       />
 
       <RadialLayer recipe={recipe} variant={variant} />
-
-      {useAmbient && ambientSource ? (
-        <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-          <LottieView autoPlay loop source={ambientSource} style={styles.ambient} />
-        </View>
-      ) : null}
 
       <View style={[styles.content, contentStyle]}>{children}</View>
     </View>
@@ -110,10 +97,6 @@ export function CosmicBackground({
 }
 
 const styles = StyleSheet.create({
-  ambient: {
-    flex: 1,
-    opacity: 0.15,
-  },
   container: {
     flex: 1,
   },

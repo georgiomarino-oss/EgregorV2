@@ -45,7 +45,7 @@ export const figmaV2Reference = {
     auth: {
       linear: {
         angleDeg: 177.33781696089176,
-        colors: ['rgb(18, 39, 68)', 'rgb(11, 23, 49)'],
+        colors: ['#122744', '#0B1731'],
         locations: [0.016282, 0.98372],
       },
       radials: [
@@ -62,7 +62,7 @@ export const figmaV2Reference = {
     home: {
       linear: {
         angleDeg: 177.3378032907102,
-        colors: ['rgb(8, 23, 41)', 'rgb(6, 18, 34)'],
+        colors: ['#081729', '#061222'],
         locations: [0.016282, 0.98372],
       },
       radials: [
@@ -79,7 +79,7 @@ export const figmaV2Reference = {
     profile: {
       linear: {
         angleDeg: 177.33785823862775,
-        colors: ['rgb(19, 36, 66)', 'rgb(11, 23, 49)'],
+        colors: ['#132442', '#0B1731'],
         locations: [0.016282, 0.98372],
       },
       radials: [
@@ -95,16 +95,16 @@ export const figmaV2Reference = {
     },
     events: {
       linear: {
-        angleDeg: 177.33785823862775,
-        colors: ['rgb(21, 29, 52)', 'rgb(16, 23, 41)'],
+        angleDeg: 177.3378032907102,
+        colors: ['#081729', '#061222'],
         locations: [0.016282, 0.98372],
       },
       radials: [
         {
-          matrix: 'matrix(0 -22 -26 0 484.27 -32.24)',
+          matrix: 'matrix(0 -22 -26 0 108.96 -48.36)',
           stops: [
-            { color: 'rgba(255,204,129,0.2)', offset: 0 },
-            { color: 'rgba(128,102,65,0.1)', offset: 0.325 },
+            { color: 'rgba(124,215,255,0.12)', offset: 0 },
+            { color: 'rgba(62,108,128,0.06)', offset: 0.325 },
             { color: 'rgba(0,0,0,0)', offset: 0.65 },
           ],
         },
@@ -112,17 +112,17 @@ export const figmaV2Reference = {
     },
     solo: {
       linear: {
-        angleDeg: 177.3378032907102,
-        colors: ['rgb(17, 31, 49)', 'rgb(10, 23, 37)'],
+        angleDeg: 177.33781696089176,
+        colors: ['#122744', '#0B1731'],
         locations: [0.016282, 0.98372],
       },
       radials: [
         {
-          matrix: 'matrix(0 -22 -26 0 302.66 -32.24)',
+          matrix: 'matrix(0 -22 -30 0 108.96 -64.48)',
           stops: [
-            { color: 'rgba(255,220,164,0.19)', offset: 0 },
-            { color: 'rgba(128,110,82,0.095)', offset: 0.325 },
-            { color: 'rgba(0,0,0,0)', offset: 0.65 },
+            { color: 'rgba(121,175,233,0.2)', offset: 0 },
+            { color: 'rgba(61,88,117,0.1)', offset: 0.31 },
+            { color: 'rgba(0,0,0,0)', offset: 0.62 },
           ],
         },
       ],
@@ -132,20 +132,20 @@ export const figmaV2Reference = {
     default: {
       backgroundColor: 'rgba(12,34,50,0.88)',
       borderColor: 'rgba(118,156,186,0.64)',
-      borderWidth: 0.8,
+      borderWidth: 1,
     },
     authForm: {
       borderColor: 'rgba(118,156,186,0.64)',
-      borderWidth: 0.8,
+      borderWidth: 1,
       layer: {
         linear: {
-          angleDeg: 170.50171749685236,
+          angleDeg: 173.3227285078803,
           colors: ['rgba(17, 43, 64, 0.96)', 'rgba(10, 30, 46, 0.98)'],
           locations: [0.07735, 0.92265],
         },
         radials: [
           {
-            matrix: 'matrix(0 -22 -38 0 452.26 -70.6)',
+            matrix: 'matrix(0 -22 -38 0 452.26 -49.4)',
             stops: [
               { color: 'rgba(116,209,244,0.1)', offset: 0 },
               { color: 'rgba(0,0,0,0)', offset: 0.7 },
@@ -156,7 +156,7 @@ export const figmaV2Reference = {
     },
     homeStatCard: {
       borderColor: 'rgba(102,141,171,0.55)',
-      borderWidth: 0.8,
+      borderWidth: 1,
       layer: {
         linear: {
           angleDeg: 173.9814294516185,
@@ -177,16 +177,16 @@ export const figmaV2Reference = {
     homeStatSmall: {
       backgroundColor: 'rgba(12,37,55,0.86)',
       borderColor: 'rgba(112,148,176,0.56)',
-      borderWidth: 0.8,
+      borderWidth: 1,
     },
     homeAlert: {
       backgroundColor: 'rgba(12,34,50,0.88)',
       borderColor: 'rgba(118,156,186,0.64)',
-      borderWidth: 0.8,
+      borderWidth: 1,
     },
     profileImpactCard: {
       borderColor: 'rgba(102,141,171,0.55)',
-      borderWidth: 0.8,
+      borderWidth: 1,
       layer: {
         linear: {
           angleDeg: 176.03890916724248,
@@ -207,7 +207,27 @@ export const figmaV2Reference = {
     profileRow: {
       backgroundColor: 'rgba(11,36,56,0.85)',
       borderColor: 'rgba(124,153,180,0.65)',
-      borderWidth: 0.8,
+      borderWidth: 1,
+    },
+    eventsPanel: {
+      borderColor: 'rgba(108,148,176,0.58)',
+      borderWidth: 1,
+      layer: {
+        linear: {
+          angleDeg: 171.79904949717775,
+          colors: ['rgba(15, 37, 57, 0.98)', 'rgba(9, 27, 41, 0.98)'],
+          locations: [0.061733, 0.93827],
+        },
+        radials: [
+          {
+            matrix: 'matrix(0 -24 -32 0 282.87 36.992)',
+            stops: [
+              { color: 'rgba(108,209,255,0.1)', offset: 0 },
+              { color: 'rgba(0,0,0,0)', offset: 0.68 },
+            ],
+          },
+        ],
+      },
     },
     eventRoomCurrent: {
       borderColor: 'rgba(111,148,176,0.62)',

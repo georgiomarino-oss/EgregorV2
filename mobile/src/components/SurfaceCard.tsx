@@ -20,6 +20,7 @@ interface SurfaceCardProps extends ViewProps {
     | 'homeAlert'
     | 'profileImpact'
     | 'profileRow'
+    | 'eventsPanel'
     | 'eventRoomCurrent';
 }
 
@@ -39,6 +40,7 @@ const toneMap = {
 const surfaceRecipeMap = {
   authForm: figmaV2Reference.surfaces.authForm,
   default: figmaV2Reference.surfaces.default,
+  eventsPanel: figmaV2Reference.surfaces.eventsPanel,
   eventRoomCurrent: figmaV2Reference.surfaces.eventRoomCurrent,
   homeAlert: figmaV2Reference.surfaces.homeAlert,
   homeStat: figmaV2Reference.surfaces.homeStatCard,

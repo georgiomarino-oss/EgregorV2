@@ -7,12 +7,12 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
-// CSS/Figma linear-gradient angle:
-// 0deg = top, 90deg = right, 180deg = bottom, 270deg = left.
+// CSS/Figma mapping:
+// 90deg = left -> right, 180deg = top -> bottom.
 export function cssAngleToLinearPoints(angleDeg: number): LinearGradientPoints {
-  const radians = (angleDeg * Math.PI) / 180;
-  const vectorX = Math.sin(radians);
-  const vectorY = -Math.cos(radians);
+  const radians = ((angleDeg - 90) * Math.PI) / 180;
+  const vectorX = Math.cos(radians);
+  const vectorY = Math.sin(radians);
 
   const start = {
     x: clamp(0.5 - vectorX / 2, 0, 1),

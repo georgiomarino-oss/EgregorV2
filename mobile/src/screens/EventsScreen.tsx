@@ -138,7 +138,7 @@ export function EventsScreen() {
   }, []);
 
   return (
-    <CosmicBackground ambientSource={ambientAnimation} variant="events">
+    <CosmicBackground ambientSource={ambientAnimation} variant="home">
       <ScrollView contentContainerStyle={styles.content}>
         <Typography variant="H1" weight="bold">
           Earth in prayer
@@ -150,7 +150,7 @@ export function EventsScreen() {
             : 'Your location is not available yet.'}
         </Typography>
 
-        <SurfaceCard radius="xl" style={styles.section} variant="eventRoomCurrent">
+        <SurfaceCard radius="xl" style={styles.section} variant="eventsPanel">
           <Typography color={eventMarkerColors.live} variant="Label">
             Live Globe
           </Typography>

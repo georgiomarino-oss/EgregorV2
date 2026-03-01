@@ -1,20 +1,21 @@
 import { Platform } from 'react-native';
 
 import { figmaV2Reference } from './figma-v2-reference';
+import { figmaV2Backgrounds } from './figmaV2Backgrounds';
 
 export const colors = {
-  bgAuthStart: figmaV2Reference.backgrounds.auth.linear.colors[0],
-  bgAuthEnd: figmaV2Reference.backgrounds.auth.linear.colors[1],
-  bgHomeStart: figmaV2Reference.backgrounds.home.linear.colors[0],
-  bgHomeEnd: figmaV2Reference.backgrounds.home.linear.colors[1],
-  bgSoloStart: figmaV2Reference.backgrounds.solo.linear.colors[0],
-  bgSoloEnd: figmaV2Reference.backgrounds.solo.linear.colors[1],
-  bgEventsStart: figmaV2Reference.backgrounds.events.linear.colors[0],
-  bgEventsEnd: figmaV2Reference.backgrounds.events.linear.colors[1],
-  bgProfileStart: figmaV2Reference.backgrounds.profile.linear.colors[0],
-  bgProfileEnd: figmaV2Reference.backgrounds.profile.linear.colors[1],
-  glowCyan: figmaV2Reference.backgrounds.home.radials[0].stops[0].color,
-  glowGold: figmaV2Reference.backgrounds.events.radials[0].stops[0].color,
+  bgAuthStart: figmaV2Backgrounds.auth.linear.colors[0],
+  bgAuthEnd: figmaV2Backgrounds.auth.linear.colors[1],
+  bgHomeStart: figmaV2Backgrounds.home.linear.colors[0],
+  bgHomeEnd: figmaV2Backgrounds.home.linear.colors[1],
+  bgSoloStart: figmaV2Backgrounds.solo.linear.colors[0],
+  bgSoloEnd: figmaV2Backgrounds.solo.linear.colors[1],
+  bgEventsStart: figmaV2Backgrounds.events.linear.colors[0],
+  bgEventsEnd: figmaV2Backgrounds.events.linear.colors[1],
+  bgProfileStart: figmaV2Backgrounds.profile.linear.colors[0],
+  bgProfileEnd: figmaV2Backgrounds.profile.linear.colors[1],
+  glowCyan: 'rgba(124,215,255,0.12)',
+  glowGold: 'rgba(124,215,255,0.12)',
   textPrimary: figmaV2Reference.text.heading,
   textSecondary: figmaV2Reference.text.body,
   textMuted: figmaV2Reference.text.muted,

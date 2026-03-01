@@ -43,7 +43,7 @@ export function SoloScreen() {
           />
 
           <View style={styles.row}>
-            <SurfaceCard radius="sm" style={styles.metaCard} variant="homeStatSmall">
+            <SurfaceCard radius="sm" style={styles.metaCard} variant="homeAlert">
               <Typography color={colors.textSecondary} variant="Label">
                 Focus
               </Typography>
@@ -51,7 +51,7 @@ export function SoloScreen() {
                 Healing
               </Typography>
             </SurfaceCard>
-            <SurfaceCard radius="sm" style={styles.metaCard} variant="homeStatSmall">
+            <SurfaceCard radius="sm" style={styles.metaCard} variant="homeAlert">
               <Typography color={colors.textSecondary} variant="Label">
                 Duration
               </Typography>
