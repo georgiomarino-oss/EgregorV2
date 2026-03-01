@@ -1,0 +1,7 @@
+project_id = "egregor-v2"
+
+[functions.generate-prayer-script]
+verify_jwt = true
+
+[functions.generate-prayer-audio]
+verify_jwt = true
