@@ -25,8 +25,14 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "permissions": ["ACCESS_COARSE_LOCATION", "ACCESS_FINE_LOCATION"],
-      "predictiveBackGestureEnabled": false
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ],
+      "predictiveBackGestureEnabled": false,
+      "package": "com.egregor.egregorv2"
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -39,6 +45,11 @@
         }
       ],
       "expo-font"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "3f524a60-f902-46d7-a34e-8f88a8d068da"
+      }
+    }
   }
 }
