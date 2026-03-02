@@ -15,6 +15,8 @@ const TARGET_WORDS_BY_DURATION = {
 const OPENAI_MODEL = process.env.OPENAI_MODEL ?? 'gpt-4.1-mini';
 const LANGUAGE = 'en';
 const PRAYER_TONE = 'grounded, compassionate, and hopeful';
+const HYPHEN_LIKE_PATTERN = /[\u2010\u2011\u2012\u2013\u2014\u2015\u2212]/g;
+const SECTION_HEADING_PATTERN = /^(grounding|prayer|closing|opening|reflection)\s*:?$/i;
 
 const PRAYERS = [
   {
@@ -128,6 +130,66 @@ function countWords(text) {
   }
 
   return normalized.split(/\s+/).length;
+}
+
+function sanitizeLineForSpeech(line) {
+  let cleaned = line.normalize('NFKC').replace(/\t/g, ' ').trim();
+  if (!cleaned) {
+    return '';
+  }
+
+  cleaned = cleaned.replace(/^#{1,6}\s+/, '');
+  cleaned = cleaned.replace(/^([-*\u2022\u25CF\u25E6\u25AA\u25AB]|\d+[.)])\s+/, '');
+
+  if (SECTION_HEADING_PATTERN.test(cleaned)) {
+    return '';
+  }
+
+  cleaned = cleaned.replace(/[*_`~>|]/g, '');
+  cleaned = cleaned.replace(/([A-Za-z])\s*\/\s*([A-Za-z])/g, '$1 and $2');
+  cleaned = cleaned.replace(HYPHEN_LIKE_PATTERN, ' ');
+  cleaned = cleaned.replace(/\s*-\s*/g, ' ');
+  cleaned = cleaned.replace(/\s+/g, ' ');
+  cleaned = cleaned.replace(/\s+([,.;!?])/g, '$1');
+  cleaned = cleaned.replace(/([,.;!?])\1+/g, '$1');
+
+  return cleaned.trim();
+}
+
+function sanitizeScriptForSpeech(raw) {
+  const lines = raw.replace(/\r\n?/g, '\n').split('\n');
+  const paragraphs = [];
+  let currentParagraph = [];
+
+  for (const line of lines) {
+    const cleaned = sanitizeLineForSpeech(line);
+    if (!cleaned) {
+      if (currentParagraph.length > 0) {
+        paragraphs.push(currentParagraph.join(' ').trim());
+        currentParagraph = [];
+      }
+      continue;
+    }
+
+    currentParagraph.push(cleaned);
+  }
+
+  if (currentParagraph.length > 0) {
+    paragraphs.push(currentParagraph.join(' ').trim());
+  }
+
+  const normalizedParagraphs = paragraphs
+    .map((paragraph) => {
+      const collapsed = paragraph.replace(/\s+/g, ' ').trim();
+      if (!collapsed) {
+        return '';
+      }
+
+      return /[.?!]$/.test(collapsed) ? collapsed : `${collapsed}.`;
+    })
+    .filter(Boolean);
+
+  return normalizedParagraphs.join('\n\n').trim();
 }
 
 function sleep(ms) {
@@ -355,23 +417,23 @@ async function generateScriptWithRetry({
   const openingHints =
     priorDurations.length > 0
       ? priorDurations
-          .map((entry) => `- ${entry.duration} min opening: ${entry.preview}`)
+          .map((entry) => `${entry.duration} minute opening: ${entry.preview}`)
           .join('\n')
-      : '- No prior scripts for this prayer in this run.';
+      : 'No prior scripts for this prayer in this run.';
 
   const prompt = [
     `Write a spiritually grounded prayer script for "${prayer.title}" in the "${prayer.category}" category.`,
     `Prayer intention details: ${prayer.body}`,
     `Target spoken length: ${targetDuration} minutes.`,
-    `Target word count: about ${targetWords} words (acceptable range ±10%).`,
+    `Target word count: about ${targetWords} words (acceptable range plus or minus 10 percent).`,
     'Requirements:',
-    `- Tone must be ${PRAYER_TONE}.`,
-    '- Use contemporary language suitable for a broad spiritual audience.',
-    '- Make this script unique and non-repetitive.',
-    '- Avoid reusing sentence structures, repeated openings, and repeated refrain lines.',
-    '- Use three sections with simple headings: Grounding, Prayer, Closing.',
-    '- Keep flow natural for spoken audio pacing.',
-    '- Return plain text only.',
+    `Tone must be ${PRAYER_TONE}.`,
+    'Use contemporary language suitable for a broad spiritual audience.',
+    'Make this script unique and non-repetitive.',
+    'Avoid reusing sentence structures, repeated openings, and repeated refrain lines.',
+    'Keep flow natural for spoken audio pacing.',
+    'Do not use bullet points, numbered lists, markdown, section labels, or hyphen-based list formatting.',
+    'Return plain spoken prose only.',
     'Previously generated scripts for this same prayer (avoid these openings and repeated phrases):',
     openingHints,
   ].join('\n');
@@ -382,7 +444,7 @@ async function generateScriptWithRetry({
         input: [
           {
             content:
-              'You write high-quality spoken prayer scripts. Output must be original, emotionally precise, and free from repetitive wording.',
+              'You write high-quality spoken prayer scripts. Output must be original, emotionally precise, free from repetitive wording, and formatted as clean prose suitable for text to speech.',
             role: 'system',
           },
           {
@@ -406,7 +468,12 @@ async function generateScriptWithRetry({
       throw new Error('OpenAI returned no readable text output.');
     }
 
-    return script;
+    const sanitizedScript = sanitizeScriptForSpeech(script);
+    if (!sanitizedScript) {
+      throw new Error('OpenAI output was empty after sanitization.');
+    }
+
+    return sanitizedScript;
   } catch (error) {
     if (attempt >= 3) {
       throw error;
@@ -422,7 +489,6 @@ async function generateScriptWithRetry({
     });
   }
 }
-
 function extractResponseText(response) {
   if (typeof response?.output_text === 'string' && response.output_text.trim().length > 0) {
     return response.output_text.trim();
@@ -457,7 +523,8 @@ async function upsertPrayerScript({
   serviceRoleKey,
   supabaseUrl,
 }) {
-  const wordCount = countWords(scriptText);
+  const sanitizedScript = sanitizeScriptForSpeech(scriptText);
+  const wordCount = countWords(sanitizedScript);
 
   await supabaseRestRequest({
     body: {
@@ -465,7 +532,7 @@ async function upsertPrayerScript({
       language: LANGUAGE,
       model,
       prayer_library_item_id: prayerLibraryItemId,
-      script_text: scriptText,
+      script_text: sanitizedScript,
       tone: PRAYER_TONE,
       word_count: wordCount,
     },
