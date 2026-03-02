@@ -1,11 +1,13 @@
 import ambientAnimation from '../../assets/lottie/cosmic-ambient.json';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import globeFallbackAnimation from '../../assets/lottie/globe-fallback.json';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
+import LottieView from 'lottie-react-native';
 
 import type { SoloStackParamList } from '../app/navigation/types';
 import { Screen } from '../components/Screen';
@@ -155,6 +157,7 @@ export function SoloLiveScreen() {
   const [scriptText, setScriptText] = useState(route.params?.scriptPreset ?? '');
   const [loadingScript, setLoadingScript] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const playPulseRef = useRef<LottieView>(null);
 
   const activePrayerTitle = route.params?.intention?.trim() || 'Prayer';
   const fallbackScript = route.params?.scriptPreset || '';
@@ -288,6 +291,19 @@ export function SoloLiveScreen() {
       clearInterval(timer);
     };
   }, [isRunning, totalSeconds]);
+
+  useEffect(() => {
+    if (!playPulseRef.current) {
+      return;
+    }
+
+    if (isRunning) {
+      playPulseRef.current.play();
+      return;
+    }
+
+    playPulseRef.current.reset();
+  }, [isRunning]);
 
   return (
     <Screen
@@ -457,13 +473,24 @@ export function SoloLiveScreen() {
         <View style={styles.centerBlock}>
           <Pressable
             onPress={() => setIsRunning((current) => !current)}
-            style={({ pressed }) => [styles.playButton, pressed && styles.playPressed]}
+            style={({ pressed }) => [styles.playPulseTap, pressed && styles.playPressed]}
           >
-            <MaterialCommunityIcons
-              color={figmaV2Reference.backgrounds.solo.linear.colors[0]}
-              name={isRunning ? 'pause' : 'play'}
-              size={48}
-            />
+            <View style={styles.playPulseContainer}>
+              <LottieView
+                autoPlay={false}
+                loop
+                ref={playPulseRef}
+                source={globeFallbackAnimation}
+                style={styles.playPulseLottie}
+              />
+              <View style={styles.playButtonCore}>
+                <MaterialCommunityIcons
+                  color={figmaV2Reference.tabs.activeBorder}
+                  name={isRunning ? 'pause' : 'play'}
+                  size={42}
+                />
+              </View>
+            </View>
           </Pressable>
           <Typography
             allowFontScaling={false}
@@ -716,13 +743,30 @@ const styles = StyleSheet.create({
   minutesSelectorButton: {
     justifyContent: 'center',
   },
-  playButton: {
+  playButtonCore: {
     alignItems: 'center',
-    backgroundColor: colors.textPrimary,
+    backgroundColor: 'transparent',
     borderRadius: radii.pill,
-    height: 124,
+    borderWidth: 0,
+    height: 104,
     justifyContent: 'center',
-    width: 124,
+    width: 104,
+  },
+  playPulseContainer: {
+    alignItems: 'center',
+    borderRadius: radii.pill,
+    justifyContent: 'center',
+    height: 140,
+    width: 140,
+  },
+  playPulseLottie: {
+    height: 156,
+    position: 'absolute',
+    width: 156,
+  },
+  playPulseTap: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   playPressed: {
     transform: [{ scale: 0.98 }],
