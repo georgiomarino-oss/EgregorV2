@@ -4,6 +4,7 @@ import {
   type AudioSource,
   type AudioStatus,
 } from 'expo-audio';
+import { requireNativeModule } from 'expo-modules-core';
 import type { EventSubscription } from 'expo-modules-core';
 
 const AUDIO_STATUS_UPDATE_INTERVAL_MS = 250;
@@ -61,6 +62,50 @@ function normalizeSource(source: AudioSource | string | number): AudioSource {
   return source;
 }
 
+type CompatAudioPlayer = {
+  addListener: (eventName: string, listener: (status: AudioStatus) => void) => EventSubscription;
+  currentStatus: AudioStatus | null;
+  pause: () => void;
+  play: () => void;
+  remove: () => void;
+  seekTo: (seconds: number) => Promise<void>;
+};
+
+type ExpoAudioNativeModule = {
+  AudioPlayer: new (
+    source: AudioSource,
+    updateInterval: number,
+    keepAudioSessionActive: boolean,
+  ) => CompatAudioPlayer;
+};
+
+function isCreateAudioPlayerArityError(error: unknown) {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const normalizedMessage = error.message.toLowerCase();
+  return (
+    normalizedMessage.includes('received 4 arguments') &&
+    normalizedMessage.includes('3 was expected')
+  );
+}
+
+function createAudioPlayerCompat(source: AudioSource): CompatAudioPlayer {
+  try {
+    return createAudioPlayer(source, {
+      updateInterval: AUDIO_STATUS_UPDATE_INTERVAL_MS,
+    }) as CompatAudioPlayer;
+  } catch (error) {
+    if (!isCreateAudioPlayerArityError(error)) {
+      throw error;
+    }
+
+    const audioModule = requireNativeModule('ExpoAudio') as ExpoAudioNativeModule;
+    return new audioModule.AudioPlayer(source, AUDIO_STATUS_UPDATE_INTERVAL_MS, false);
+  }
+}
+
 export async function configureAudioForPlayback() {
   if (!configureAudioPromise) {
     configureAudioPromise = setAudioModeAsync({
@@ -79,9 +124,7 @@ export async function configureAudioForPlayback() {
 }
 
 export function createPlayer(sourceUriOrAsset: AudioSource | string | number): ManagedAudioPlayer {
-  const player = createAudioPlayer(normalizeSource(sourceUriOrAsset), {
-    updateInterval: AUDIO_STATUS_UPDATE_INTERVAL_MS,
-  });
+  const player = createAudioPlayerCompat(normalizeSource(sourceUriOrAsset));
 
   let status = mapStatus(player.currentStatus);
   let subscription: EventSubscription | null = null;

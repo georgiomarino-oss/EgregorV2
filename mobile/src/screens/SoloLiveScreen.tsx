@@ -14,6 +14,8 @@ import { Screen } from '../components/Screen';
 import { SurfaceCard } from '../components/SurfaceCard';
 import { Typography } from '../components/Typography';
 import { fetchPrayerScriptVariantByTitle, fetchUserPreferences } from '../lib/api/data';
+import { generatePrayerAudio } from '../lib/api/functions';
+import { configureAudioForPlayback, createPlayer, type ManagedAudioPlayer } from '../lib/audio';
 import { supabase } from '../lib/supabase';
 import { figmaV2Reference } from '../theme/figma-v2-reference';
 import { sectionGap } from '../theme/layout';
@@ -22,8 +24,14 @@ import { colors, radii, spacing } from '../theme/tokens';
 type SoloLiveRoute = RouteProp<SoloStackParamList, 'SoloLive'>;
 type SoloNavigation = NativeStackNavigationProp<SoloStackParamList, 'SoloLive'>;
 
-const VOICE_OPTIONS = ['Marcus', 'Ayla', 'Noah'] as const;
+const VOICE_OPTIONS = ['Oliver', 'Ayla', 'Noah'] as const;
 const MINUTE_OPTIONS = [3, 5, 10] as const;
+const DEFAULT_ELEVENLABS_VOICE_ID = 'jfIS2w2yJi0grJZPyEsk';
+const ELEVENLABS_VOICE_ID_BY_LABEL: Partial<
+  Record<(typeof VOICE_OPTIONS)[number], string>
+> = {
+  Oliver: 'jfIS2w2yJi0grJZPyEsk',
+};
 
 function formatClock(totalSeconds: number) {
   const clamped = Math.max(0, Math.floor(totalSeconds));
@@ -145,7 +153,7 @@ export function SoloLiveScreen() {
   const navigation = useNavigation<SoloNavigation>();
   const route = useRoute<SoloLiveRoute>();
 
-  const [selectedVoice, setSelectedVoice] = useState<(typeof VOICE_OPTIONS)[number]>('Marcus');
+  const [selectedVoice, setSelectedVoice] = useState<(typeof VOICE_OPTIONS)[number]>('Oliver');
   const [selectedMinutes, setSelectedMinutes] = useState<(typeof MINUTE_OPTIONS)[number]>(10);
   const [isVoiceMenuOpen, setIsVoiceMenuOpen] = useState(false);
   const [isMinuteMenuOpen, setIsMinuteMenuOpen] = useState(false);
@@ -156,8 +164,12 @@ export function SoloLiveScreen() {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [scriptText, setScriptText] = useState(route.params?.scriptPreset ?? '');
   const [loadingScript, setLoadingScript] = useState(false);
+  const [loadingAudio, setLoadingAudio] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const playPulseRef = useRef<LottieView>(null);
+  const activePlayerRef = useRef<ManagedAudioPlayer | null>(null);
+  const activePlayerKeyRef = useRef<string | null>(null);
+  const activePlayerUnsubscribeRef = useRef<(() => void) | null>(null);
 
   const activePrayerTitle = route.params?.intention?.trim() || 'Prayer';
   const fallbackScript = route.params?.scriptPreset || '';
@@ -190,12 +202,101 @@ export function SoloLiveScreen() {
     );
   }, [elapsedSeconds, scriptParagraphs.length, totalSeconds]);
   const activeParagraph = scriptParagraphs[activeParagraphIndex] ?? '';
+  const activeVoiceId =
+    ELEVENLABS_VOICE_ID_BY_LABEL[selectedVoice] ?? DEFAULT_ELEVENLABS_VOICE_ID;
+  const activeAudioKey = useMemo(
+    () => `${activeVoiceId}|${selectedMinutes}|${resolvedScriptText.trim()}`,
+    [activeVoiceId, resolvedScriptText, selectedMinutes],
+  );
 
   const closeAllSelectors = useCallback(() => {
     setIsVoiceMenuOpen(false);
     setIsMinuteMenuOpen(false);
     setIsInviteOpen(false);
   }, []);
+
+  const disposeActivePlayer = useCallback(() => {
+    activePlayerRef.current?.pause();
+    activePlayerUnsubscribeRef.current?.();
+    activePlayerUnsubscribeRef.current = null;
+    activePlayerRef.current?.dispose();
+    activePlayerRef.current = null;
+    activePlayerKeyRef.current = null;
+  }, []);
+
+  const stopActivePlayback = useCallback(async () => {
+    const activePlayer = activePlayerRef.current;
+    if (!activePlayer) {
+      return;
+    }
+
+    try {
+      await activePlayer.stop();
+    } catch {
+      activePlayer.pause();
+    }
+
+    setIsRunning(false);
+    setElapsedSeconds(0);
+  }, []);
+
+  const onExitSession = useCallback(() => {
+    closeAllSelectors();
+
+    void (async () => {
+      await stopActivePlayback();
+      disposeActivePlayer();
+      navigation.goBack();
+    })();
+  }, [closeAllSelectors, disposeActivePlayer, navigation, stopActivePlayback]);
+
+  const ensureAudioPlayer = useCallback(async () => {
+    const nextScript = resolvedScriptText.trim();
+    if (!nextScript) {
+      throw new Error('No script available for this prayer yet.');
+    }
+
+    if (activePlayerRef.current && activePlayerKeyRef.current === activeAudioKey) {
+      return activePlayerRef.current;
+    }
+
+    setLoadingAudio(true);
+    try {
+      await configureAudioForPlayback();
+
+      const audioResponse = await generatePrayerAudio({
+        script: nextScript,
+        voiceId: activeVoiceId,
+      });
+
+      const audioUrl = audioResponse?.audioUrl?.trim();
+      const audioBase64 = audioResponse?.audioBase64?.trim();
+      const contentType = audioResponse?.contentType?.trim() || 'audio/mpeg';
+
+      if (!audioUrl && !audioBase64) {
+        throw new Error('Audio generation returned an empty payload.');
+      }
+
+      const sourceUri = audioUrl || `data:${contentType};base64,${audioBase64}`;
+
+      disposeActivePlayer();
+
+      const player = createPlayer(sourceUri);
+      activePlayerUnsubscribeRef.current = player.subscribe((status) => {
+        setElapsedSeconds(Math.max(0, Math.floor(status.positionMillis / 1000)));
+        if (status.didJustFinish) {
+          setIsRunning(false);
+        }
+      });
+
+      activePlayerRef.current = player;
+      activePlayerKeyRef.current = activeAudioKey;
+
+      return player;
+    } finally {
+      setLoadingAudio(false);
+    }
+  }, [activeAudioKey, activeVoiceId, disposeActivePlayer, resolvedScriptText]);
 
   const loadSelectedScript = useCallback(async () => {
     if (!activePrayerTitle) {
@@ -243,8 +344,11 @@ export function SoloLiveScreen() {
         }
 
         if (preferences.preferredVoiceId?.trim()) {
+          const normalizedPreferredVoice = preferences.preferredVoiceId.trim().toLowerCase();
           const matched = VOICE_OPTIONS.find(
-            (voice) => voice.toLowerCase() === preferences.preferredVoiceId.trim().toLowerCase(),
+            (voice) =>
+              voice.toLowerCase() === normalizedPreferredVoice ||
+              ELEVENLABS_VOICE_ID_BY_LABEL[voice]?.toLowerCase() === normalizedPreferredVoice,
           );
           if (matched) {
             setSelectedVoice(matched);
@@ -269,28 +373,26 @@ export function SoloLiveScreen() {
   useEffect(() => {
     setElapsedSeconds(0);
     setIsRunning(false);
-  }, [selectedMinutes]);
+    disposeActivePlayer();
+  }, [activeAudioKey, disposeActivePlayer]);
 
   useEffect(() => {
-    if (!isRunning) {
+    return () => {
+      void stopActivePlayback();
+      disposeActivePlayer();
+    };
+  }, [disposeActivePlayer, stopActivePlayback]);
+
+  useEffect(() => {
+    if (elapsedSeconds < totalSeconds) {
       return;
     }
 
-    const timer = setInterval(() => {
-      setElapsedSeconds((current) => {
-        const next = current + 1;
-        if (next >= totalSeconds) {
-          setIsRunning(false);
-          return totalSeconds;
-        }
-        return next;
-      });
-    }, 1000);
-
-    return () => {
-      clearInterval(timer);
-    };
-  }, [isRunning, totalSeconds]);
+    setIsRunning(false);
+    if (activePlayerRef.current) {
+      void activePlayerRef.current.stop();
+    }
+  }, [elapsedSeconds, totalSeconds]);
 
   useEffect(() => {
     if (!playPulseRef.current) {
@@ -304,6 +406,28 @@ export function SoloLiveScreen() {
 
     playPulseRef.current.reset();
   }, [isRunning]);
+
+  const onTogglePlayback = useCallback(async () => {
+    closeAllSelectors();
+
+    if (isRunning) {
+      activePlayerRef.current?.pause();
+      setIsRunning(false);
+      return;
+    }
+
+    try {
+      const player = await ensureAudioPlayer();
+      player.play();
+      setIsRunning(true);
+      setError(null);
+    } catch (nextError) {
+      const message =
+        nextError instanceof Error ? nextError.message : 'Failed to generate prayer audio.';
+      setError(message);
+      setIsRunning(false);
+    }
+  }, [closeAllSelectors, ensureAudioPlayer, isRunning]);
 
   return (
     <Screen
@@ -329,7 +453,7 @@ export function SoloLiveScreen() {
 
           <Pressable
             accessibilityLabel="Close solo session"
-            onPress={() => navigation.goBack()}
+            onPress={onExitSession}
             style={({ pressed }) => [styles.iconCircleButton, pressed && styles.iconButtonPressed]}
           >
             <MaterialCommunityIcons color={colors.textPrimary} name="close" size={24} />
@@ -472,7 +596,10 @@ export function SoloLiveScreen() {
 
         <View style={styles.centerBlock}>
           <Pressable
-            onPress={() => setIsRunning((current) => !current)}
+            disabled={loadingScript || loadingAudio || !resolvedScriptText.trim()}
+            onPress={() => {
+              void onTogglePlayback();
+            }}
             style={({ pressed }) => [styles.playPulseTap, pressed && styles.playPressed]}
           >
             <View style={styles.playPulseContainer}>
@@ -499,7 +626,7 @@ export function SoloLiveScreen() {
             variant="H2"
             weight="bold"
           >
-            {isRunning ? 'Playing' : 'Ready to begin'}
+            {loadingAudio ? 'Preparing audio...' : isRunning ? 'Playing' : 'Ready to begin'}
           </Typography>
 
           <View style={styles.scriptWrap}>
@@ -594,6 +721,9 @@ export function SoloLiveScreen() {
               onPress={() => {
                 setElapsedSeconds(0);
                 setIsRunning(false);
+                if (activePlayerRef.current) {
+                  void activePlayerRef.current.stop();
+                }
               }}
               style={({ pressed }) => [styles.bottomIconAction, pressed && styles.selectorPressed]}
             >
