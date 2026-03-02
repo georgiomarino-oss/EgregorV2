@@ -1,212 +1,520 @@
 import ambientAnimation from '../../assets/lottie/cosmic-ambient.json';
-import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, StyleSheet, TextInput, View } from 'react-native';
+import { useMemo, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
 
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
-import { Button } from '../components/Button';
+import type { SoloStackParamList } from '../app/navigation/types';
 import { Screen } from '../components/Screen';
 import { SurfaceCard } from '../components/SurfaceCard';
 import { Typography } from '../components/Typography';
-import type { SoloStackParamList } from '../app/navigation/types';
-import { fetchLatestIntention, fetchUserPreferences, saveIntention } from '../lib/api/data';
-import { supabase } from '../lib/supabase';
+import { HOME_CARD_GAP, PROFILE_SECTION_GAP, SCREEN_PAD_X } from '../theme/figmaV2Layout';
 import { figmaV2Reference } from '../theme/figma-v2-reference';
-import {
-  PROFILE_ROW_GAP,
-  PROFILE_SECTION_GAP,
-  SUBTITLE_TO_MAINCARD_GAP,
-  TITLE_TO_SUBTITLE_GAP,
-} from '../theme/figmaV2Layout';
-import { cardPaddingMd } from '../theme/layout';
-import { colors, radii, typography } from '../theme/tokens';
+import { colors, radii, spacing } from '../theme/tokens';
 
 type SoloNavigation = NativeStackNavigationProp<SoloStackParamList, 'SoloHome'>;
+type LibraryMode = 'favorites' | 'recent' | null;
+type PrayerCategory =
+  | 'Relationships'
+  | 'Wellbeing'
+  | 'Abundance'
+  | 'Purpose'
+  | 'Protection'
+  | 'Gratitude';
+
+type CategoryFilter = 'All' | PrayerCategory;
+
+interface PrayerCardItem {
+  category: PrayerCategory;
+  body: string;
+  durationLabel: string;
+  id: string;
+  tags: string;
+  title: string;
+}
+
+const CATEGORY_FILTERS: readonly CategoryFilter[] = [
+  'All',
+  'Relationships',
+  'Wellbeing',
+  'Abundance',
+  'Purpose',
+  'Protection',
+  'Gratitude',
+];
+
+const SOLO_PRAYER_LIBRARY: readonly PrayerCardItem[] = [
+  {
+    body: 'Guide this bond with patience, trust, and healthy communication that strengthens connection.',
+    category: 'Relationships',
+    durationLabel: '3-10 min',
+    id: 'relationships-1',
+    tags: 'Connection - Harmony',
+    title: 'Prayer for Family Unity',
+  },
+  {
+    body: 'Bring peace to conversations and clarity to unresolved moments so healing can continue.',
+    category: 'Relationships',
+    durationLabel: '5-12 min',
+    id: 'relationships-2',
+    tags: 'Reconciliation - Peace',
+    title: 'Prayer for Reconciliation',
+  },
+  {
+    body: 'Anchor the mind, steady the breath, and restore calm energy for the day ahead.',
+    category: 'Wellbeing',
+    durationLabel: '3-8 min',
+    id: 'wellbeing-1',
+    tags: 'Calm - Recovery',
+    title: 'Prayer for Inner Calm',
+  },
+  {
+    body: 'Support healthy routines, deep rest, and resilience through every challenge.',
+    category: 'Wellbeing',
+    durationLabel: '5-10 min',
+    id: 'wellbeing-2',
+    tags: 'Rest - Strength',
+    title: 'Prayer for Rest and Renewal',
+  },
+  {
+    body: 'Open pathways for provision, wise decisions, and meaningful opportunities.',
+    category: 'Abundance',
+    durationLabel: '4-9 min',
+    id: 'abundance-1',
+    tags: 'Provision - Opportunity',
+    title: 'Prayer for Provision',
+  },
+  {
+    body: 'Align resources with purpose and invite generosity, discipline, and gratitude.',
+    category: 'Abundance',
+    durationLabel: '5-11 min',
+    id: 'abundance-2',
+    tags: 'Stewardship - Gratitude',
+    title: 'Prayer for Responsible Growth',
+  },
+  {
+    body: 'Clarify priorities and reveal the next right step with courage and consistency.',
+    category: 'Purpose',
+    durationLabel: '4-8 min',
+    id: 'purpose-1',
+    tags: 'Direction - Focus',
+    title: 'Prayer for Clear Purpose',
+  },
+  {
+    body: 'Strengthen conviction and serve with humility in every mission you are called to.',
+    category: 'Purpose',
+    durationLabel: '5-10 min',
+    id: 'purpose-2',
+    tags: 'Calling - Service',
+    title: 'Prayer for Meaningful Work',
+  },
+  {
+    body: 'Cover your home and loved ones with safety, wisdom, and steady protection.',
+    category: 'Protection',
+    durationLabel: '3-7 min',
+    id: 'protection-1',
+    tags: 'Safety - Home',
+    title: 'Prayer for Household Protection',
+  },
+  {
+    body: 'Guard each journey with attentiveness, safe passage, and peaceful arrival.',
+    category: 'Protection',
+    durationLabel: '3-6 min',
+    id: 'protection-2',
+    tags: 'Travel - Protection',
+    title: 'Prayer for Safe Travel',
+  },
+  {
+    body: 'Center the heart in gratitude for daily gifts, lessons, and faithful support.',
+    category: 'Gratitude',
+    durationLabel: '3-6 min',
+    id: 'gratitude-1',
+    tags: 'Thankfulness - Joy',
+    title: 'Prayer of Daily Gratitude',
+  },
+  {
+    body: 'Reflect with humility, celebrate progress, and carry gratitude into tomorrow.',
+    category: 'Gratitude',
+    durationLabel: '4-8 min',
+    id: 'gratitude-2',
+    tags: 'Reflection - Hope',
+    title: 'Prayer for Evening Reflection',
+  },
+];
+
+function FilterChip({
+  active,
+  fill = false,
+  label,
+  onPress,
+  size = 'md',
+}: {
+  active: boolean;
+  fill?: boolean;
+  label: string;
+  onPress: () => void;
+  size?: 'md' | 'sm';
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.chipBase,
+        size === 'sm' ? styles.chipSm : styles.chipMd,
+        fill && styles.chipFill,
+        active ? styles.chipActive : styles.chipInactive,
+        pressed && styles.chipPressed,
+      ]}
+    >
+      <Typography
+        allowFontScaling={false}
+        color={active ? figmaV2Reference.text.activeTab : colors.textLabel}
+        style={styles.chipText}
+        variant="Caption"
+        weight="bold"
+      >
+        {label}
+      </Typography>
+    </Pressable>
+  );
+}
 
 export function SoloScreen() {
   const navigation = useNavigation<SoloNavigation>();
-  const [userId, setUserId] = useState<string | null>(null);
-  const [intention, setIntention] = useState('');
-  const [preferredMinutes, setPreferredMinutes] = useState(5);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { width: windowWidth } = useWindowDimensions();
+  const [libraryMode, setLibraryMode] = useState<LibraryMode>('recent');
+  const [selectedCategory, setSelectedCategory] = useState<CategoryFilter | null>('All');
+  const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
 
-  useEffect(() => {
-    let active = true;
+  const favoriteCount = favoriteIds.length;
+  const recentCount = SOLO_PRAYER_LIBRARY.length;
 
-    const loadInitialData = async () => {
-      setLoading(true);
-      try {
-        const { data, error: userError } = await supabase.auth.getUser();
-        if (userError || !data.user) {
-          throw new Error(userError?.message || 'Could not load current user.');
-        }
+  const visibleLibrary = useMemo(() => {
+    if (libraryMode === 'favorites') {
+      return SOLO_PRAYER_LIBRARY.filter((item) => favoriteIds.includes(item.id));
+    }
 
-        const nextUserId = data.user.id;
-        if (!active) {
-          return;
-        }
+    return SOLO_PRAYER_LIBRARY;
+  }, [favoriteIds, libraryMode]);
 
-        setUserId(nextUserId);
-        const [latestIntention, preferences] = await Promise.all([
-          fetchLatestIntention(nextUserId),
-          fetchUserPreferences(nextUserId),
-        ]);
+  const sections = useMemo(() => {
+    const categories =
+      !selectedCategory || selectedCategory === 'All'
+        ? CATEGORY_FILTERS.filter((item): item is PrayerCategory => item !== 'All')
+        : [selectedCategory];
 
-        if (!active) {
-          return;
-        }
+    return categories
+      .map((category) => ({
+        category,
+        items: visibleLibrary.filter((item) => item.category === category),
+      }))
+      .filter((section) => section.items.length > 0);
+  }, [selectedCategory, visibleLibrary]);
 
-        setIntention(latestIntention);
-        setPreferredMinutes(preferences.preferredSessionMinutes);
-        setError(null);
-      } catch (nextError) {
-        if (!active) {
-          return;
-        }
-        setError(nextError instanceof Error ? nextError.message : 'Failed to load solo setup.');
-      } finally {
-        if (active) {
-          setLoading(false);
-        }
+  const prayerCardWidth = useMemo(() => {
+    const estimatedWidth = windowWidth - SCREEN_PAD_X * 2 - 96;
+    return Math.min(274, Math.max(220, estimatedWidth));
+  }, [windowWidth]);
+
+  const toggleFavorite = (itemId: string) => {
+    setFavoriteIds((current) => {
+      if (current.includes(itemId)) {
+        return current.filter((id) => id !== itemId);
       }
-    };
 
-    void loadInitialData();
-
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  const focusLabel = useMemo(() => {
-    const normalized = intention.trim();
-    if (!normalized) {
-      return 'Add intention';
-    }
-    const firstWord = normalized.split(/\s+/)[0] ?? '';
-    if (!firstWord) {
-      return 'Focus';
-    }
-    return firstWord.slice(0, 1).toUpperCase() + firstWord.slice(1).toLowerCase();
-  }, [intention]);
-
-  const onContinue = async () => {
-    const normalizedIntention = intention.trim();
-    if (!normalizedIntention || !userId) {
-      return;
-    }
-
-    setSaving(true);
-    try {
-      await saveIntention(userId, normalizedIntention);
-      setError(null);
-      navigation.navigate('SoloSetup', { intention: normalizedIntention });
-    } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : 'Failed to save intention.');
-    } finally {
-      setSaving(false);
-    }
+      return [...current, itemId];
+    });
   };
 
   return (
     <Screen ambientSource={ambientAnimation} contentContainerStyle={styles.content} variant="solo">
-      <View style={styles.headerBlock}>
+      <SurfaceCard radius="xl" style={styles.heroCard} variant="welcomeMain">
+        <Typography allowFontScaling={false} color={colors.textLabel} variant="Label" weight="bold">
+          SOLO PRAYER
+        </Typography>
         <Typography allowFontScaling={false} variant="H1" weight="bold">
-          Set your daily intention
+          Your intention creates ripple effects.
         </Typography>
-        <Typography allowFontScaling={false} color={colors.textSecondary}>
-          This intention shapes your solo script and event recommendations.
+        <Typography allowFontScaling={false} color={colors.textSecondary} variant="bodyLg">
+          Browse by category and swipe through prayers with one tap start.
         </Typography>
+      </SurfaceCard>
+
+      <View style={styles.topFilterRow}>
+        <FilterChip
+          active={libraryMode === 'favorites'}
+          fill
+          label={`Favorites (${favoriteCount})`}
+          onPress={() =>
+            setLibraryMode((current) => (current === 'favorites' ? null : 'favorites'))
+          }
+        />
+        <FilterChip
+          active={libraryMode === 'recent'}
+          fill
+          label={`Recent (${recentCount})`}
+          onPress={() => setLibraryMode((current) => (current === 'recent' ? null : 'recent'))}
+        />
       </View>
 
-      <SurfaceCard radius="xl" style={styles.section} variant="welcomeMain">
-        <Typography allowFontScaling={false} color={colors.textLabel} variant="Label">
-          Today I choose
-        </Typography>
-        <TextInput
-          multiline
-          onChangeText={setIntention}
-          placeholder="Type your intention"
-          placeholderTextColor={colors.textSecondary}
-          style={styles.input}
-          value={intention}
-        />
+      <ScrollView
+        horizontal
+        contentContainerStyle={styles.categoryRail}
+        showsHorizontalScrollIndicator={false}
+      >
+        {CATEGORY_FILTERS.map((category) => (
+          <FilterChip
+            key={category}
+            active={selectedCategory === category}
+            label={category}
+            onPress={() =>
+              setSelectedCategory((current) => (current === category ? null : category))
+            }
+            size="sm"
+          />
+        ))}
+      </ScrollView>
 
-        <View style={styles.row}>
-          <SurfaceCard radius="sm" style={styles.metaCard} variant="homeAlert">
-            <Typography allowFontScaling={false} color={colors.textBodySoft} variant="Label">
-              Focus
-            </Typography>
-            <Typography allowFontScaling={false} variant="H2" weight="bold">
-              {loading ? '...' : focusLabel}
-            </Typography>
-          </SurfaceCard>
-          <SurfaceCard radius="sm" style={styles.metaCard} variant="homeAlert">
-            <Typography allowFontScaling={false} color={colors.textBodySoft} variant="Label">
-              Preferred duration
-            </Typography>
-            <Typography allowFontScaling={false} variant="H2" weight="bold">
-              {loading ? '...' : `${preferredMinutes} min`}
-            </Typography>
-          </SurfaceCard>
-        </View>
-
-        {loading ? <ActivityIndicator color={colors.accentMintStart} /> : null}
-        {error ? (
-          <Typography allowFontScaling={false} color={colors.danger} variant="Caption">
-            {error}
+      {sections.length === 0 ? (
+        <SurfaceCard radius="xl" style={styles.emptyStateCard} variant="homeAlert">
+          <Typography allowFontScaling={false} variant="H2" weight="bold">
+            No prayers in this filter yet
           </Typography>
-        ) : null}
+          <Typography allowFontScaling={false} color={colors.textSecondary}>
+            Save prayers to favorites or choose another category to continue.
+          </Typography>
+        </SurfaceCard>
+      ) : (
+        sections.map((section) => (
+          <SurfaceCard key={section.category} radius="xl" style={styles.categorySection}>
+            <View style={styles.sectionHeaderRow}>
+              <Typography allowFontScaling={false} variant="H2" weight="bold">
+                {section.category}
+              </Typography>
+              <Typography
+                allowFontScaling={false}
+                color={colors.textSecondary}
+                variant="Body"
+                weight="bold"
+              >
+                {`${section.items.length} prayers`}
+              </Typography>
+            </View>
+            <Typography allowFontScaling={false} color={colors.textSecondary} variant="bodyLg">
+              Swipe left to explore this category
+            </Typography>
 
-        <Button
-          disabled={!intention.trim() || loading}
-          loading={saving}
-          onPress={() => void onContinue()}
-          title="Continue"
-          variant="primary"
-        />
-        <Button
-          onPress={() => navigation.navigate('PrayerLibrary')}
-          title="Prayer Library"
-          variant="secondary"
-        />
-      </SurfaceCard>
+            <ScrollView
+              horizontal
+              contentContainerStyle={styles.prayerRail}
+              showsHorizontalScrollIndicator={false}
+            >
+              {section.items.map((item) => {
+                const isFavorite = favoriteIds.includes(item.id);
+
+                return (
+                  <SurfaceCard
+                    key={item.id}
+                    contentPadding={spacing.sm}
+                    radius="md"
+                    style={[styles.prayerCard, { width: prayerCardWidth }]}
+                    variant="homeStatSmall"
+                  >
+                    <View style={styles.prayerCardHeader}>
+                      <Typography
+                        allowFontScaling={false}
+                        style={styles.prayerTitle}
+                        variant="H2"
+                        weight="bold"
+                      >
+                        {item.title}
+                      </Typography>
+                      <Pressable
+                        onPress={() => toggleFavorite(item.id)}
+                        style={({ pressed }) => [
+                          styles.favoriteButton,
+                          isFavorite && styles.favoriteButtonActive,
+                          pressed && styles.favoritePressed,
+                        ]}
+                      >
+                        <Typography
+                          allowFontScaling={false}
+                          color={isFavorite ? colors.textOnSky : colors.textSecondary}
+                          variant="H2"
+                          weight="bold"
+                        >
+                          {isFavorite ? 'Saved' : 'Save'}
+                        </Typography>
+                      </Pressable>
+                    </View>
+
+                    <Typography
+                      allowFontScaling={false}
+                      color={colors.textSecondary}
+                      style={styles.prayerBody}
+                    >
+                      {item.body}
+                    </Typography>
+                    <Typography
+                      allowFontScaling={false}
+                      color={colors.accentSkyStart}
+                      variant="Body"
+                      weight="bold"
+                    >
+                      {`${item.durationLabel} - ${item.category}`}
+                    </Typography>
+                    <Typography
+                      allowFontScaling={false}
+                      color={colors.textCaption}
+                      variant="Caption"
+                    >
+                      {item.tags}
+                    </Typography>
+                    <Pressable
+                      onPress={() =>
+                        navigation.navigate('SoloLive', {
+                          intention: item.title,
+                          scriptPreset: item.body,
+                        })
+                      }
+                      style={({ pressed }) => [
+                        styles.startButton,
+                        pressed && styles.startButtonPressed,
+                      ]}
+                    >
+                      <Typography
+                        allowFontScaling={false}
+                        color={colors.textOnSky}
+                        variant="H2"
+                        weight="bold"
+                      >
+                        Start prayer
+                      </Typography>
+                    </Pressable>
+                  </SurfaceCard>
+                );
+              })}
+            </ScrollView>
+          </SurfaceCard>
+        ))
+      )}
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
+  categoryRail: {
+    gap: spacing.sm,
+    paddingRight: spacing.sm,
+  },
+  categorySection: {
+    gap: spacing.sm,
+  },
+  chipBase: {
+    alignItems: 'center',
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.xxs,
+  },
+  chipFill: {
+    flex: 1,
+    minWidth: 0,
+  },
+  chipMd: {
+    minHeight: 34,
+  },
+  chipSm: {
+    minHeight: 30,
+    minWidth: 60,
+  },
+  chipActive: {
+    backgroundColor: figmaV2Reference.tabs.activeBackground,
+    borderColor: figmaV2Reference.tabs.activeBorder,
+  },
+  chipInactive: {
+    backgroundColor: colors.surface,
+    borderColor: colors.borderMedium,
+  },
+  chipPressed: {
+    transform: [{ scale: 0.98 }],
+  },
+  chipText: {
+    lineHeight: 14,
+    textTransform: 'none',
+  },
   content: {
     gap: PROFILE_SECTION_GAP,
   },
-  headerBlock: {
-    gap: TITLE_TO_SUBTITLE_GAP,
-    marginBottom: SUBTITLE_TO_MAINCARD_GAP,
+  emptyStateCard: {
+    gap: spacing.xs,
+    minHeight: 148,
   },
-  input: {
-    backgroundColor: figmaV2Reference.inputs.auth.background,
-    borderColor: figmaV2Reference.inputs.auth.border,
-    borderRadius: radii.sm,
+  favoriteButton: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: figmaV2Reference.buttons.secondary.background,
+    borderColor: figmaV2Reference.buttons.secondary.border,
+    borderRadius: radii.pill,
     borderWidth: 1,
-    color: figmaV2Reference.inputs.auth.text,
-    fontFamily: typography.family.regular,
-    fontSize: typography.size.body,
-    minHeight: 74,
-    padding: cardPaddingMd,
-    textAlignVertical: 'top',
+    justifyContent: 'center',
+    minHeight: 32,
+    minWidth: 68,
+    paddingHorizontal: spacing.sm,
   },
-  metaCard: {
-    flex: 1,
-    gap: PROFILE_ROW_GAP,
+  favoriteButtonActive: {
+    backgroundColor: figmaV2Reference.buttons.sky.from,
+    borderColor: figmaV2Reference.buttons.sky.border,
   },
-  row: {
+  favoritePressed: {
+    transform: [{ scale: 0.97 }],
+  },
+  heroCard: {
+    gap: spacing.xs,
+    marginBottom: spacing.xs,
+  },
+  prayerBody: {
+    minHeight: 68,
+  },
+  prayerCard: {
+    gap: spacing.xs,
+    minHeight: 208,
+  },
+  prayerCardHeader: {
+    alignItems: 'flex-start',
     flexDirection: 'row',
-    gap: PROFILE_SECTION_GAP,
+    gap: spacing.sm,
+    justifyContent: 'space-between',
   },
-  section: {
-    gap: PROFILE_SECTION_GAP,
+  prayerRail: {
+    gap: HOME_CARD_GAP,
+    paddingRight: spacing.sm,
+  },
+  prayerTitle: {
+    flex: 1,
+  },
+  sectionHeaderRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  startButton: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: figmaV2Reference.buttons.sky.from,
+    borderColor: figmaV2Reference.buttons.sky.border,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    justifyContent: 'center',
+    minHeight: 38,
+    paddingHorizontal: spacing.sm,
+  },
+  startButtonPressed: {
+    transform: [{ scale: 0.98 }],
+  },
+  topFilterRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
   },
 });
