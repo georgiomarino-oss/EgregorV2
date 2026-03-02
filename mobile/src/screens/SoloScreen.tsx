@@ -240,17 +240,14 @@ export function SoloScreen() {
 
   return (
     <Screen ambientSource={ambientAnimation} contentContainerStyle={styles.content} variant="solo">
-      <SurfaceCard radius="xl" style={styles.heroCard} variant="welcomeMain">
+      <View style={styles.headerBlock}>
         <Typography allowFontScaling={false} color={colors.textLabel} variant="Label" weight="bold">
           SOLO PRAYER
         </Typography>
-        <Typography allowFontScaling={false} variant="H1" weight="bold">
+        <Typography allowFontScaling={false} style={styles.heroTitle} variant="H1" weight="bold">
           Your intention creates ripple effects.
         </Typography>
-        <Typography allowFontScaling={false} color={colors.textSecondary} variant="bodyLg">
-          Browse by category and swipe through prayers with one tap start.
-        </Typography>
-      </SurfaceCard>
+      </View>
 
       <View style={styles.topFilterRow}>
         <FilterChip
@@ -525,9 +522,13 @@ const styles = StyleSheet.create({
   favoritePressed: {
     transform: [{ scale: 0.97 }],
   },
-  heroCard: {
+  headerBlock: {
     gap: spacing.xs,
     marginBottom: spacing.xs,
+  },
+  heroTitle: {
+    fontSize: 27,
+    lineHeight: 30,
   },
   prayerBody: {
     minHeight: 68,
