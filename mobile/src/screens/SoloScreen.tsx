@@ -186,6 +186,9 @@ export function SoloScreen() {
   const [libraryMode, setLibraryMode] = useState<LibraryMode>('recent');
   const [selectedCategory, setSelectedCategory] = useState<CategoryFilter | null>('All');
   const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
+  const [activeSlideByCategory, setActiveSlideByCategory] = useState<
+    Partial<Record<PrayerCategory, number>>
+  >({});
 
   const favoriteCount = favoriteIds.length;
   const recentCount = SOLO_PRAYER_LIBRARY.length;
@@ -216,6 +219,8 @@ export function SoloScreen() {
     const estimatedWidth = windowWidth - SCREEN_PAD_X * 2 - 96;
     return Math.min(274, Math.max(220, estimatedWidth));
   }, [windowWidth]);
+
+  const prayerCardStep = useMemo(() => prayerCardWidth + HOME_CARD_GAP, [prayerCardWidth]);
 
   const toggleFavorite = (itemId: string) => {
     setFavoriteIds((current) => {
@@ -301,12 +306,20 @@ export function SoloScreen() {
                 {`${section.items.length} prayers`}
               </Typography>
             </View>
-            <Typography allowFontScaling={false} color={colors.textSecondary} variant="bodyLg">
-              Swipe left to explore this category
-            </Typography>
 
             <ScrollView
               horizontal
+              decelerationRate="fast"
+              onMomentumScrollEnd={(event) => {
+                const nextIndex = Math.round(event.nativeEvent.contentOffset.x / prayerCardStep);
+                const clampedIndex = Math.max(0, Math.min(section.items.length - 1, nextIndex));
+                setActiveSlideByCategory((current) => ({
+                  ...current,
+                  [section.category]: clampedIndex,
+                }));
+              }}
+              snapToAlignment="start"
+              snapToInterval={prayerCardStep}
               contentContainerStyle={styles.prayerRail}
               showsHorizontalScrollIndicator={false}
             >
@@ -396,6 +409,21 @@ export function SoloScreen() {
                 );
               })}
             </ScrollView>
+
+            {section.items.length > 1 ? (
+              <View style={styles.dotRow}>
+                {section.items.map((item, index) => {
+                  const isActive = (activeSlideByCategory[section.category] ?? 0) === index;
+
+                  return (
+                    <View
+                      key={`${section.category}-${item.id}-dot`}
+                      style={[styles.dot, isActive ? styles.dotActive : styles.dotInactive]}
+                    />
+                  );
+                })}
+              </View>
+            ) : null}
           </SurfaceCard>
         ))
       )}
@@ -446,6 +474,26 @@ const styles = StyleSheet.create({
   },
   content: {
     gap: PROFILE_SECTION_GAP,
+  },
+  dot: {
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    height: 8,
+    width: 8,
+  },
+  dotActive: {
+    backgroundColor: colors.accentSkyStart,
+    borderColor: colors.accentSkyStart,
+  },
+  dotInactive: {
+    backgroundColor: colors.surfaceStrong,
+    borderColor: colors.borderMedium,
+  },
+  dotRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: spacing.xxs,
+    justifyContent: 'flex-start',
   },
   emptyStateCard: {
     gap: spacing.xs,
