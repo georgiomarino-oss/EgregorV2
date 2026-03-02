@@ -1,0 +1,808 @@
+import { supabase } from '../supabase';
+
+export type EventStatus = 'live' | 'scheduled' | 'completed' | 'cancelled';
+export type EventVisibility = 'public' | 'private';
+
+interface EventRow {
+  country_code: string | null;
+  created_at: string;
+  description: string | null;
+  duration_minutes: number | null;
+  host_note: string | null;
+  id: string;
+  region: string | null;
+  starts_at: string;
+  status: EventStatus;
+  subtitle: string | null;
+  title: string;
+  visibility: EventVisibility;
+}
+
+interface EventParticipantRow {
+  event_id: string;
+  is_active: boolean;
+  joined_at: string;
+  last_seen_at: string;
+  user_id: string;
+}
+
+interface PrayerLibraryRow {
+  body: string;
+  category: string | null;
+  duration_minutes: number | null;
+  id: string;
+  starts_count: number | null;
+  title: string;
+}
+
+interface ProfileRow {
+  display_name: string | null;
+  high_contrast_mode: boolean | null;
+  id: string;
+  preferred_ambient: string | null;
+  preferred_breath_mode: string | null;
+  preferred_session_minutes: number | null;
+  preferred_voice_id: string | null;
+  voice_enabled: boolean | null;
+}
+
+interface SoloSessionRow {
+  completed_at: string | null;
+  duration_seconds: number | null;
+  id: string;
+}
+
+interface UserIntentionRow {
+  created_at: string;
+  id: string;
+  intention: string;
+}
+
+export interface AppEvent {
+  countryCode: string | null;
+  description: string | null;
+  durationMinutes: number;
+  hostNote: string | null;
+  id: string;
+  participants: number;
+  region: string | null;
+  startsAt: string;
+  status: EventStatus;
+  subtitle: string | null;
+  title: string;
+  visibility: EventVisibility;
+}
+
+export interface CommunityAlert {
+  eventId: string;
+  subtitle: string;
+  title: string;
+}
+
+export interface CommunitySnapshot {
+  alerts: CommunityAlert[];
+  countries: number;
+  events: AppEvent[];
+  liveEvents: number;
+  strongestLiveEventId: string | null;
+  strongestLiveEventTitle: string | null;
+  uniqueActiveParticipants: number;
+}
+
+export interface PrayerLibraryItem {
+  body: string;
+  category: string | null;
+  durationMinutes: number;
+  id: string;
+  startsCount: number;
+  subtitle: string;
+  title: string;
+}
+
+export interface UserPreferences {
+  highContrastMode: boolean;
+  preferredAmbient: string;
+  preferredBreathMode: string;
+  preferredSessionMinutes: number;
+  preferredVoiceId: string;
+  voiceEnabled: boolean;
+}
+
+export interface ProfileSummary {
+  circleMembers: number;
+  eventsJoinedThisWeek: number;
+  highContrastMode: boolean;
+  minutesPrayed: number;
+  sessionsThisWeek: number;
+  soloStreakDays: number;
+  weeklyImpactChangePercent: number;
+}
+
+export interface SoloStats {
+  minutesThisWeek: number;
+  sessionsThisWeek: number;
+  sessionsToday: number;
+}
+
+export interface EventRoomSnapshot {
+  event: AppEvent;
+  isJoined: boolean;
+  joinedCount: number;
+}
+
+function startOfDay(date: Date) {
+  const next = new Date(date);
+  next.setHours(0, 0, 0, 0);
+  return next;
+}
+
+function startOfWeekMonday(date: Date) {
+  const next = startOfDay(date);
+  const currentDay = next.getDay();
+  const deltaToMonday = currentDay === 0 ? -6 : 1 - currentDay;
+  next.setDate(next.getDate() + deltaToMonday);
+  return next;
+}
+
+function toIso(date: Date) {
+  return date.toISOString();
+}
+
+function formatDurationMinutes(minutes: number) {
+  if (minutes <= 1) {
+    return '1 min';
+  }
+  return `${minutes} min`;
+}
+
+function minutesFromSeconds(totalSeconds: number) {
+  if (totalSeconds <= 0) {
+    return 0;
+  }
+  return Math.round(totalSeconds / 60);
+}
+
+function hoursFromNow(isoDate: string) {
+  const target = new Date(isoDate).getTime();
+  const now = Date.now();
+  return Math.floor((target - now) / (1000 * 60 * 60));
+}
+
+function formatEventSubtitle(event: AppEvent) {
+  if (event.status === 'live') {
+    return `${event.participants} active now`;
+  }
+
+  const hours = hoursFromNow(event.startsAt);
+  if (hours <= 0) {
+    return 'Starting soon';
+  }
+
+  if (hours < 24) {
+    return `Starts in ${hours}h`;
+  }
+
+  const days = Math.floor(hours / 24);
+  return `Starts in ${days}d`;
+}
+
+function toSupabaseErrorMessage(error: unknown, fallback: string) {
+  if (error && typeof error === 'object' && 'message' in error) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === 'string' && message.trim().length > 0) {
+      return message;
+    }
+  }
+
+  return fallback;
+}
+
+function mapEventRow(row: EventRow, participants: number): AppEvent {
+  return {
+    countryCode: row.country_code,
+    description: row.description,
+    durationMinutes: row.duration_minutes ?? 20,
+    hostNote: row.host_note,
+    id: row.id,
+    participants,
+    region: row.region,
+    startsAt: row.starts_at,
+    status: row.status,
+    subtitle: row.subtitle,
+    title: row.title,
+    visibility: row.visibility,
+  };
+}
+
+function rankEventStatus(status: EventStatus) {
+  if (status === 'live') {
+    return 0;
+  }
+
+  if (status === 'scheduled') {
+    return 1;
+  }
+
+  if (status === 'completed') {
+    return 2;
+  }
+
+  return 3;
+}
+
+async function fetchParticipantCountsByEvent(
+  eventIds: string[],
+  activeWindowMinutes = 90,
+): Promise<Map<string, number>> {
+  const counts = new Map<string, number>();
+
+  if (eventIds.length === 0) {
+    return counts;
+  }
+
+  const cutoff = new Date(Date.now() - activeWindowMinutes * 60 * 1000);
+  const { data, error } = await supabase
+    .from('event_participants')
+    .select('event_id,user_id,last_seen_at,is_active')
+    .in('event_id', eventIds)
+    .eq('is_active', true)
+    .gte('last_seen_at', toIso(cutoff));
+
+  if (error) {
+    throw new Error(toSupabaseErrorMessage(error, 'Failed to load event participants.'));
+  }
+
+  const rows = (data ?? []) as EventParticipantRow[];
+  for (const row of rows) {
+    counts.set(row.event_id, (counts.get(row.event_id) ?? 0) + 1);
+  }
+
+  return counts;
+}
+
+export async function fetchEvents(limit = 8): Promise<AppEvent[]> {
+  const { data, error } = await supabase
+    .from('events')
+    .select(
+      'id,title,subtitle,description,host_note,region,country_code,starts_at,status,duration_minutes,visibility,created_at',
+    )
+    .in('status', ['live', 'scheduled'])
+    .order('starts_at', { ascending: true })
+    .limit(limit);
+
+  if (error) {
+    throw new Error(toSupabaseErrorMessage(error, 'Failed to load events.'));
+  }
+
+  const eventRows = (data ?? []) as EventRow[];
+  const participantCounts = await fetchParticipantCountsByEvent(eventRows.map((event) => event.id));
+
+  return eventRows
+    .map((row) => mapEventRow(row, participantCounts.get(row.id) ?? 0))
+    .sort((a, b) => {
+      const rankDiff = rankEventStatus(a.status) - rankEventStatus(b.status);
+      if (rankDiff !== 0) {
+        return rankDiff;
+      }
+      return new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime();
+    });
+}
+
+export async function fetchEventById(eventId: string): Promise<AppEvent | null> {
+  const { data, error } = await supabase
+    .from('events')
+    .select(
+      'id,title,subtitle,description,host_note,region,country_code,starts_at,status,duration_minutes,visibility,created_at',
+    )
+    .eq('id', eventId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(toSupabaseErrorMessage(error, 'Failed to load event details.'));
+  }
+
+  if (!data) {
+    return null;
+  }
+
+  const counts = await fetchParticipantCountsByEvent([eventId]);
+  return mapEventRow(data as EventRow, counts.get(eventId) ?? 0);
+}
+
+export async function fetchCommunitySnapshot(): Promise<CommunitySnapshot> {
+  const events = await fetchEvents(12);
+  const liveEvents = events.filter((event) => event.status === 'live');
+  const liveEventIds = liveEvents.map((event) => event.id);
+
+  let uniqueActiveParticipants = 0;
+
+  if (liveEventIds.length > 0) {
+    const cutoff = new Date(Date.now() - 90 * 60 * 1000);
+    const { data, error } = await supabase
+      .from('event_participants')
+      .select('user_id,event_id,last_seen_at,is_active')
+      .in('event_id', liveEventIds)
+      .eq('is_active', true)
+      .gte('last_seen_at', toIso(cutoff));
+
+    if (error) {
+      throw new Error(toSupabaseErrorMessage(error, 'Failed to load community participants.'));
+    }
+
+    uniqueActiveParticipants = new Set(
+      ((data ?? []) as EventParticipantRow[]).map((entry) => entry.user_id),
+    ).size;
+  }
+
+  const countries = new Set(
+    liveEvents
+      .map((event) => event.countryCode ?? event.region)
+      .filter((value): value is string => Boolean(value && value.trim())),
+  ).size;
+
+  const strongestLiveEvent = liveEvents
+    .slice()
+    .sort((a, b) => b.participants - a.participants || a.title.localeCompare(b.title))[0];
+
+  const alerts = events.slice(0, 2).map((event) => ({
+    eventId: event.id,
+    subtitle: formatEventSubtitle(event),
+    title: event.title,
+  }));
+
+  return {
+    alerts,
+    countries,
+    events,
+    liveEvents: liveEvents.length,
+    strongestLiveEventId: strongestLiveEvent?.id ?? null,
+    strongestLiveEventTitle: strongestLiveEvent?.title ?? null,
+    uniqueActiveParticipants,
+  };
+}
+
+export async function fetchPrayerLibraryItems(): Promise<PrayerLibraryItem[]> {
+  const { data, error } = await supabase
+    .from('prayer_library_items')
+    .select('id,title,body,category,duration_minutes,starts_count')
+    .eq('is_public', true)
+    .order('created_at', { ascending: false })
+    .limit(40);
+
+  if (error) {
+    throw new Error(toSupabaseErrorMessage(error, 'Failed to load prayer library.'));
+  }
+
+  const rows = (data ?? []) as PrayerLibraryRow[];
+  return rows.map((row) => {
+    const duration = row.duration_minutes ?? 5;
+    const starts = row.starts_count ?? 0;
+    const category = row.category?.trim();
+    const categoryPart = category ? `${category} • ` : '';
+
+    return {
+      body: row.body,
+      category: category ?? null,
+      durationMinutes: duration,
+      id: row.id,
+      startsCount: starts,
+      subtitle: `${categoryPart}${formatDurationMinutes(duration)} • ${starts} starts`,
+      title: row.title,
+    };
+  });
+}
+
+export async function incrementPrayerLibraryStart(itemId: string) {
+  const { data, error } = await supabase
+    .from('prayer_library_items')
+    .select('starts_count')
+    .eq('id', itemId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(toSupabaseErrorMessage(error, 'Failed to update prayer usage.'));
+  }
+
+  const nextStarts = ((data as { starts_count?: number } | null)?.starts_count ?? 0) + 1;
+  const { error: updateError } = await supabase
+    .from('prayer_library_items')
+    .update({ starts_count: nextStarts })
+    .eq('id', itemId);
+
+  if (updateError) {
+    throw new Error(toSupabaseErrorMessage(updateError, 'Failed to update prayer usage.'));
+  }
+}
+
+export async function fetchLatestIntention(userId: string): Promise<string> {
+  const { data, error } = await supabase
+    .from('user_intentions')
+    .select('id,intention,created_at')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(toSupabaseErrorMessage(error, 'Failed to load your latest intention.'));
+  }
+
+  return ((data as UserIntentionRow | null)?.intention ?? '').trim();
+}
+
+export async function saveIntention(userId: string, intention: string) {
+  const trimmed = intention.trim();
+  if (!trimmed) {
+    return;
+  }
+
+  const { error } = await supabase.from('user_intentions').insert({
+    intention: trimmed,
+    user_id: userId,
+  });
+
+  if (error) {
+    throw new Error(toSupabaseErrorMessage(error, 'Failed to save intention.'));
+  }
+}
+
+export async function fetchUserPreferences(userId: string): Promise<UserPreferences> {
+  const { error: upsertError } = await supabase.from('profiles').upsert(
+    {
+      id: userId,
+    },
+    {
+      onConflict: 'id',
+    },
+  );
+
+  if (upsertError) {
+    throw new Error(toSupabaseErrorMessage(upsertError, 'Failed to initialize profile.'));
+  }
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .select(
+      'id,display_name,preferred_voice_id,preferred_breath_mode,preferred_ambient,preferred_session_minutes,high_contrast_mode,voice_enabled',
+    )
+    .eq('id', userId)
+    .single();
+
+  if (error) {
+    throw new Error(toSupabaseErrorMessage(error, 'Failed to load profile preferences.'));
+  }
+
+  const row = data as ProfileRow;
+  return {
+    highContrastMode: Boolean(row.high_contrast_mode),
+    preferredAmbient: row.preferred_ambient?.trim() || 'Bowls',
+    preferredBreathMode: row.preferred_breath_mode?.trim() || 'Deep',
+    preferredSessionMinutes: row.preferred_session_minutes ?? 5,
+    preferredVoiceId: row.preferred_voice_id?.trim() || '',
+    voiceEnabled: row.voice_enabled ?? true,
+  };
+}
+
+function calculateSoloStreakDays(completedDates: string[]) {
+  if (completedDates.length === 0) {
+    return 0;
+  }
+
+  const uniqueDays = Array.from(
+    new Set(
+      completedDates
+        .map((dateValue) => {
+          const date = new Date(dateValue);
+          if (Number.isNaN(date.getTime())) {
+            return null;
+          }
+
+          return startOfDay(date).toISOString();
+        })
+        .filter((value): value is string => value !== null),
+    ),
+  )
+    .map((value) => new Date(value).getTime())
+    .sort((a, b) => b - a);
+
+  if (uniqueDays.length === 0) {
+    return 0;
+  }
+
+  let streak = 1;
+  for (let index = 1; index < uniqueDays.length; index += 1) {
+    const previous = uniqueDays[index - 1];
+    const current = uniqueDays[index];
+    if (previous === undefined || current === undefined) {
+      break;
+    }
+
+    const diffDays = Math.round((previous - current) / (24 * 60 * 60 * 1000));
+
+    if (diffDays === 1) {
+      streak += 1;
+      continue;
+    }
+
+    break;
+  }
+
+  return streak;
+}
+
+function calculateImpactChangePercent(thisWeekMinutes: number, previousWeekMinutes: number) {
+  if (previousWeekMinutes === 0) {
+    if (thisWeekMinutes === 0) {
+      return 0;
+    }
+    return 100;
+  }
+
+  return Math.round(((thisWeekMinutes - previousWeekMinutes) / previousWeekMinutes) * 100);
+}
+
+export async function fetchProfileSummary(userId: string): Promise<ProfileSummary> {
+  const now = new Date();
+  const weekStart = startOfWeekMonday(now);
+  const previousWeekStart = new Date(weekStart);
+  previousWeekStart.setDate(previousWeekStart.getDate() - 7);
+
+  const [preferences, membershipRes, eventParticipantRes, soloSessionsRes] = await Promise.all([
+    fetchUserPreferences(userId),
+    supabase.from('circle_members').select('circle_id').eq('user_id', userId),
+    supabase
+      .from('event_participants')
+      .select('event_id,joined_at')
+      .eq('user_id', userId)
+      .order('joined_at', { ascending: false }),
+    supabase
+      .from('solo_sessions')
+      .select('id,duration_seconds,completed_at')
+      .eq('user_id', userId)
+      .order('completed_at', { ascending: false }),
+  ]);
+
+  if (membershipRes.error) {
+    throw new Error(toSupabaseErrorMessage(membershipRes.error, 'Failed to load circle stats.'));
+  }
+  if (eventParticipantRes.error) {
+    throw new Error(
+      toSupabaseErrorMessage(eventParticipantRes.error, 'Failed to load event participation.'),
+    );
+  }
+  if (soloSessionsRes.error) {
+    throw new Error(toSupabaseErrorMessage(soloSessionsRes.error, 'Failed to load solo stats.'));
+  }
+
+  const circleIds = ((membershipRes.data ?? []) as { circle_id: string }[]).map(
+    (row) => row.circle_id,
+  );
+
+  let circleMembers = 0;
+  if (circleIds.length > 0) {
+    const { data, error } = await supabase
+      .from('circle_members')
+      .select('user_id,circle_id')
+      .in('circle_id', circleIds);
+
+    if (error) {
+      throw new Error(toSupabaseErrorMessage(error, 'Failed to load circle membership counts.'));
+    }
+
+    circleMembers = new Set(
+      ((data ?? []) as { user_id: string }[])
+        .map((row) => row.user_id)
+        .filter((memberId) => memberId !== userId),
+    ).size;
+  }
+
+  const eventRows = (eventParticipantRes.data ?? []) as { event_id: string; joined_at: string }[];
+  const eventsJoinedThisWeek = new Set(
+    eventRows
+      .filter((row) => new Date(row.joined_at).getTime() >= weekStart.getTime())
+      .map((row) => row.event_id),
+  ).size;
+
+  const sessionRows = (soloSessionsRes.data ?? []) as SoloSessionRow[];
+  const completedSessionRows = sessionRows.filter((row) => Boolean(row.completed_at));
+  const minutesPrayed = minutesFromSeconds(
+    completedSessionRows.reduce((acc, row) => acc + (row.duration_seconds ?? 0), 0),
+  );
+  const sessionsThisWeek = completedSessionRows.filter((row) => {
+    const completedAt = row.completed_at ? new Date(row.completed_at).getTime() : 0;
+    return completedAt >= weekStart.getTime();
+  }).length;
+
+  const thisWeekMinutes = minutesFromSeconds(
+    completedSessionRows
+      .filter((row) => {
+        const completedAt = row.completed_at ? new Date(row.completed_at).getTime() : 0;
+        return completedAt >= weekStart.getTime();
+      })
+      .reduce((acc, row) => acc + (row.duration_seconds ?? 0), 0),
+  );
+
+  const previousWeekMinutes = minutesFromSeconds(
+    completedSessionRows
+      .filter((row) => {
+        const completedAt = row.completed_at ? new Date(row.completed_at).getTime() : 0;
+        return completedAt >= previousWeekStart.getTime() && completedAt < weekStart.getTime();
+      })
+      .reduce((acc, row) => acc + (row.duration_seconds ?? 0), 0),
+  );
+
+  const soloStreakDays = calculateSoloStreakDays(
+    completedSessionRows
+      .map((row) => row.completed_at)
+      .filter((value): value is string => Boolean(value)),
+  );
+
+  return {
+    circleMembers,
+    eventsJoinedThisWeek,
+    highContrastMode: preferences.highContrastMode,
+    minutesPrayed,
+    sessionsThisWeek,
+    soloStreakDays,
+    weeklyImpactChangePercent: calculateImpactChangePercent(thisWeekMinutes, previousWeekMinutes),
+  };
+}
+
+export async function setHighContrastMode(userId: string, enabled: boolean) {
+  const { error } = await supabase
+    .from('profiles')
+    .update({ high_contrast_mode: enabled })
+    .eq('id', userId);
+
+  if (error) {
+    throw new Error(toSupabaseErrorMessage(error, 'Failed to update accessibility preference.'));
+  }
+}
+
+export async function fetchSoloStats(userId: string): Promise<SoloStats> {
+  const now = new Date();
+  const weekStart = startOfWeekMonday(now);
+  const todayStart = startOfDay(now);
+
+  const { data, error } = await supabase
+    .from('solo_sessions')
+    .select('id,duration_seconds,completed_at')
+    .eq('user_id', userId)
+    .not('completed_at', 'is', null)
+    .order('completed_at', { ascending: false });
+
+  if (error) {
+    throw new Error(toSupabaseErrorMessage(error, 'Failed to load solo progress.'));
+  }
+
+  const sessions = (data ?? []) as SoloSessionRow[];
+  const sessionsThisWeek = sessions.filter((row) => {
+    const completedAt = row.completed_at ? new Date(row.completed_at).getTime() : 0;
+    return completedAt >= weekStart.getTime();
+  });
+  const sessionsToday = sessions.filter((row) => {
+    const completedAt = row.completed_at ? new Date(row.completed_at).getTime() : 0;
+    return completedAt >= todayStart.getTime();
+  });
+
+  const minutesThisWeek = minutesFromSeconds(
+    sessionsThisWeek.reduce((acc, row) => acc + (row.duration_seconds ?? 0), 0),
+  );
+
+  return {
+    minutesThisWeek,
+    sessionsThisWeek: sessionsThisWeek.length,
+    sessionsToday: sessionsToday.length,
+  };
+}
+
+export async function recordSoloSession(input: {
+  durationSeconds: number;
+  intention: string;
+  scriptText: string;
+  userId: string;
+}) {
+  if (input.durationSeconds <= 0) {
+    return;
+  }
+
+  const { error } = await supabase.from('solo_sessions').insert({
+    completed_at: new Date().toISOString(),
+    duration_seconds: Math.round(input.durationSeconds),
+    intention: input.intention.trim(),
+    script_text: input.scriptText.trim() || null,
+    user_id: input.userId,
+  });
+
+  if (error) {
+    throw new Error(toSupabaseErrorMessage(error, 'Failed to record solo session.'));
+  }
+}
+
+export async function fetchEventRoomSnapshot(
+  eventId: string,
+  userId: string,
+): Promise<EventRoomSnapshot> {
+  const [event, participantCounts, participationState] = await Promise.all([
+    fetchEventById(eventId),
+    fetchParticipantCountsByEvent([eventId]),
+    supabase
+      .from('event_participants')
+      .select('event_id,user_id,is_active,last_seen_at,joined_at')
+      .eq('event_id', eventId)
+      .eq('user_id', userId)
+      .maybeSingle(),
+  ]);
+
+  if (!event) {
+    throw new Error('Event not found.');
+  }
+
+  if (participationState.error) {
+    throw new Error(
+      toSupabaseErrorMessage(participationState.error, 'Failed to load event room state.'),
+    );
+  }
+
+  const participantState = participationState.data as EventParticipantRow | null;
+
+  return {
+    event: {
+      ...event,
+      participants: participantCounts.get(eventId) ?? 0,
+    },
+    isJoined: Boolean(participantState?.is_active),
+    joinedCount: participantCounts.get(eventId) ?? 0,
+  };
+}
+
+export async function joinEventRoom(eventId: string, userId: string) {
+  const nowIso = new Date().toISOString();
+  const { error } = await supabase.from('event_participants').upsert(
+    {
+      event_id: eventId,
+      is_active: true,
+      joined_at: nowIso,
+      last_seen_at: nowIso,
+      user_id: userId,
+    },
+    {
+      onConflict: 'event_id,user_id',
+    },
+  );
+
+  if (error) {
+    throw new Error(toSupabaseErrorMessage(error, 'Failed to join room.'));
+  }
+}
+
+export async function leaveEventRoom(eventId: string, userId: string) {
+  const { error } = await supabase
+    .from('event_participants')
+    .update({
+      is_active: false,
+      last_seen_at: new Date().toISOString(),
+    })
+    .eq('event_id', eventId)
+    .eq('user_id', userId);
+
+  if (error) {
+    throw new Error(toSupabaseErrorMessage(error, 'Failed to leave room.'));
+  }
+}
+
+export async function refreshEventPresence(eventId: string, userId: string) {
+  const { error } = await supabase
+    .from('event_participants')
+    .update({
+      is_active: true,
+      last_seen_at: new Date().toISOString(),
+    })
+    .eq('event_id', eventId)
+    .eq('user_id', userId)
+    .eq('is_active', true);
+
+  if (error) {
+    throw new Error(toSupabaseErrorMessage(error, 'Failed to refresh room presence.'));
+  }
+}

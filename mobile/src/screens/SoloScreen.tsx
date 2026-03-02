@@ -1,6 +1,6 @@
 import ambientAnimation from '../../assets/lottie/cosmic-ambient.json';
-import { useState } from 'react';
-import { StyleSheet, TextInput, View } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, StyleSheet, TextInput, View } from 'react-native';
 
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -10,6 +10,8 @@ import { Screen } from '../components/Screen';
 import { SurfaceCard } from '../components/SurfaceCard';
 import { Typography } from '../components/Typography';
 import type { SoloStackParamList } from '../app/navigation/types';
+import { fetchLatestIntention, fetchUserPreferences, saveIntention } from '../lib/api/data';
+import { supabase } from '../lib/supabase';
 import { figmaV2Reference } from '../theme/figma-v2-reference';
 import {
   PROFILE_ROW_GAP,
@@ -24,9 +26,90 @@ type SoloNavigation = NativeStackNavigationProp<SoloStackParamList, 'SoloHome'>;
 
 export function SoloScreen() {
   const navigation = useNavigation<SoloNavigation>();
-  const [intention, setIntention] = useState(
-    'peace and grounded courage for my family and community',
-  );
+  const [userId, setUserId] = useState<string | null>(null);
+  const [intention, setIntention] = useState('');
+  const [preferredMinutes, setPreferredMinutes] = useState(5);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+
+    const loadInitialData = async () => {
+      setLoading(true);
+      try {
+        const { data, error: userError } = await supabase.auth.getUser();
+        if (userError || !data.user) {
+          throw new Error(userError?.message || 'Could not load current user.');
+        }
+
+        const nextUserId = data.user.id;
+        if (!active) {
+          return;
+        }
+
+        setUserId(nextUserId);
+        const [latestIntention, preferences] = await Promise.all([
+          fetchLatestIntention(nextUserId),
+          fetchUserPreferences(nextUserId),
+        ]);
+
+        if (!active) {
+          return;
+        }
+
+        setIntention(latestIntention);
+        setPreferredMinutes(preferences.preferredSessionMinutes);
+        setError(null);
+      } catch (nextError) {
+        if (!active) {
+          return;
+        }
+        setError(nextError instanceof Error ? nextError.message : 'Failed to load solo setup.');
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
+      }
+    };
+
+    void loadInitialData();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const focusLabel = useMemo(() => {
+    const normalized = intention.trim();
+    if (!normalized) {
+      return 'Add intention';
+    }
+    const firstWord = normalized.split(/\s+/)[0] ?? '';
+    if (!firstWord) {
+      return 'Focus';
+    }
+    return firstWord.slice(0, 1).toUpperCase() + firstWord.slice(1).toLowerCase();
+  }, [intention]);
+
+  const onContinue = async () => {
+    const normalizedIntention = intention.trim();
+    if (!normalizedIntention || !userId) {
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await saveIntention(userId, normalizedIntention);
+      setError(null);
+      navigation.navigate('SoloSetup', { intention: normalizedIntention });
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : 'Failed to save intention.');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <Screen ambientSource={ambientAnimation} contentContainerStyle={styles.content} variant="solo">
@@ -35,7 +118,7 @@ export function SoloScreen() {
           Set your daily intention
         </Typography>
         <Typography allowFontScaling={false} color={colors.textSecondary}>
-          One phrase calibrates your home feed, room suggestions, and solo scripts.
+          This intention shapes your solo script and event recommendations.
         </Typography>
       </View>
 
@@ -58,21 +141,30 @@ export function SoloScreen() {
               Focus
             </Typography>
             <Typography allowFontScaling={false} variant="H2" weight="bold">
-              Healing
+              {loading ? '...' : focusLabel}
             </Typography>
           </SurfaceCard>
           <SurfaceCard radius="sm" style={styles.metaCard} variant="homeAlert">
             <Typography allowFontScaling={false} color={colors.textBodySoft} variant="Label">
-              Duration
+              Preferred duration
             </Typography>
             <Typography allowFontScaling={false} variant="H2" weight="bold">
-              30 sec setup
+              {loading ? '...' : `${preferredMinutes} min`}
             </Typography>
           </SurfaceCard>
         </View>
 
+        {loading ? <ActivityIndicator color={colors.accentMintStart} /> : null}
+        {error ? (
+          <Typography allowFontScaling={false} color={colors.danger} variant="Caption">
+            {error}
+          </Typography>
+        ) : null}
+
         <Button
-          onPress={() => navigation.navigate('SoloSetup', { intention })}
+          disabled={!intention.trim() || loading}
+          loading={saving}
+          onPress={() => void onContinue()}
           title="Continue"
           variant="primary"
         />

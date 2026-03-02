@@ -3,7 +3,6 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
 import { BottomTabs } from '../../components/BottomTabs';
 import { AuthScreen } from '../../screens/AuthScreen';
-import { ColorSwatchScreen } from '../../screens/ColorSwatchScreen';
 import { CommunityScreen } from '../../screens/CommunityScreen';
 import { EventDetailsScreen } from '../../screens/EventDetailsScreen';
 import { EventRoomScreen } from '../../screens/EventRoomScreen';
@@ -48,7 +47,6 @@ function CommunityStackNavigator() {
   return (
     <CommunityStack.Navigator screenOptions={sharedStackOptions}>
       <CommunityStack.Screen name="CommunityHome" component={CommunityScreen} />
-      <CommunityStack.Screen name="ColorSwatch" component={ColorSwatchScreen} />
     </CommunityStack.Navigator>
   );
 }

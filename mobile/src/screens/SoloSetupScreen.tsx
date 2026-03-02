@@ -1,5 +1,6 @@
 import ambientAnimation from '../../assets/lottie/cosmic-ambient.json';
-import { StyleSheet, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -10,6 +11,8 @@ import { Button } from '../components/Button';
 import { Screen } from '../components/Screen';
 import { SurfaceCard } from '../components/SurfaceCard';
 import { Typography } from '../components/Typography';
+import { fetchSoloStats, fetchUserPreferences, type UserPreferences } from '../lib/api/data';
+import { supabase } from '../lib/supabase';
 import { profileRowGap, sectionGap } from '../theme/layout';
 import { colors } from '../theme/tokens';
 
@@ -29,11 +32,67 @@ function SetupStat({ label, value }: { label: string; value: string }) {
   );
 }
 
+const defaultPreferences: UserPreferences = {
+  highContrastMode: false,
+  preferredAmbient: 'Bowls',
+  preferredBreathMode: 'Deep',
+  preferredSessionMinutes: 5,
+  preferredVoiceId: '',
+  voiceEnabled: true,
+};
+
 export function SoloSetupScreen() {
   const navigation = useNavigation<SoloSetupNavigation>();
   const route = useRoute<SoloSetupRoute>();
 
-  const intention = route.params?.intention?.trim() || 'peace, healing, and grounded courage';
+  const [preferences, setPreferences] = useState<UserPreferences>(defaultPreferences);
+  const [sessionsToday, setSessionsToday] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const intention = route.params?.intention?.trim() || 'Set your intention on the previous screen';
+
+  useEffect(() => {
+    let active = true;
+
+    const loadData = async () => {
+      setLoading(true);
+      try {
+        const { data, error: userError } = await supabase.auth.getUser();
+        if (userError || !data.user) {
+          throw new Error(userError?.message || 'Could not load user context.');
+        }
+
+        const [nextPreferences, soloStats] = await Promise.all([
+          fetchUserPreferences(data.user.id),
+          fetchSoloStats(data.user.id),
+        ]);
+
+        if (!active) {
+          return;
+        }
+
+        setPreferences(nextPreferences);
+        setSessionsToday(soloStats.sessionsToday);
+        setError(null);
+      } catch (nextError) {
+        if (!active) {
+          return;
+        }
+        setError(nextError instanceof Error ? nextError.message : 'Failed to load setup data.');
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
+      }
+    };
+
+    void loadData();
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   return (
     <Screen ambientSource={ambientAnimation} contentContainerStyle={styles.content} variant="solo">
@@ -41,7 +100,7 @@ export function SoloSetupScreen() {
         Intentional solo ritual
       </Typography>
       <Typography color={colors.textSecondary}>
-        Setup flow is simplified for quick starts while preserving depth.
+        Confirm your settings, then begin your guided session.
       </Typography>
 
       <SurfaceCard radius="xl" style={styles.section}>
@@ -50,15 +109,23 @@ export function SoloSetupScreen() {
         </Typography>
         <Typography variant="H2">{intention}</Typography>
 
+        {loading ? <ActivityIndicator color={colors.accentMintStart} /> : null}
+
         <View style={styles.row}>
-          <SetupStat label="Duration" value="5 min" />
-          <SetupStat label="Breath mode" value="Deep" />
+          <SetupStat label="Duration" value={`${preferences.preferredSessionMinutes} min`} />
+          <SetupStat label="Breath mode" value={preferences.preferredBreathMode} />
         </View>
 
         <View style={styles.row}>
-          <SetupStat label="Ambient" value="Bowls" />
-          <SetupStat label="Voice" value="Enabled" />
+          <SetupStat label="Ambient" value={preferences.preferredAmbient} />
+          <SetupStat label="Voice" value={preferences.voiceEnabled ? 'Enabled' : 'Muted'} />
         </View>
+
+        {error ? (
+          <Typography color={colors.danger} variant="Caption">
+            {error}
+          </Typography>
+        ) : null}
 
         <Button
           onPress={() => {
@@ -77,10 +144,10 @@ export function SoloSetupScreen() {
 
       <SurfaceCard radius="sm" style={styles.section}>
         <Typography variant="H2" weight="bold">
-          Personalized AI lines ready
+          Today&apos;s progress
         </Typography>
         <Typography color={colors.textSecondary}>
-          2 of 2 daily free generations remaining.
+          {`${sessionsToday} completed session${sessionsToday === 1 ? '' : 's'} today.`}
         </Typography>
       </SurfaceCard>
     </Screen>
