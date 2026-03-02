@@ -229,6 +229,14 @@ export function SurfaceCard({
   variant = 'default',
   ...props
 }: SurfaceCardProps) {
+  const flattenedStyle = StyleSheet.flatten(style) ?? {};
+  const { columnGap, gap, rowGap, ...cardStyle } = flattenedStyle;
+  const contentGapStyle: ViewStyle = {
+    ...(typeof gap === 'number' ? { gap } : {}),
+    ...(typeof rowGap === 'number' ? { rowGap } : {}),
+    ...(typeof columnGap === 'number' ? { columnGap } : {}),
+  };
+
   const recipe = surfaceRecipeMap[variant];
   const layer = hasLayer(recipe) ? recipe.layer : undefined;
   const radialRecipes = layer?.radials;
@@ -272,7 +280,7 @@ export function SurfaceCard({
           ...recipeSize,
           ...resolvedPadding,
         },
-        style,
+        cardStyle,
       ]}
     >
       {linearPoints && layer?.linear ? (
@@ -298,7 +306,7 @@ export function SurfaceCard({
           width={svgSize.width}
         />
       ) : null}
-      <View style={styles.content}>{children}</View>
+      <View style={[styles.content, contentGapStyle]}>{children}</View>
     </View>
   );
 }

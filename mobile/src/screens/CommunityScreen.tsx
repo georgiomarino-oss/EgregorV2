@@ -165,17 +165,13 @@ export function CommunityScreen() {
           </Typography>
         </SurfaceCard>
       ) : (
-        snapshot?.alerts.map((alert, index) => (
+        snapshot?.alerts.map((alert) => (
           <Pressable
             key={alert.eventId}
             onPress={() => openEventDetails(alert.eventId)}
             style={({ pressed }) => [styles.pressable, pressed && styles.pressedScale]}
           >
-            <SurfaceCard
-              radius="sm"
-              style={[styles.feedCard, index === 0 ? styles.firstAlert : null]}
-              variant="homeAlert"
-            >
+            <SurfaceCard radius="sm" style={styles.feedCard} variant="homeAlert">
               <Typography allowFontScaling={false} variant="H2" weight="bold">
                 {alert.title}
               </Typography>
@@ -192,13 +188,11 @@ export function CommunityScreen() {
 
 const styles = StyleSheet.create({
   content: {
+    gap: HOME_CARD_GAP,
     paddingBottom: HOME_CARD_GAP,
   },
   feedCard: {
     gap: PROFILE_ROW_GAP,
-  },
-  firstAlert: {
-    marginBottom: HOME_CARD_GAP,
   },
   headerBlock: {
     gap: TITLE_TO_SUBTITLE_GAP,
@@ -220,6 +214,5 @@ const styles = StyleSheet.create({
   },
   section: {
     gap: PROFILE_SECTION_GAP,
-    marginBottom: HOME_CARD_GAP,
   },
 });
