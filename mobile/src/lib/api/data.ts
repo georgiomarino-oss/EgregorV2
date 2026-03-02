@@ -35,6 +35,13 @@ interface PrayerLibraryRow {
   title: string;
 }
 
+interface PrayerLibraryScriptRow {
+  duration_minutes: number;
+  id: string;
+  language: string;
+  script_text: string;
+}
+
 interface ProfileRow {
   display_name: string | null;
   high_contrast_mode: boolean | null;
@@ -412,6 +419,60 @@ export async function incrementPrayerLibraryStart(itemId: string) {
   if (updateError) {
     throw new Error(toSupabaseErrorMessage(updateError, 'Failed to update prayer usage.'));
   }
+}
+
+export async function fetchPrayerScriptVariantByTitle(input: {
+  durationMinutes: number;
+  language?: string;
+  title: string;
+}): Promise<string | null> {
+  const title = input.title.trim();
+  if (!title) {
+    return null;
+  }
+
+  const language = input.language?.trim() || 'en';
+
+  const { data: prayerItem, error: prayerItemError } = await supabase
+    .from('prayer_library_items')
+    .select('id,title,is_public')
+    .eq('title', title)
+    .eq('is_public', true)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (prayerItemError) {
+    throw new Error(
+      toSupabaseErrorMessage(prayerItemError, 'Failed to load prayer library item for script.'),
+    );
+  }
+
+  const prayerLibraryItemId = (prayerItem as { id?: string } | null)?.id;
+  if (!prayerLibraryItemId) {
+    return null;
+  }
+
+  const { data: scriptRow, error: scriptError } = await supabase
+    .from('prayer_library_scripts')
+    .select('id,script_text,duration_minutes,language')
+    .eq('prayer_library_item_id', prayerLibraryItemId)
+    .eq('duration_minutes', input.durationMinutes)
+    .eq('language', language)
+    .order('updated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (scriptError) {
+    throw new Error(toSupabaseErrorMessage(scriptError, 'Failed to load prayer script variant.'));
+  }
+
+  const script = ((scriptRow as PrayerLibraryScriptRow | null)?.script_text ?? '').trim();
+  if (!script) {
+    return null;
+  }
+
+  return script;
 }
 
 export async function fetchLatestIntention(userId: string): Promise<string> {

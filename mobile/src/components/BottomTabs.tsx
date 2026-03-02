@@ -63,6 +63,20 @@ function TabLogo({ color, routeName }: { color: string; routeName: string }) {
 export function BottomTabs({ descriptors, navigation, state }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
   const points = cssAngleToLinearPoints(figmaV2Reference.tabs.containerGradient.angleDeg);
+  const focusedRouteKey = state.routes[state.index]?.key;
+  const focusedOptions = focusedRouteKey ? descriptors[focusedRouteKey]?.options : undefined;
+  const tabBarStyles = focusedOptions?.tabBarStyle
+    ? Array.isArray(focusedOptions.tabBarStyle)
+      ? focusedOptions.tabBarStyle
+      : [focusedOptions.tabBarStyle]
+    : [];
+  const hideTabBar = tabBarStyles.some(
+    (style) => ((style as { display?: string } | undefined)?.display ?? '') === 'none',
+  );
+
+  if (hideTabBar) {
+    return null;
+  }
 
   return (
     <View style={[styles.wrapper, { paddingBottom: Math.max(insets.bottom, spacing.sm) }]}>

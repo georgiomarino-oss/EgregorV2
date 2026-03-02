@@ -1,4 +1,5 @@
 ﻿import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { getFocusedRouteNameFromRoute } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
 import { BottomTabs } from '../../components/BottomTabs';
@@ -82,7 +83,19 @@ function MainTabs() {
         component={CommunityStackNavigator}
         options={{ title: 'Community' }}
       />
-      <Tab.Screen name="SoloTab" component={SoloStackNavigator} options={{ title: 'Solo' }} />
+      <Tab.Screen
+        name="SoloTab"
+        component={SoloStackNavigator}
+        options={({ route }) => {
+          const nestedRouteName = getFocusedRouteNameFromRoute(route) ?? 'SoloHome';
+          const hideTabBar = nestedRouteName === 'SoloLive';
+
+          return {
+            title: 'Solo',
+            ...(hideTabBar ? { tabBarStyle: { display: 'none' } } : {}),
+          };
+        }}
+      />
       <Tab.Screen name="EventsTab" component={EventsStackNavigator} options={{ title: 'Events' }} />
       <Tab.Screen
         name="ProfileTab"
