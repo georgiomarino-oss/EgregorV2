@@ -1,6 +1,6 @@
 import ambientAnimation from '../../assets/lottie/cosmic-ambient.json';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -32,6 +32,113 @@ function formatClock(totalSeconds: number) {
   return `${minutes}:${seconds}`;
 }
 
+function sanitizeScriptParagraph(paragraph: string) {
+  const withoutMarkdownHeadings = paragraph
+    .replace(/^\*\*\s*(grounding|prayer|closing)\s*\*\*\s*[:\-–—]?\s*/i, '')
+    .replace(/^(grounding|prayer|closing)\s*[:\-–—]\s*/i, '')
+    .replace(/\*\*/g, '');
+
+  return withoutMarkdownHeadings.trim();
+}
+
+function splitLongParagraph(paragraph: string, maxChars = 130) {
+  if (paragraph.length <= maxChars) {
+    return [paragraph];
+  }
+
+  const sentences = paragraph
+    .split(/(?<=[.!?])\s+/)
+    .map((sentence) => sentence.trim())
+    .filter((sentence) => sentence.length > 0);
+
+  if (sentences.length <= 1) {
+    return [paragraph];
+  }
+
+  const chunks: string[] = [];
+  let buffer = '';
+
+  for (const sentence of sentences) {
+    const candidate = buffer ? `${buffer} ${sentence}` : sentence;
+    if (candidate.length <= maxChars) {
+      buffer = candidate;
+      continue;
+    }
+
+    if (buffer) {
+      chunks.push(buffer.trim());
+      buffer = sentence;
+    } else {
+      chunks.push(sentence.trim());
+    }
+  }
+
+  if (buffer) {
+    chunks.push(buffer.trim());
+  }
+
+  return chunks.length > 0 ? chunks : [paragraph];
+}
+
+function splitScriptIntoParagraphs(script: string) {
+  const normalized = script.trim();
+  if (!normalized) {
+    return [];
+  }
+
+  const paragraphs = normalized
+    .replace(/\r\n/g, '\n')
+    .split(/\n{2,}/)
+    .map((part) => sanitizeScriptParagraph(part))
+    .filter((part) => part.length > 0);
+
+  if (paragraphs.length > 1) {
+    return paragraphs.flatMap((paragraph) => splitLongParagraph(paragraph));
+  }
+
+  const singleParagraph = paragraphs[0] ?? '';
+  if (!singleParagraph) {
+    return [];
+  }
+
+  const sentences = singleParagraph
+    .split(/(?<=[.!?])\s+/)
+    .map((sentence) => sentence.trim())
+    .filter((sentence) => sentence.length > 0);
+
+  if (sentences.length <= 2) {
+    return [singleParagraph];
+  }
+
+  const fallbackParagraphs: string[] = [];
+  let buffer = '';
+
+  for (const sentence of sentences) {
+    const candidate = buffer ? `${buffer} ${sentence}` : sentence;
+    if (candidate.length <= 240) {
+      buffer = candidate;
+      continue;
+    }
+
+    if (buffer) {
+      fallbackParagraphs.push(buffer.trim());
+      buffer = sentence;
+    } else {
+      fallbackParagraphs.push(sentence.trim());
+    }
+  }
+
+  if (buffer) {
+    fallbackParagraphs.push(buffer.trim());
+  }
+
+  if (fallbackParagraphs.length > 0) {
+    return fallbackParagraphs.flatMap((paragraph) => splitLongParagraph(paragraph));
+  }
+
+  return splitLongParagraph(singleParagraph);
+}
+
 export function SoloLiveScreen() {
   const navigation = useNavigation<SoloNavigation>();
   const route = useRoute<SoloLiveRoute>();
@@ -50,6 +157,8 @@ export function SoloLiveScreen() {
   const [error, setError] = useState<string | null>(null);
 
   const activePrayerTitle = route.params?.intention?.trim() || 'Prayer';
+  const fallbackScript = route.params?.scriptPreset || '';
+  const resolvedScriptText = scriptText || fallbackScript;
   const totalSeconds = selectedMinutes * 60;
 
   const progress = useMemo(() => {
@@ -62,6 +171,22 @@ export function SoloLiveScreen() {
 
   const elapsedLabel = useMemo(() => formatClock(elapsedSeconds), [elapsedSeconds]);
   const totalLabel = useMemo(() => formatClock(totalSeconds), [totalSeconds]);
+  const scriptParagraphs = useMemo(
+    () => splitScriptIntoParagraphs(resolvedScriptText),
+    [resolvedScriptText],
+  );
+  const activeParagraphIndex = useMemo(() => {
+    if (scriptParagraphs.length <= 1 || totalSeconds <= 0) {
+      return 0;
+    }
+
+    const normalizedProgress = Math.min(0.999999, Math.max(0, elapsedSeconds / totalSeconds));
+    return Math.min(
+      scriptParagraphs.length - 1,
+      Math.floor(normalizedProgress * scriptParagraphs.length),
+    );
+  }, [elapsedSeconds, scriptParagraphs.length, totalSeconds]);
+  const activeParagraph = scriptParagraphs[activeParagraphIndex] ?? '';
 
   const closeAllSelectors = useCallback(() => {
     setIsVoiceMenuOpen(false);
@@ -355,22 +480,24 @@ export function SoloLiveScreen() {
               <Typography allowFontScaling={false} color={colors.textSecondary} variant="Body">
                 Loading prayer script...
               </Typography>
-            ) : (
-              <ScrollView
-                contentContainerStyle={styles.scriptContent}
-                showsVerticalScrollIndicator={false}
-              >
+            ) : resolvedScriptText ? (
+              <View style={styles.scriptSyncWrap}>
                 <Typography
+                  adjustsFontSizeToFit
                   allowFontScaling={false}
-                  style={styles.scriptText}
-                  variant="bodyLg"
+                  minimumFontScale={0.58}
+                  numberOfLines={6}
+                  style={styles.scriptTextActive}
+                  variant="H2"
                   weight="bold"
                 >
-                  {scriptText ||
-                    route.params?.scriptPreset ||
-                    'No script available for this prayer yet.'}
+                  {activeParagraph}
                 </Typography>
-              </ScrollView>
+              </View>
+            ) : (
+              <Typography allowFontScaling={false} color={colors.textSecondary} variant="Body">
+                No script available for this prayer yet.
+              </Typography>
             )}
           </View>
 
@@ -494,6 +621,7 @@ const styles = StyleSheet.create({
   },
   bottomBlock: {
     gap: spacing.xs,
+    marginTop: spacing.xs,
   },
   bottomIconAction: {
     alignItems: 'center',
@@ -508,7 +636,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flex: 1,
     gap: spacing.sm,
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
     minHeight: 0,
   },
   container: {
@@ -628,16 +756,28 @@ const styles = StyleSheet.create({
   screenContent: {
     flex: 1,
   },
-  scriptContent: {
-    flexGrow: 1,
+  scriptSyncWrap: {
+    alignItems: 'center',
+    gap: spacing.xxs,
     justifyContent: 'center',
+    minHeight: 0,
+    paddingBottom: spacing.xxs,
+    width: '100%',
   },
-  scriptText: {
+  scriptTextActive: {
+    fontSize: 21,
+    lineHeight: 31,
+    maxWidth: '98%',
+    paddingBottom: spacing.xxs,
     textAlign: 'center',
   },
   scriptWrap: {
+    alignItems: 'center',
     flex: 1,
+    justifyContent: 'center',
     minHeight: 0,
+    paddingHorizontal: spacing.xs,
+    paddingVertical: spacing.sm,
     width: '100%',
   },
   selectorButton: {
