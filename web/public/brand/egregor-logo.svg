@@ -1,0 +1,35 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Egregor V1 still master logo">
+  <defs>
+    <radialGradient id="bg-grad" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(512 512) rotate(90) scale(512)">
+      <stop offset="0" stop-color="#17354F"/>
+      <stop offset="1" stop-color="#030A13"/>
+    </radialGradient>
+    <radialGradient id="core-grad" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(512 512) rotate(90) scale(286)">
+      <stop offset="0" stop-color="#FFDCA6" stop-opacity="0.95"/>
+      <stop offset="0.52" stop-color="#89D8FF" stop-opacity="0.58"/>
+      <stop offset="1" stop-color="#89D8FF" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="ring-grad" x1="128" y1="128" x2="896" y2="896" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#5DE1C2"/>
+      <stop offset="0.5" stop-color="#89D8FF"/>
+      <stop offset="1" stop-color="#FFDCA6"/>
+    </linearGradient>
+  </defs>
+
+  <circle cx="512" cy="512" r="500" fill="url(#bg-grad)"/>
+  <circle cx="512" cy="512" r="286" fill="url(#core-grad)"/>
+
+  <circle cx="512" cy="512" r="375" stroke="url(#ring-grad)" stroke-width="10" stroke-opacity="0.92"/>
+  <circle cx="512" cy="512" r="307" stroke="#A9E8FF" stroke-opacity="0.64" stroke-width="7"/>
+  <circle cx="512" cy="512" r="220" stroke="#5DE1C2" stroke-opacity="0.34" stroke-width="5"/>
+
+  <path d="M137 512H887" stroke="#AEE8FF" stroke-opacity="0.44" stroke-width="6"/>
+  <path d="M512 137V887" stroke="#AEE8FF" stroke-opacity="0.34" stroke-width="6"/>
+
+  <circle cx="884" cy="512" r="18" fill="#5DE1C2"/>
+  <circle cx="512" cy="140" r="17" fill="#89D8FF"/>
+  <circle cx="319" cy="814" r="16" fill="#FFBF6B"/>
+
+  <circle cx="512" cy="512" r="34" fill="#FFF2DE"/>
+  <circle cx="512" cy="512" r="67" stroke="#FFDCA6" stroke-opacity="0.5" stroke-width="4"/>
+</svg>

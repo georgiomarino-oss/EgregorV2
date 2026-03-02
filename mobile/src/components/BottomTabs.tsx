@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { cssAngleToLinearPoints } from '../theme/gradient';
 import { figmaV2Reference } from '../theme/figma-v2-reference';
+import { tabBarInsetX } from '../theme/layout';
 import { colors, radii, spacing } from '../theme/tokens';
 import { Typography } from './Typography';
 
@@ -102,7 +103,7 @@ const styles = StyleSheet.create({
     borderColor: figmaV2Reference.tabs.activeBorder,
   },
   wrapper: {
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: tabBarInsetX,
     paddingTop: spacing.xs,
   },
 });

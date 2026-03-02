@@ -9,6 +9,8 @@
     "web": "expo start --web",
     "lint": "eslint . --ext .ts,.tsx",
     "lint:fix": "eslint . --ext .ts,.tsx --fix",
+    "check:no-screen-hex": "node ./scripts/check-no-hex-in-screens.mjs",
+    "ci:design-system": "npm run check:no-screen-hex",
     "typecheck": "tsc --noEmit",
     "format": "prettier --check .",
     "format:fix": "prettier --write ."

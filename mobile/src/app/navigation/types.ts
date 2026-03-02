@@ -19,6 +19,7 @@ export type SoloStackParamList = {
 
 export type CommunityStackParamList = {
   CommunityHome: undefined;
+  ColorSwatch: undefined;
 };
 
 export type EventsStackParamList = {

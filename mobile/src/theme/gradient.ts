@@ -26,3 +26,18 @@ export function cssAngleToLinearPoints(angleDeg: number): LinearGradientPoints {
 
   return { end, start };
 }
+
+function isClose(a: number, b: number, tolerance = 1e-6) {
+  return Math.abs(a - b) <= tolerance;
+}
+
+const angle180Sanity = cssAngleToLinearPoints(180);
+const isAngle180Valid =
+  isClose(angle180Sanity.start.x, 0.5) &&
+  isClose(angle180Sanity.start.y, 0) &&
+  isClose(angle180Sanity.end.x, 0.5) &&
+  isClose(angle180Sanity.end.y, 1);
+
+if (__DEV__ && !isAngle180Valid) {
+  console.warn('[gradient] cssAngleToLinearPoints failed sanity check for 180deg');
+}

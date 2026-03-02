@@ -5,9 +5,10 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
 
 import { cssAngleToLinearPoints } from '../theme/gradient';
-import { figmaV2Backgrounds, type BackgroundRecipe } from '../theme/figmaV2Backgrounds';
+import { figmaV2Reference } from '../theme/figma-v2-reference';
+import { parseRgba } from '../theme/svgStop';
 
-type CosmicBackgroundVariant = 'auth' | 'home' | 'solo' | 'events' | 'profile';
+type CosmicBackgroundVariant = 'auth' | 'home' | 'solo' | 'events' | 'eventRoom' | 'profile';
 
 interface CosmicBackgroundProps {
   ambientSource?: unknown;
@@ -17,18 +18,23 @@ interface CosmicBackgroundProps {
   variant?: CosmicBackgroundVariant;
 }
 
+type BackgroundRecipe = (typeof figmaV2Reference.backgrounds)[CosmicBackgroundVariant];
+
 const recipeByVariant: Record<CosmicBackgroundVariant, BackgroundRecipe> = {
-  auth: figmaV2Backgrounds.auth,
-  events: figmaV2Backgrounds.events,
-  home: figmaV2Backgrounds.home,
-  profile: figmaV2Backgrounds.profile,
-  solo: figmaV2Backgrounds.solo,
+  auth: figmaV2Reference.backgrounds.auth,
+  eventRoom: figmaV2Reference.backgrounds.eventRoom,
+  events: figmaV2Reference.backgrounds.events,
+  home: figmaV2Reference.backgrounds.home,
+  profile: figmaV2Reference.backgrounds.profile,
+  solo: figmaV2Reference.backgrounds.solo,
 };
 
 function RadialLayer({ recipe, variant }: { recipe: BackgroundRecipe; variant: string }) {
+  const { height, width } = recipe.svg;
+
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-      <Svg height="100%" preserveAspectRatio="none" viewBox="0 0 605.34 806" width="100%">
+      <Svg height="100%" preserveAspectRatio="none" viewBox={`0 0 ${width} ${height}`} width="100%">
         <Defs>
           {recipe.radials.map((radial, index) => {
             const gradientId = `${variant}-radial-${index}`;
@@ -43,13 +49,20 @@ function RadialLayer({ recipe, variant }: { recipe: BackgroundRecipe; variant: s
                 key={gradientId}
                 r="10"
               >
-                {radial.stops.map((stop, stopIndex) => (
-                  <Stop
-                    key={`${gradientId}-stop-${stopIndex}`}
-                    offset={`${stop.offset * 100}%`}
-                    stopColor={stop.color}
-                  />
-                ))}
+                {radial.stops.map((stop, stopIndex) => {
+                  const svgStop = parseRgba(stop.color);
+                  const stopOpacityProps =
+                    svgStop.stopOpacity === undefined ? {} : { stopOpacity: svgStop.stopOpacity };
+
+                  return (
+                    <Stop
+                      key={`${gradientId}-stop-${stopIndex}`}
+                      offset={`${stop.offset * 100}%`}
+                      stopColor={svgStop.stopColor}
+                      {...stopOpacityProps}
+                    />
+                  );
+                })}
               </RadialGradient>
             );
           })}
@@ -57,9 +70,9 @@ function RadialLayer({ recipe, variant }: { recipe: BackgroundRecipe; variant: s
         {recipe.radials.map((_radial, index) => (
           <Rect
             fill={`url(#${variant}-radial-${index})`}
-            height="806"
+            height={height}
             key={`${variant}-rect-${index}`}
-            width="605.34"
+            width={width}
             x="0"
             y="0"
           />

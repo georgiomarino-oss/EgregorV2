@@ -1,17 +1,19 @@
-﻿import ambientAnimation from '../../assets/lottie/cosmic-ambient.json';
+import ambientAnimation from '../../assets/lottie/cosmic-ambient.json';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
 import { useRoute } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
 
 import type { SoloStackParamList } from '../app/navigation/types';
 import { Button } from '../components/Button';
-import { CosmicBackground } from '../components/CosmicBackground';
+import { Screen } from '../components/Screen';
 import { SurfaceCard } from '../components/SurfaceCard';
 import { Typography } from '../components/Typography';
 import { generatePrayerAudio, generatePrayerScript } from '../lib/api/functions';
 import { configureAudioForPlayback, createPlayer, type ManagedAudioPlayer } from '../lib/audio';
+import { figmaV2Reference } from '../theme/figma-v2-reference';
+import { profileRowGap, sectionGap } from '../theme/layout';
 import { colors, radii, spacing } from '../theme/tokens';
 
 type SoloLiveRoute = RouteProp<SoloStackParamList, 'SoloLive'>;
@@ -164,97 +166,95 @@ export function SoloLiveScreen() {
   const durationLabel = useMemo(() => formatMillis(durationMillis), [durationMillis]);
 
   return (
-    <CosmicBackground ambientSource={ambientAnimation} variant="solo">
-      <ScrollView contentContainerStyle={styles.content}>
-        <Typography variant="H1" weight="bold">
-          Live ritual atmosphere
+    <Screen ambientSource={ambientAnimation} contentContainerStyle={styles.content} variant="solo">
+      <Typography variant="H1" weight="bold">
+        Live ritual atmosphere
+      </Typography>
+      <Typography color={colors.textSecondary}>
+        Dedicated solo screen with breathing-synced aura and divine light motion.
+      </Typography>
+
+      <SurfaceCard radius="xl" style={styles.section}>
+        <Typography color={colors.textSecondary} variant="Label">
+          Breath phase: exhale for 7s
         </Typography>
-        <Typography color={colors.textSecondary}>
-          Dedicated solo screen with breathing-synced aura and divine light motion.
-        </Typography>
 
-        <SurfaceCard radius="xl" style={styles.section}>
-          <Typography color={colors.textSecondary} variant="Label">
-            Breath phase: exhale for 7s
-          </Typography>
-
-          <View style={styles.timerWrap}>
-            <View style={styles.timerInner}>
-              <Typography color="#FFE8BD" variant="Metric" weight="bold">
-                {elapsedLabel}
-              </Typography>
-              <Typography color={colors.textSecondary} variant="Caption">
-                {`of ${durationLabel}`}
-              </Typography>
-            </View>
+        <View style={styles.timerWrap}>
+          <View style={styles.timerInner}>
+            <Typography color={figmaV2Reference.buttons.gold.from} variant="Metric" weight="bold">
+              {elapsedLabel}
+            </Typography>
+            <Typography color={colors.textSecondary} variant="Caption">
+              {`of ${durationLabel}`}
+            </Typography>
           </View>
+        </View>
 
-          <SurfaceCard radius="sm" style={styles.stepActive} tone="warm">
-            <Typography>1. Breathe in and invite compassion.</Typography>
-          </SurfaceCard>
-          <SurfaceCard radius="sm" style={styles.stepCard}>
-            <Typography>2. Breathe out and release fear.</Typography>
-          </SurfaceCard>
-          <SurfaceCard radius="sm" style={styles.stepCard}>
-            <Typography>3. Rest in gratitude for healing already unfolding.</Typography>
-          </SurfaceCard>
-
-          <View style={styles.buttonRow}>
-            <Button
-              loading={loadingScript}
-              onPress={onGenerateScript}
-              title="Generate Script"
-              variant="gold"
-            />
-            <Button
-              loading={loadingAudio}
-              onPress={onGenerateAudio}
-              title="Generate Audio"
-              variant="primary"
-            />
-          </View>
-
-          <View style={styles.buttonRow}>
-            <Button
-              disabled={!isSoundReady}
-              onPress={onTogglePause}
-              title={isPlaying ? 'Pause' : 'Resume'}
-              variant="secondary"
-            />
-            <Button
-              disabled={!isSoundReady}
-              onPress={() => void onStop()}
-              title="Stop"
-              variant="secondary"
-            />
-          </View>
-
-          {loadingScript ? <ActivityIndicator color={colors.accentMintStart} /> : null}
-          {script ? <Typography color={colors.textSecondary}>{script}</Typography> : null}
-          {audioStatus ? <Typography variant="Caption">{audioStatus}</Typography> : null}
-          {error ? <Typography color={colors.danger}>{error}</Typography> : null}
+        <SurfaceCard radius="sm" style={styles.stepActive}>
+          <Typography>1. Breathe in and invite compassion.</Typography>
+        </SurfaceCard>
+        <SurfaceCard radius="sm" style={styles.stepCard}>
+          <Typography>2. Breathe out and release fear.</Typography>
+        </SurfaceCard>
+        <SurfaceCard radius="sm" style={styles.stepCard}>
+          <Typography>3. Rest in gratitude for healing already unfolding.</Typography>
         </SurfaceCard>
 
-        <View style={styles.row}>
-          <SurfaceCard radius="md" style={styles.statCard}>
-            <Typography color={colors.textSecondary} variant="Label">
-              This week
-            </Typography>
-            <Typography variant="H2" weight="bold">
-              8 sessions
-            </Typography>
-          </SurfaceCard>
-          <SurfaceCard radius="md" style={styles.statCard}>
-            <Typography color={colors.textSecondary} variant="Label">
-              Minutes
-            </Typography>
-            <Typography variant="H2" weight="bold">
-              74
-            </Typography>
-          </SurfaceCard>
+        <View style={styles.buttonRow}>
+          <Button
+            loading={loadingScript}
+            onPress={onGenerateScript}
+            title="Generate Script"
+            variant="gold"
+          />
+          <Button
+            loading={loadingAudio}
+            onPress={onGenerateAudio}
+            title="Generate Audio"
+            variant="primary"
+          />
         </View>
-      </ScrollView>
-    </CosmicBackground>
+
+        <View style={styles.buttonRow}>
+          <Button
+            disabled={!isSoundReady}
+            onPress={onTogglePause}
+            title={isPlaying ? 'Pause' : 'Resume'}
+            variant="secondary"
+          />
+          <Button
+            disabled={!isSoundReady}
+            onPress={() => void onStop()}
+            title="Stop"
+            variant="secondary"
+          />
+        </View>
+
+        {loadingScript ? <ActivityIndicator color={colors.accentMintStart} /> : null}
+        {script ? <Typography color={colors.textSecondary}>{script}</Typography> : null}
+        {audioStatus ? <Typography variant="Caption">{audioStatus}</Typography> : null}
+        {error ? <Typography color={colors.danger}>{error}</Typography> : null}
+      </SurfaceCard>
+
+      <View style={styles.row}>
+        <SurfaceCard radius="md" style={styles.statCard}>
+          <Typography color={colors.textSecondary} variant="Label">
+            This week
+          </Typography>
+          <Typography variant="H2" weight="bold">
+            8 sessions
+          </Typography>
+        </SurfaceCard>
+        <SurfaceCard radius="md" style={styles.statCard}>
+          <Typography color={colors.textSecondary} variant="Label">
+            Minutes
+          </Typography>
+          <Typography variant="H2" weight="bold">
+            74
+          </Typography>
+        </SurfaceCard>
+      </View>
+    </Screen>
   );
 }
 
@@ -264,23 +264,21 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   content: {
-    gap: spacing.md,
-    padding: spacing.xl,
-    paddingBottom: spacing.xxxl,
+    gap: sectionGap,
   },
   row: {
     flexDirection: 'row',
-    gap: spacing.sm,
+    gap: sectionGap,
   },
   section: {
-    gap: spacing.sm,
+    gap: sectionGap,
   },
   statCard: {
     flex: 1,
-    gap: spacing.xs,
+    gap: profileRowGap,
   },
   stepActive: {
-    borderColor: 'rgba(255, 214, 152, 0.56)',
+    borderColor: figmaV2Reference.buttons.gold.border,
     paddingVertical: spacing.xs,
   },
   stepCard: {
@@ -288,7 +286,7 @@ const styles = StyleSheet.create({
   },
   timerInner: {
     alignItems: 'center',
-    borderColor: 'rgba(255, 214, 152, 0.56)',
+    borderColor: figmaV2Reference.buttons.gold.border,
     borderRadius: radii.pill,
     borderWidth: 1,
     height: 210,
@@ -297,8 +295,8 @@ const styles = StyleSheet.create({
   },
   timerWrap: {
     alignItems: 'center',
-    backgroundColor: 'rgba(17, 32, 47, 0.84)',
-    borderColor: 'rgba(255, 214, 152, 0.56)',
+    backgroundColor: figmaV2Reference.eventRoom.miniButtonBackground,
+    borderColor: figmaV2Reference.buttons.gold.border,
     borderRadius: radii.pill,
     borderWidth: 1,
     justifyContent: 'center',

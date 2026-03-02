@@ -1,22 +1,15 @@
-﻿import ambientAnimation from '../../assets/lottie/cosmic-ambient.json';
+import ambientAnimation from '../../assets/lottie/cosmic-ambient.json';
 import { useState } from 'react';
-import {
-  Image,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  TextInput,
-  View,
-} from 'react-native';
+import { KeyboardAvoidingView, Platform, StyleSheet, TextInput, View } from 'react-native';
 
-import logoV1 from '../../assets/brand/logo-v1.png';
 import { Button } from '../components/Button';
-import { CosmicBackground } from '../components/CosmicBackground';
+import { LiveLogo } from '../components/LiveLogo';
+import { Screen } from '../components/Screen';
 import { SurfaceCard } from '../components/SurfaceCard';
 import { Typography } from '../components/Typography';
 import { supabase } from '../lib/supabase';
 import { figmaV2Reference } from '../theme/figma-v2-reference';
+import { sectionGap } from '../theme/layout';
 import { colors, radii, spacing, typography } from '../theme/tokens';
 
 type AuthMode = 'signIn' | 'signUp';
@@ -78,87 +71,88 @@ export function AuthScreen() {
   };
 
   return (
-    <CosmicBackground ambientSource={ambientAnimation} variant="auth">
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.keyboardAvoiding}
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      style={styles.keyboardAvoiding}
+    >
+      <Screen
+        ambientSource={ambientAnimation}
+        contentContainerStyle={styles.scrollContent}
+        scrollProps={{ keyboardShouldPersistTaps: 'handled' }}
+        variant="auth"
+        withTabBarInset={false}
       >
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
-        >
-          <View style={styles.header}>
-            <Image resizeMode="contain" source={logoV1} style={styles.logo} />
-            <Typography variant="H1" weight="bold">
-              Enter the collective field
-            </Typography>
-            <Typography color={colors.textSecondary} style={styles.subtitle} variant="Body">
-              Sign in to join live healing rooms and personalized solo rituals.
-            </Typography>
+        <View style={styles.header}>
+          <LiveLogo size={82} style={styles.logo} />
+          <Typography variant="H1" weight="bold">
+            Enter the collective field
+          </Typography>
+          <Typography color={colors.textSecondary} style={styles.subtitle} variant="Body">
+            Sign in to join live healing rooms and personalized solo rituals.
+          </Typography>
+        </View>
+
+        <SurfaceCard radius="xl" style={styles.card} variant="authForm">
+          <View style={styles.form}>
+            <Typography variant="Label">Email</Typography>
+            <TextInput
+              autoCapitalize="none"
+              autoComplete="email"
+              keyboardType="email-address"
+              onChangeText={setEmail}
+              placeholder="you@example.com"
+              placeholderTextColor={colors.textSecondary}
+              style={styles.input}
+              value={email}
+            />
+
+            <Typography variant="Label">Password</Typography>
+            <TextInput
+              autoCapitalize="none"
+              autoComplete="password"
+              onChangeText={setPassword}
+              placeholder="********"
+              placeholderTextColor={colors.textSecondary}
+              secureTextEntry
+              style={styles.input}
+              value={password}
+            />
           </View>
 
-          <SurfaceCard radius="xl" style={styles.card} variant="authForm">
-            <View style={styles.form}>
-              <Typography variant="Label">Email</Typography>
-              <TextInput
-                autoCapitalize="none"
-                autoComplete="email"
-                keyboardType="email-address"
-                onChangeText={setEmail}
-                placeholder="you@example.com"
-                placeholderTextColor={colors.textSecondary}
-                style={styles.input}
-                value={email}
-              />
-
-              <Typography variant="Label">Password</Typography>
-              <TextInput
-                autoCapitalize="none"
-                autoComplete="password"
-                onChangeText={setPassword}
-                placeholder="••••••••"
-                placeholderTextColor={colors.textSecondary}
-                secureTextEntry
-                style={styles.input}
-                value={password}
-              />
-            </View>
-
-            <View style={styles.modeRow}>
-              <SurfaceCard radius="sm" style={styles.modeCard} variant="homeStatSmall">
-                <Typography color={colors.textSecondary} variant="Label">
-                  Mode
-                </Typography>
-                <Typography variant="H2" weight="bold">
-                  {isSignIn ? 'Sign in' : 'Sign up'}
-                </Typography>
-              </SurfaceCard>
-              <SurfaceCard radius="sm" style={styles.modeCard} variant="homeStatSmall">
-                <Typography color={colors.textSecondary} variant="Label">
-                  State
-                </Typography>
-                <Typography variant="H2" weight="bold">
-                  {loading ? 'Working' : 'Ready'}
-                </Typography>
-              </SurfaceCard>
-            </View>
-
-            {message ? (
-              <Typography color={colors.textSecondary} style={styles.message} variant="Caption">
-                {message}
+          <View style={styles.modeRow}>
+            <SurfaceCard radius="sm" style={styles.modeCard} variant="authMeta">
+              <Typography color={colors.textBodySoft} variant="Label">
+                Mode
               </Typography>
-            ) : null}
+              <Typography variant="H2" weight="bold">
+                {isSignIn ? 'Sign in' : 'Sign up'}
+              </Typography>
+            </SurfaceCard>
+            <SurfaceCard radius="sm" style={styles.modeCard} variant="authMeta">
+              <Typography color={colors.textBodySoft} variant="Label">
+                State
+              </Typography>
+              <Typography variant="H2" weight="bold">
+                {loading ? 'Working' : 'Ready'}
+              </Typography>
+            </SurfaceCard>
+          </View>
 
-            <Button loading={loading} onPress={onSubmit} title={isSignIn ? 'Sign in' : 'Sign up'} />
-            <Button
-              onPress={() => setMode(isSignIn ? 'signUp' : 'signIn')}
-              title={isSignIn ? 'Create account' : 'Back to sign in'}
-              variant="secondary"
-            />
-          </SurfaceCard>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </CosmicBackground>
+          {message ? (
+            <Typography color={colors.textSecondary} style={styles.message} variant="Caption">
+              {message}
+            </Typography>
+          ) : null}
+
+          <Button loading={loading} onPress={onSubmit} title={isSignIn ? 'Sign in' : 'Sign up'} />
+          <Button
+            onPress={() => setMode(isSignIn ? 'signUp' : 'signIn')}
+            title={isSignIn ? 'Create account' : 'Back to sign in'}
+            variant="secondary"
+          />
+        </SurfaceCard>
+      </Screen>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -187,9 +181,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   logo: {
-    height: 54,
+    alignSelf: 'center',
     marginBottom: spacing.xs,
-    width: 220,
   },
   message: {
     paddingHorizontal: spacing.xs,
@@ -197,7 +190,6 @@ const styles = StyleSheet.create({
   modeCard: {
     flex: 1,
     gap: spacing.xs,
-    paddingVertical: spacing.sm,
   },
   modeRow: {
     flexDirection: 'row',
@@ -205,9 +197,8 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
+    gap: sectionGap,
     justifyContent: 'center',
-    padding: spacing.xl,
-    paddingBottom: spacing.xxxl,
   },
   subtitle: {
     maxWidth: 460,

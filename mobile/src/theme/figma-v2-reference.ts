@@ -1,3 +1,12 @@
+import {
+  EVENTS_PANEL_HEIGHT,
+  HOME_ALERT_HEIGHT,
+  HOME_STAT_HEIGHT,
+  PROFILE_IMPACT_HEIGHT,
+  PROFILE_ROW_HEIGHT,
+  WELCOME_MAINCARD_HEIGHT,
+} from './figmaV2Layout';
+
 export interface FigmaLinearGradientRecipe {
   angleDeg: number;
   colors: readonly [string, string, ...string[]];
@@ -29,6 +38,7 @@ export const figmaV2Reference = {
   text: {
     heading: '#EFF9FF',
     body: '#ABC6D8',
+    bodySoft: '#ABC5D8',
     bodyStrong: '#C1D8E9',
     caption: '#B6CDDF',
     label: '#A9C8DB',
@@ -58,6 +68,10 @@ export const figmaV2Reference = {
           ],
         },
       ],
+      svg: {
+        width: 605.33,
+        height: 806,
+      },
     },
     home: {
       linear: {
@@ -75,6 +89,10 @@ export const figmaV2Reference = {
           ],
         },
       ],
+      svg: {
+        width: 605.33,
+        height: 806,
+      },
     },
     profile: {
       linear: {
@@ -92,10 +110,14 @@ export const figmaV2Reference = {
           ],
         },
       ],
+      svg: {
+        width: 605.34,
+        height: 806,
+      },
     },
     events: {
       linear: {
-        angleDeg: 177.3378032907102,
+        angleDeg: 177.33785823862775,
         colors: ['#081729', '#061222'],
         locations: [0.016282, 0.98372],
       },
@@ -109,6 +131,31 @@ export const figmaV2Reference = {
           ],
         },
       ],
+      svg: {
+        width: 605.34,
+        height: 806,
+      },
+    },
+    eventRoom: {
+      linear: {
+        angleDeg: 177.33785823862775,
+        colors: ['#151D34', '#101729'],
+        locations: [0.016282, 0.98372],
+      },
+      radials: [
+        {
+          matrix: 'matrix(0 -22 -26 0 484.27 -32.24)',
+          stops: [
+            { color: 'rgba(255,204,129,0.2)', offset: 0 },
+            { color: 'rgba(128,102,65,0.1)', offset: 0.325 },
+            { color: 'rgba(0,0,0,0)', offset: 0.65 },
+          ],
+        },
+      ],
+      svg: {
+        width: 605.34,
+        height: 806,
+      },
     },
     solo: {
       linear: {
@@ -126,17 +173,59 @@ export const figmaV2Reference = {
           ],
         },
       ],
+      svg: {
+        width: 605.33,
+        height: 806,
+      },
     },
   },
   surfaces: {
     default: {
       backgroundColor: 'rgba(12,34,50,0.88)',
       borderColor: 'rgba(118,156,186,0.64)',
-      borderWidth: 1,
+      borderWidth: 0.8,
+      padding: 15,
+      svg: {
+        width: 565.7250366,
+        height: 58.4,
+      },
     },
     authForm: {
       borderColor: 'rgba(118,156,186,0.64)',
       borderWidth: 1,
+      padding: 15,
+      svg: {
+        width: 565.328125,
+        height: 353,
+      },
+      layer: {
+        linear: {
+          angleDeg: 170.50171749685236,
+          colors: ['rgba(17, 43, 64, 0.96)', 'rgba(10, 30, 46, 0.98)'],
+          locations: [0.07735, 0.92265],
+        },
+        radials: [
+          {
+            matrix: 'matrix(0 -22 -38 0 452.26 -70.6)',
+            stops: [
+              { color: 'rgba(116,209,244,0.1)', offset: 0 },
+              { color: 'rgba(0,0,0,0)', offset: 0.7 },
+            ],
+          },
+        ],
+      },
+    },
+    welcomeMainCard: {
+      borderColor: 'rgba(118,156,186,0.64)',
+      borderWidth: 1,
+      padding: 14,
+      size: {
+        minHeight: WELCOME_MAINCARD_HEIGHT,
+      },
+      svg: {
+        width: 565.328125,
+        height: 247,
+      },
       layer: {
         linear: {
           angleDeg: 173.3227285078803,
@@ -156,7 +245,15 @@ export const figmaV2Reference = {
     },
     homeStatCard: {
       borderColor: 'rgba(102,141,171,0.55)',
-      borderWidth: 1,
+      borderWidth: 0.8,
+      padding: 15,
+      size: {
+        minHeight: HOME_STAT_HEIGHT,
+      },
+      svg: {
+        width: 565.7250366,
+        height: 222.6,
+      },
       layer: {
         linear: {
           angleDeg: 173.9814294516185,
@@ -177,16 +274,54 @@ export const figmaV2Reference = {
     homeStatSmall: {
       backgroundColor: 'rgba(12,37,55,0.86)',
       borderColor: 'rgba(112,148,176,0.56)',
+      borderWidth: 0.8,
+      padding: 13,
+      svg: {
+        width: 263.563,
+        height: 66.4,
+      },
+    },
+    authMetaCard: {
+      backgroundColor: 'rgba(12,34,50,0.88)',
+      borderColor: 'rgba(118,156,186,0.64)',
       borderWidth: 1,
+      padding: {
+        bottom: 12,
+        top: 16,
+        x: 10,
+      },
+      size: {
+        minHeight: 67,
+      },
+      svg: {
+        width: 263.664,
+        height: 67,
+      },
     },
     homeAlert: {
       backgroundColor: 'rgba(12,34,50,0.88)',
       borderColor: 'rgba(118,156,186,0.64)',
-      borderWidth: 1,
+      borderWidth: 0.8,
+      padding: 12,
+      size: {
+        minHeight: HOME_ALERT_HEIGHT,
+      },
+      svg: {
+        width: 565.7250366,
+        height: 58.4,
+      },
     },
     profileImpactCard: {
       borderColor: 'rgba(102,141,171,0.55)',
-      borderWidth: 1,
+      borderWidth: 0.8,
+      padding: 15,
+      size: {
+        minHeight: PROFILE_IMPACT_HEIGHT,
+      },
+      svg: {
+        width: 565.7374878,
+        height: 146.2,
+      },
       layer: {
         linear: {
           angleDeg: 176.03890916724248,
@@ -207,11 +342,31 @@ export const figmaV2Reference = {
     profileRow: {
       backgroundColor: 'rgba(11,36,56,0.85)',
       borderColor: 'rgba(124,153,180,0.65)',
-      borderWidth: 1,
+      borderWidth: 0.8,
+      padding: {
+        bottom: 0.8,
+        top: 10.8,
+        x: 12.8,
+      },
+      size: {
+        height: PROFILE_ROW_HEIGHT,
+      },
+      svg: {
+        width: 565.7374878,
+        height: 36.8,
+      },
     },
     eventsPanel: {
       borderColor: 'rgba(108,148,176,0.58)',
-      borderWidth: 1,
+      borderWidth: 0.8,
+      padding: 15,
+      size: {
+        minHeight: EVENTS_PANEL_HEIGHT,
+      },
+      svg: {
+        width: 565.7374878,
+        height: 462.4,
+      },
       layer: {
         linear: {
           angleDeg: 171.79904949717775,
@@ -232,6 +387,11 @@ export const figmaV2Reference = {
     eventRoomCurrent: {
       borderColor: 'rgba(111,148,176,0.62)',
       borderWidth: 0.8,
+      padding: 15,
+      svg: {
+        width: Number('565.7374877929688'),
+        height: Number('155.60000610351562'),
+      },
       layer: {
         linear: {
           angleDeg: 175.78511890666476,
@@ -314,5 +474,24 @@ export const figmaV2Reference = {
     progressFillTo: '#FFE1B5',
     miniButtonBackground: 'rgba(12,36,53,0.88)',
     miniButtonBorder: 'rgba(118,160,190,0.67)',
+    miniButtonText: '#DDF0FC',
+  },
+  markers: {
+    live: '#FF5C72',
+    scheduled: '#4EA1FF',
+    user: '#46DEBC',
+  },
+  status: {
+    success: '#46DEBC',
+    danger: '#FF5C72',
+    warning: '#FFC06B',
+  },
+  overlays: {
+    backdrop: 'rgba(1, 6, 12, 0.6)',
+    pressed: 'rgba(0, 0, 0, 0.08)',
+    disabled: 'rgba(1, 6, 12, 0.26)',
+  },
+  borders: {
+    faint: 'rgba(122,171,203,0.58)',
   },
 } as const;

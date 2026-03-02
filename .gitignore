@@ -5,6 +5,9 @@
 mobile/.expo/
 mobile/dist/
 supabase/.temp/
+web/.next/
+web/.vercel/
+web/tsconfig.tsbuildinfo
 
 # Environment files (never commit secrets)
 **/.env

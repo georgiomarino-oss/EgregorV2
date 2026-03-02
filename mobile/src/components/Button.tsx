@@ -16,14 +16,29 @@ interface ButtonProps {
   variant?: ButtonVariant;
 }
 
-const gradientByVariant: Record<ButtonVariant, readonly [string, string]> = {
-  primary: [figmaV2Reference.buttons.mint.from, figmaV2Reference.buttons.mint.to],
-  secondary: [
-    figmaV2Reference.buttons.secondary.background,
-    figmaV2Reference.buttons.secondary.background,
-  ],
-  gold: [figmaV2Reference.buttons.gold.from, figmaV2Reference.buttons.gold.to],
-  sky: [figmaV2Reference.buttons.sky.from, figmaV2Reference.buttons.sky.to],
+const gradientByVariant: Record<
+  ButtonVariant,
+  { colors: readonly [string, string]; locations: readonly [number, number] }
+> = {
+  primary: {
+    colors: [figmaV2Reference.buttons.mint.from, figmaV2Reference.buttons.mint.to],
+    locations: [0, 1],
+  },
+  secondary: {
+    colors: [
+      figmaV2Reference.buttons.secondary.background,
+      figmaV2Reference.buttons.secondary.background,
+    ],
+    locations: [0, 1],
+  },
+  gold: {
+    colors: [figmaV2Reference.buttons.gold.from, figmaV2Reference.buttons.gold.to],
+    locations: [0, 1],
+  },
+  sky: {
+    colors: [figmaV2Reference.buttons.sky.from, figmaV2Reference.buttons.sky.to],
+    locations: [0, 1],
+  },
 };
 
 const textColorByVariant: Record<ButtonVariant, string> = {
@@ -45,45 +60,59 @@ export function Button({
       accessibilityRole="button"
       disabled={disabled || loading}
       onPress={onPress}
-      style={({ pressed }) => [
-        styles.pressable,
-        pressed && styles.pressed,
-        (disabled || loading) && styles.disabled,
-      ]}
+      style={({ pressed }) => [styles.pressable, pressed && styles.pressedScale]}
     >
-      <LinearGradient
-        colors={gradientByVariant[variant]}
-        end={{ x: 1, y: 0 }}
-        start={{ x: 0, y: 0 }}
-        style={[
-          styles.gradient,
-          variant === 'secondary' && styles.secondaryBorder,
-          variant === 'gold' && styles.goldBorder,
-          variant === 'sky' && styles.skyBorder,
-        ]}
-      >
-        {loading ? (
-          <View style={styles.loader}>
-            <ActivityIndicator color={textColorByVariant[variant]} />
-          </View>
-        ) : (
-          <Typography
-            color={textColorByVariant[variant]}
-            style={styles.label}
-            variant="Label"
-            weight="bold"
+      {({ pressed }) => {
+        const showOverlay = pressed || disabled || loading;
+
+        return (
+          <LinearGradient
+            colors={gradientByVariant[variant].colors}
+            end={{ x: 1, y: 0 }}
+            locations={gradientByVariant[variant].locations}
+            start={{ x: 0, y: 0 }}
+            style={[
+              styles.gradient,
+              variant === 'secondary' && styles.secondaryBorder,
+              variant === 'gold' && styles.goldBorder,
+              variant === 'sky' && styles.skyBorder,
+            ]}
           >
-            {title}
-          </Typography>
-        )}
-      </LinearGradient>
+            {loading ? (
+              <View style={styles.loader}>
+                <ActivityIndicator color={textColorByVariant[variant]} />
+              </View>
+            ) : (
+              <Typography
+                color={textColorByVariant[variant]}
+                style={styles.label}
+                variant="Label"
+                weight="bold"
+              >
+                {title}
+              </Typography>
+            )}
+
+            {showOverlay ? (
+              <View
+                pointerEvents="none"
+                style={[
+                  styles.stateOverlay,
+                  (disabled || loading) && styles.disabledOverlay,
+                  pressed && styles.pressedOverlay,
+                ]}
+              />
+            ) : null}
+          </LinearGradient>
+        );
+      }}
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  disabled: {
-    opacity: 0.52,
+  disabledOverlay: {
+    backgroundColor: figmaV2Reference.overlays.disabled,
   },
   goldBorder: {
     borderColor: figmaV2Reference.buttons.gold.border,
@@ -104,8 +133,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     minHeight: 18,
   },
-  pressed: {
-    opacity: 0.88,
+  pressedOverlay: {
+    backgroundColor: figmaV2Reference.overlays.pressed,
+  },
+  pressedScale: {
     transform: [{ scale: 0.99 }],
   },
   pressable: {
@@ -118,6 +149,9 @@ const styles = StyleSheet.create({
   },
   skyBorder: {
     borderColor: figmaV2Reference.buttons.sky.border,
+  },
+  stateOverlay: {
+    ...StyleSheet.absoluteFillObject,
   },
 });
 
