@@ -4,7 +4,7 @@
     "slug": "egregor-v2",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/brand/app-icon-still-1024.png",
     "userInterfaceStyle": "dark",
     "scheme": "egregorv2",
     "splash": {
@@ -20,10 +20,8 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#0c1226",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
+        "backgroundColor": "#00000000",
+        "foregroundImage": "./assets/brand/app-icon-still-1024.png"
       },
       "permissions": [
         "ACCESS_COARSE_LOCATION",
@@ -35,7 +33,7 @@
       "package": "com.egregor.egregorv2"
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/brand/app-icon-still-48.png"
     },
     "plugins": [
       [

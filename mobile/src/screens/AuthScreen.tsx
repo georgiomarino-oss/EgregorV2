@@ -79,6 +79,7 @@ export function AuthScreen() {
         ambientSource={ambientAnimation}
         contentContainerStyle={styles.scrollContent}
         scrollProps={{ keyboardShouldPersistTaps: 'handled' }}
+        topOffset={6}
         variant="auth"
         withTabBarInset={false}
       >
@@ -119,37 +120,20 @@ export function AuthScreen() {
             />
           </View>
 
-          <View style={styles.modeRow}>
-            <SurfaceCard radius="sm" style={styles.modeCard} variant="authMeta">
-              <Typography color={colors.textBodySoft} variant="Label">
-                Mode
-              </Typography>
-              <Typography variant="H2" weight="bold">
-                {isSignIn ? 'Sign in' : 'Sign up'}
-              </Typography>
-            </SurfaceCard>
-            <SurfaceCard radius="sm" style={styles.modeCard} variant="authMeta">
-              <Typography color={colors.textBodySoft} variant="Label">
-                State
-              </Typography>
-              <Typography variant="H2" weight="bold">
-                {loading ? 'Working' : 'Ready'}
-              </Typography>
-            </SurfaceCard>
-          </View>
-
           {message ? (
             <Typography color={colors.textSecondary} style={styles.message} variant="Caption">
               {message}
             </Typography>
           ) : null}
 
-          <Button loading={loading} onPress={onSubmit} title={isSignIn ? 'Sign in' : 'Sign up'} />
-          <Button
-            onPress={() => setMode(isSignIn ? 'signUp' : 'signIn')}
-            title={isSignIn ? 'Create account' : 'Back to sign in'}
-            variant="secondary"
-          />
+          <View style={styles.actions}>
+            <Button loading={loading} onPress={onSubmit} title={isSignIn ? 'Sign in' : 'Sign up'} />
+            <Button
+              onPress={() => setMode(isSignIn ? 'signUp' : 'signIn')}
+              title={isSignIn ? 'Create account' : 'Back to sign in'}
+              variant="secondary"
+            />
+          </View>
         </SurfaceCard>
       </Screen>
     </KeyboardAvoidingView>
@@ -157,14 +141,20 @@ export function AuthScreen() {
 }
 
 const styles = StyleSheet.create({
+  actions: {
+    gap: spacing.sm,
+    marginTop: spacing.xs,
+  },
   card: {
-    gap: spacing.md,
+    gap: sectionGap,
+    paddingBottom: spacing.md,
   },
   form: {
-    gap: spacing.xs,
+    gap: spacing.sm,
   },
   header: {
     gap: spacing.sm,
+    marginBottom: sectionGap,
   },
   input: {
     backgroundColor: figmaV2Reference.inputs.auth.background,
@@ -187,18 +177,12 @@ const styles = StyleSheet.create({
   message: {
     paddingHorizontal: spacing.xs,
   },
-  modeCard: {
-    flex: 1,
-    gap: spacing.xs,
-  },
-  modeRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
   scrollContent: {
     flexGrow: 1,
     gap: sectionGap,
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
+    paddingBottom: sectionGap,
+    paddingTop: sectionGap,
   },
   subtitle: {
     maxWidth: 460,

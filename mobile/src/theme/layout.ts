@@ -24,6 +24,8 @@ export const HOME_SUBTITLE_TO_STAT_GAP = SUBTITLE_TO_MAINCARD_GAP;
 export const CARD_PADDING_LG = 15;
 export const CARD_PADDING_MD = 13;
 export const TAB_BAR_INSET_X = SCREEN_PAD_X;
+export const SCREEN_SAFE_TOP_EXTRA = 12;
+export const SCREEN_SAFE_BOTTOM_EXTRA = 12;
 
 // Backward-compatible aliases for existing imports.
 export const screenPaddingX = SCREEN_PAD_X;
@@ -36,3 +38,5 @@ export const tabBarInsetX = TAB_BAR_INSET_X;
 export const customTabBarHeight = CUSTOM_TAB_BAR_HEIGHT;
 export const homeTitleSubtitleGap = HOME_TITLE_SUBTITLE_GAP;
 export const homeSubtitleToStatGap = HOME_SUBTITLE_TO_STAT_GAP;
+export const screenSafeTopExtra = SCREEN_SAFE_TOP_EXTRA;
+export const screenSafeBottomExtra = SCREEN_SAFE_BOTTOM_EXTRA;
