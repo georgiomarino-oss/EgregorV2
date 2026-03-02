@@ -2,6 +2,7 @@ import ambientAnimation from '../../assets/lottie/cosmic-ambient.json';
 import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
 
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
@@ -11,6 +12,7 @@ import { SurfaceCard } from '../components/SurfaceCard';
 import { Typography } from '../components/Typography';
 import { HOME_CARD_GAP, PROFILE_SECTION_GAP, SCREEN_PAD_X } from '../theme/figmaV2Layout';
 import { figmaV2Reference } from '../theme/figma-v2-reference';
+import { CARD_PADDING_LG } from '../theme/layout';
 import { colors, radii, spacing } from '../theme/tokens';
 
 type SoloNavigation = NativeStackNavigationProp<SoloStackParamList, 'SoloHome'>;
@@ -189,6 +191,7 @@ export function SoloScreen() {
   const [activeSlideByCategory, setActiveSlideByCategory] = useState<
     Partial<Record<PrayerCategory, number>>
   >({});
+  const [prayerRailWidth, setPrayerRailWidth] = useState<number | null>(null);
 
   const favoriteCount = favoriteIds.length;
   const recentCount = SOLO_PRAYER_LIBRARY.length;
@@ -215,10 +218,13 @@ export function SoloScreen() {
       .filter((section) => section.items.length > 0);
   }, [selectedCategory, visibleLibrary]);
 
-  const prayerCardWidth = useMemo(() => {
-    const estimatedWidth = windowWidth - SCREEN_PAD_X * 2 - 96;
-    return Math.min(274, Math.max(220, estimatedWidth));
+  const fallbackPrayerCardWidth = useMemo(() => {
+    const laneWidth = windowWidth - SCREEN_PAD_X * 2 - CARD_PADDING_LG * 2 - 2;
+    return Math.max(200, laneWidth);
   }, [windowWidth]);
+
+  const prayerCardWidth =
+    prayerRailWidth && prayerRailWidth > 0 ? prayerRailWidth : fallbackPrayerCardWidth;
 
   const prayerCardStep = useMemo(() => prayerCardWidth + HOME_CARD_GAP, [prayerCardWidth]);
 
@@ -310,6 +316,15 @@ export function SoloScreen() {
             <ScrollView
               horizontal
               decelerationRate="fast"
+              onLayout={(event) => {
+                const measuredWidth = event.nativeEvent.layout.width;
+                if (
+                  measuredWidth > 0 &&
+                  (prayerRailWidth === null || Math.abs(prayerRailWidth - measuredWidth) > 1)
+                ) {
+                  setPrayerRailWidth(measuredWidth);
+                }
+              }}
               onMomentumScrollEnd={(event) => {
                 const nextIndex = Math.round(event.nativeEvent.contentOffset.x / prayerCardStep);
                 const clampedIndex = Math.max(0, Math.min(section.items.length - 1, nextIndex));
@@ -327,85 +342,77 @@ export function SoloScreen() {
                 const isFavorite = favoriteIds.includes(item.id);
 
                 return (
-                  <SurfaceCard
+                  <Pressable
                     key={item.id}
-                    contentPadding={spacing.sm}
-                    radius="md"
-                    style={[styles.prayerCard, { width: prayerCardWidth }]}
-                    variant="homeStatSmall"
+                    onPress={() =>
+                      navigation.navigate('SoloLive', {
+                        intention: item.title,
+                        scriptPreset: item.body,
+                      })
+                    }
+                    style={({ pressed }) => [pressed && styles.prayerCardPressed]}
                   >
-                    <View style={styles.prayerCardHeader}>
-                      <Typography
-                        allowFontScaling={false}
-                        style={styles.prayerTitle}
-                        variant="H2"
-                        weight="bold"
-                      >
-                        {item.title}
-                      </Typography>
-                      <Pressable
-                        onPress={() => toggleFavorite(item.id)}
-                        style={({ pressed }) => [
-                          styles.favoriteButton,
-                          isFavorite && styles.favoriteButtonActive,
-                          pressed && styles.favoritePressed,
-                        ]}
-                      >
+                    <SurfaceCard
+                      contentPadding={spacing.sm}
+                      radius="md"
+                      style={[styles.prayerCard, { width: prayerCardWidth }]}
+                      variant="homeStatSmall"
+                    >
+                      <View style={styles.prayerCardHeader}>
                         <Typography
                           allowFontScaling={false}
-                          color={isFavorite ? colors.textOnSky : colors.textSecondary}
+                          style={styles.prayerTitle}
                           variant="H2"
                           weight="bold"
                         >
-                          {isFavorite ? 'Saved' : 'Save'}
+                          {item.title}
                         </Typography>
-                      </Pressable>
-                    </View>
+                        <Pressable
+                          accessibilityLabel={
+                            isFavorite ? 'Remove from favorites' : 'Add to favorites'
+                          }
+                          onPress={(event) => {
+                            event.stopPropagation();
+                            toggleFavorite(item.id);
+                          }}
+                          style={({ pressed }) => [
+                            styles.favoriteButton,
+                            isFavorite && styles.favoriteButtonActive,
+                            pressed && styles.favoritePressed,
+                          ]}
+                        >
+                          <MaterialCommunityIcons
+                            color={isFavorite ? colors.textOnSky : colors.textSecondary}
+                            name={isFavorite ? 'heart' : 'heart-outline'}
+                            size={18}
+                          />
+                        </Pressable>
+                      </View>
 
-                    <Typography
-                      allowFontScaling={false}
-                      color={colors.textSecondary}
-                      style={styles.prayerBody}
-                    >
-                      {item.body}
-                    </Typography>
-                    <Typography
-                      allowFontScaling={false}
-                      color={colors.accentSkyStart}
-                      variant="Body"
-                      weight="bold"
-                    >
-                      {`${item.durationLabel} - ${item.category}`}
-                    </Typography>
-                    <Typography
-                      allowFontScaling={false}
-                      color={colors.textCaption}
-                      variant="Caption"
-                    >
-                      {item.tags}
-                    </Typography>
-                    <Pressable
-                      onPress={() =>
-                        navigation.navigate('SoloLive', {
-                          intention: item.title,
-                          scriptPreset: item.body,
-                        })
-                      }
-                      style={({ pressed }) => [
-                        styles.startButton,
-                        pressed && styles.startButtonPressed,
-                      ]}
-                    >
                       <Typography
                         allowFontScaling={false}
-                        color={colors.textOnSky}
-                        variant="H2"
+                        color={colors.textSecondary}
+                        style={styles.prayerBody}
+                      >
+                        {item.body}
+                      </Typography>
+                      <Typography
+                        allowFontScaling={false}
+                        color={colors.accentSkyStart}
+                        variant="Body"
                         weight="bold"
                       >
-                        Start prayer
+                        {`${item.durationLabel} - ${item.category}`}
                       </Typography>
-                    </Pressable>
-                  </SurfaceCard>
+                      <Typography
+                        allowFontScaling={false}
+                        color={colors.textCaption}
+                        variant="Caption"
+                      >
+                        {item.tags}
+                      </Typography>
+                    </SurfaceCard>
+                  </Pressable>
                 );
               })}
             </ScrollView>
@@ -508,8 +515,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     justifyContent: 'center',
     minHeight: 32,
-    minWidth: 68,
-    paddingHorizontal: spacing.sm,
+    paddingHorizontal: spacing.xs,
+    width: 36,
   },
   favoriteButtonActive: {
     backgroundColor: figmaV2Reference.buttons.sky.from,
@@ -529,6 +536,9 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
     minHeight: 208,
   },
+  prayerCardPressed: {
+    transform: [{ scale: 0.995 }],
+  },
   prayerCardHeader: {
     alignItems: 'flex-start',
     flexDirection: 'row',
@@ -537,7 +547,7 @@ const styles = StyleSheet.create({
   },
   prayerRail: {
     gap: HOME_CARD_GAP,
-    paddingRight: spacing.sm,
+    paddingRight: 0,
   },
   prayerTitle: {
     flex: 1,
@@ -546,20 +556,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
-  },
-  startButton: {
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    backgroundColor: figmaV2Reference.buttons.sky.from,
-    borderColor: figmaV2Reference.buttons.sky.border,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    justifyContent: 'center',
-    minHeight: 38,
-    paddingHorizontal: spacing.sm,
-  },
-  startButtonPressed: {
-    transform: [{ scale: 0.98 }],
   },
   topFilterRow: {
     flexDirection: 'row',
