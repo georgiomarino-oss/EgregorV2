@@ -80,7 +80,7 @@ function MainTabs() {
       <Tab.Screen
         name="CommunityTab"
         component={CommunityStackNavigator}
-        options={{ title: 'Home' }}
+        options={{ title: 'Community' }}
       />
       <Tab.Screen name="SoloTab" component={SoloStackNavigator} options={{ title: 'Solo' }} />
       <Tab.Screen name="EventsTab" component={EventsStackNavigator} options={{ title: 'Events' }} />

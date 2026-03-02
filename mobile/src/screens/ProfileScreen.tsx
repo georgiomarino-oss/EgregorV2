@@ -9,7 +9,7 @@ import { MetricRow } from '../components/MetricRow';
 import { Screen } from '../components/Screen';
 import { SurfaceCard } from '../components/SurfaceCard';
 import { Typography } from '../components/Typography';
-import { fetchProfileSummary, setHighContrastMode, type ProfileSummary } from '../lib/api/data';
+import { fetchProfileSummary, type ProfileSummary } from '../lib/api/data';
 import { supabase } from '../lib/supabase';
 import {
   PROFILE_IMPACT_HEIGHT,
@@ -28,7 +28,6 @@ function formatImpact(value: number) {
 export function ProfileScreen() {
   const [loadingSignOut, setLoadingSignOut] = useState(false);
   const [loadingProfile, setLoadingProfile] = useState(true);
-  const [savingPreference, setSavingPreference] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [summary, setSummary] = useState<ProfileSummary | null>(null);
@@ -100,23 +99,6 @@ export function ProfileScreen() {
     }
   };
 
-  const onToggleHighContrast = async () => {
-    if (!user || !summary) {
-      return;
-    }
-
-    setSavingPreference(true);
-    try {
-      await setHighContrastMode(user.id, !summary.highContrastMode);
-      await loadProfile(user);
-      setError(null);
-    } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : 'Failed to update preferences.');
-    } finally {
-      setSavingPreference(false);
-    }
-  };
-
   const statRows = useMemo(
     () => [
       { label: 'Circle members', value: (summary?.circleMembers ?? 0).toString() },
@@ -125,7 +107,6 @@ export function ProfileScreen() {
         value: (summary?.eventsJoinedThisWeek ?? 0).toString(),
       },
       { label: 'Solo completion streak', value: `${summary?.soloStreakDays ?? 0} days` },
-      { label: 'High contrast mode', value: summary?.highContrastMode ? 'On' : 'Off' },
     ],
     [summary],
   );
@@ -155,17 +136,11 @@ export function ProfileScreen() {
               Weekly collective impact change
             </Typography>
             <Typography allowFontScaling={false} color={colors.textSecondary} variant="Caption">
-              {`Minutes prayed: ${summary?.minutesPrayed ?? 0} • Sessions this week: ${summary?.sessionsThisWeek ?? 0}`}
+              {`Minutes prayed: ${summary?.minutesPrayed ?? 0} - Sessions this week: ${summary?.sessionsThisWeek ?? 0}`}
             </Typography>
             <Typography allowFontScaling={false} color={colors.textSecondary} variant="Caption">
               {`Account: ${user?.email ?? 'Unavailable'}`}
             </Typography>
-            <Button
-              loading={savingPreference}
-              onPress={() => void onToggleHighContrast()}
-              title={summary?.highContrastMode ? 'Disable high contrast' : 'Enable high contrast'}
-              variant="sky"
-            />
           </>
         )}
       </SurfaceCard>
