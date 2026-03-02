@@ -430,6 +430,7 @@ async function generateScriptWithRetry({
     `Tone must be ${PRAYER_TONE}.`,
     'Use contemporary language suitable for a broad spiritual audience.',
     'Make this script unique and non-repetitive.',
+    'Use complete sentences with correct grammar and punctuation.',
     'Avoid reusing sentence structures, repeated openings, and repeated refrain lines.',
     'Keep flow natural for spoken audio pacing.',
     'Do not use bullet points, numbered lists, markdown, section labels, or hyphen-based list formatting.',
@@ -444,7 +445,7 @@ async function generateScriptWithRetry({
         input: [
           {
             content:
-              'You write high-quality spoken prayer scripts. Output must be original, emotionally precise, free from repetitive wording, and formatted as clean prose suitable for text to speech.',
+              'You write high-quality spoken prayer scripts. Output must be original, emotionally precise, grammatically correct, and formatted as clean prose suitable for text to speech.',
             role: 'system',
           },
           {

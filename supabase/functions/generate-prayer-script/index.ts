@@ -122,11 +122,11 @@ Deno.serve(async (request) => {
         {
           role: 'system',
           content:
-            'You are an assistant for spiritual reflection. Write safe, non-harmful prayer text with inclusive language. Output spoken prose only. Do not use bullet points, numbered lists, markdown, section labels, or hyphenated list formatting.',
+            'You are an assistant for spiritual reflection. Write safe, non-harmful prayer text with inclusive language. Use complete sentences with correct grammar and punctuation for spoken narration. Output spoken prose only. Do not use bullet points, numbered lists, markdown, section labels, or hyphenated list formatting.',
         },
         {
           role: 'user',
-          content: `Create a ${length} prayer script in a ${mood} tone for this intention: ${intention}. Keep it practical and emotionally supportive. The script must read smoothly for voice narration.`,
+          content: `Create a ${length} prayer script in a ${mood} tone for this intention: ${intention}. Keep it practical and emotionally supportive. The script must read smoothly for voice narration with strong grammatical accuracy.`,
         },
       ],
       model: 'gpt-4.1-mini',
