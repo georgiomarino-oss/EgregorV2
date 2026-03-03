@@ -24,7 +24,7 @@ import { colors, radii, spacing } from '../theme/tokens';
 type SoloLiveRoute = RouteProp<SoloStackParamList, 'SoloLive'>;
 type SoloNavigation = NativeStackNavigationProp<SoloStackParamList, 'SoloLive'>;
 
-const VOICE_OPTIONS = ['Oliver', 'Amaya', 'Rainbird', 'Noah'] as const;
+const VOICE_OPTIONS = ['Oliver', 'Amaya', 'Rainbird', 'Dominic'] as const;
 const MINUTE_OPTIONS = [3, 5, 10] as const;
 const DEFAULT_ELEVENLABS_VOICE_ID = 'jfIS2w2yJi0grJZPyEsk';
 const ELEVENLABS_VOICE_ID_BY_LABEL: Partial<
@@ -33,6 +33,7 @@ const ELEVENLABS_VOICE_ID_BY_LABEL: Partial<
   Oliver: 'jfIS2w2yJi0grJZPyEsk',
   Amaya: 'BFvr34n3gOoz0BAf9Rwn',
   Rainbird: 'bgU7lBMo69PNEOWHFqxM',
+  Dominic: 'V904i8ujLitGpMyoTznT',
 };
 
 function formatClock(totalSeconds: number) {
