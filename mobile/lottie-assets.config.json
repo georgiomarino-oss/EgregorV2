@@ -1,0 +1,16 @@
+{
+  "assets": [
+    {
+      "id": "cosmic-ambient",
+      "output": "assets/lottie/cosmic-ambient.json",
+      "sourceUrlEnv": "LOTTIE_URL_COSMIC_AMBIENT",
+      "requiresAuth": true
+    },
+    {
+      "id": "globe-fallback",
+      "output": "assets/lottie/globe-fallback.json",
+      "sourceUrlEnv": "LOTTIE_URL_GLOBE_FALLBACK",
+      "requiresAuth": true
+    }
+  ]
+}

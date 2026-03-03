@@ -33,6 +33,10 @@ npm install
 npm run start
 ```
 
+## Lottie premium sync
+
+Use the built-in workflow in `mobile/docs/LOTTIE_SYNC.md` to pull premium/private Lottie assets with `mobile/.env` secrets and keep JSON files in sync.
+
 ## Supabase Edge Functions
 
 Deploy after linking your project:
