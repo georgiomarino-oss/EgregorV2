@@ -15,12 +15,32 @@ interface ElevenLabsVoiceSettings {
   use_speaker_boost?: boolean;
 }
 
+interface ElevenLabsAlignment {
+  character_end_times_seconds?: number[];
+  character_start_times_seconds?: number[];
+  characters?: string[];
+}
+
+interface ElevenLabsTimestampResponse {
+  alignment?: ElevenLabsAlignment | null;
+  audio_base64?: string;
+  normalized_alignment?: ElevenLabsAlignment | null;
+}
+
+interface TimedWord {
+  endSeconds: number;
+  index: number;
+  startSeconds: number;
+  word: string;
+}
+
 const DEFAULT_VOICE_ID = 'jfIS2w2yJi0grJZPyEsk';
 const DEFAULT_MODEL_ID = 'eleven_multilingual_v2';
 const DEFAULT_AUDIO_BUCKET = 'prayer-audio';
 const DEFAULT_SIGNED_URL_TTL_SECONDS = 3600;
 const DEFAULT_CONTENT_TYPE = 'audio/mpeg';
 const AUDIO_BUCKET_MAX_BYTES = 25 * 1024 * 1024;
+const AUDIO_CACHE_VERSION = 'v2-word-timing';
 
 type SupabaseAdminClient = ReturnType<typeof createClient>;
 
@@ -126,9 +146,9 @@ async function uploadAudioToStorage(
   client: SupabaseAdminClient,
   bucket: string,
   objectPath: string,
-  audioBuffer: ArrayBuffer,
+  audioBytes: Uint8Array,
 ) {
-  const { error } = await client.storage.from(bucket).upload(objectPath, new Uint8Array(audioBuffer), {
+  const { error } = await client.storage.from(bucket).upload(objectPath, audioBytes, {
     contentType: DEFAULT_CONTENT_TYPE,
     upsert: true,
   });
@@ -136,6 +156,153 @@ async function uploadAudioToStorage(
   if (error) {
     throw new Error(`Failed to upload generated audio: ${error.message}`);
   }
+}
+
+async function uploadWordTimingsToStorage(
+  client: SupabaseAdminClient,
+  bucket: string,
+  objectPath: string,
+  wordTimings: TimedWord[],
+) {
+  const payload = new TextEncoder().encode(JSON.stringify(wordTimings));
+  const { error } = await client.storage.from(bucket).upload(objectPath, payload, {
+    contentType: 'application/json',
+    upsert: true,
+  });
+
+  if (error) {
+    throw new Error(`Failed to upload word timings: ${error.message}`);
+  }
+}
+
+function sanitizeWordTimings(value: unknown): TimedWord[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const parsed = value
+    .map((entry, index) => {
+      if (!entry || typeof entry !== 'object') {
+        return null;
+      }
+
+      const row = entry as Record<string, unknown>;
+      const word = typeof row.word === 'string' ? row.word.trim() : '';
+      const startSeconds = Number(row.startSeconds);
+      const endSeconds = Number(row.endSeconds);
+
+      if (!word || !Number.isFinite(startSeconds) || !Number.isFinite(endSeconds)) {
+        return null;
+      }
+
+      return {
+        endSeconds: Math.max(startSeconds, endSeconds),
+        index,
+        startSeconds: Math.max(0, startSeconds),
+        word,
+      } satisfies TimedWord;
+    })
+    .filter((entry): entry is TimedWord => entry !== null);
+
+  return parsed;
+}
+
+async function fetchStoredWordTimings(
+  client: SupabaseAdminClient,
+  bucket: string,
+  objectPath: string,
+) {
+  const { data, error } = await client.storage.from(bucket).download(objectPath);
+  if (error || !data) {
+    return [];
+  }
+
+  try {
+    const payload = JSON.parse(await data.text()) as unknown;
+    return sanitizeWordTimings(payload);
+  } catch {
+    return [];
+  }
+}
+
+function decodeBase64ToUint8Array(base64: string) {
+  const decoded = atob(base64);
+  const bytes = new Uint8Array(decoded.length);
+  for (let index = 0; index < decoded.length; index += 1) {
+    bytes[index] = decoded.charCodeAt(index);
+  }
+  return bytes;
+}
+
+function toWordTimingsFromAlignment(alignment: ElevenLabsAlignment | null | undefined): TimedWord[] {
+  if (!alignment) {
+    return [];
+  }
+
+  const characters = Array.isArray(alignment.characters) ? alignment.characters : [];
+  const starts = Array.isArray(alignment.character_start_times_seconds)
+    ? alignment.character_start_times_seconds
+    : [];
+  const ends = Array.isArray(alignment.character_end_times_seconds)
+    ? alignment.character_end_times_seconds
+    : [];
+  const count = Math.min(characters.length, starts.length, ends.length);
+
+  if (count <= 0) {
+    return [];
+  }
+
+  const words: TimedWord[] = [];
+  let buffer = '';
+  let wordStart = -1;
+  let wordEnd = -1;
+
+  const flushWord = () => {
+    const value = buffer.trim();
+    if (!value || wordStart < 0 || wordEnd < 0) {
+      buffer = '';
+      wordStart = -1;
+      wordEnd = -1;
+      return;
+    }
+
+    words.push({
+      endSeconds: Math.max(wordStart, wordEnd),
+      index: words.length,
+      startSeconds: Math.max(0, wordStart),
+      word: value,
+    });
+
+    buffer = '';
+    wordStart = -1;
+    wordEnd = -1;
+  };
+
+  for (let index = 0; index < count; index += 1) {
+    const character = characters[index] ?? '';
+    const startSeconds = Number(starts[index]);
+    const endSeconds = Number(ends[index]);
+    const isWhitespace = /\s/.test(character);
+
+    if (isWhitespace) {
+      flushWord();
+      continue;
+    }
+
+    if (!Number.isFinite(startSeconds) || !Number.isFinite(endSeconds)) {
+      continue;
+    }
+
+    if (wordStart < 0) {
+      wordStart = startSeconds;
+    }
+
+    wordEnd = endSeconds;
+    buffer += character;
+  }
+
+  flushWord();
+  return words;
 }
 
 function sanitizeVoiceSettings(value: unknown): ElevenLabsVoiceSettings | null {
@@ -235,8 +402,11 @@ Deno.serve(async (request) => {
 
   await ensureAudioBucket(supabaseAdmin, audioBucket);
 
-  const scriptFingerprint = await sha256Hex(`${voiceId}|${modelId}|${script}`);
+  const scriptFingerprint = await sha256Hex(
+    `${AUDIO_CACHE_VERSION}|${voiceId}|${modelId}|${script}`,
+  );
   const objectPath = `${voiceId}/${modelId}/${scriptFingerprint}.mp3`;
+  const timingObjectPath = `${voiceId}/${modelId}/${scriptFingerprint}.timings.json`;
 
   const cachedAudioUrl = await createSignedAudioUrl(
     supabaseAdmin,
@@ -246,11 +416,18 @@ Deno.serve(async (request) => {
   );
 
   if (cachedAudioUrl) {
+    const cachedWordTimings = await fetchStoredWordTimings(
+      supabaseAdmin,
+      audioBucket,
+      timingObjectPath,
+    );
+
     return new Response(
       JSON.stringify({
         audioUrl: cachedAudioUrl,
         contentType: DEFAULT_CONTENT_TYPE,
         voiceId,
+        wordTimings: cachedWordTimings,
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -268,10 +445,10 @@ Deno.serve(async (request) => {
     requestBody.voice_settings = voiceSettings;
   }
 
-  const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+  const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/with-timestamps`, {
     method: 'POST',
     headers: {
-      Accept: 'audio/mpeg',
+      Accept: 'application/json',
       'Content-Type': 'application/json',
       'xi-api-key': elevenLabsApiKey,
     },
@@ -286,8 +463,23 @@ Deno.serve(async (request) => {
     });
   }
 
-  const audioBuffer = await response.arrayBuffer();
-  await uploadAudioToStorage(supabaseAdmin, audioBucket, objectPath, audioBuffer);
+  const timestampPayload = (await response.json()) as ElevenLabsTimestampResponse;
+  const audioBase64 = timestampPayload.audio_base64?.trim();
+
+  if (!audioBase64) {
+    return new Response(JSON.stringify({ error: 'ElevenLabs response missing audio data' }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 502,
+    });
+  }
+
+  const audioBytes = decodeBase64ToUint8Array(audioBase64);
+  const alignment = timestampPayload.normalized_alignment ?? timestampPayload.alignment;
+  const wordTimings = toWordTimingsFromAlignment(alignment);
+
+  await uploadAudioToStorage(supabaseAdmin, audioBucket, objectPath, audioBytes);
+  await uploadWordTimingsToStorage(supabaseAdmin, audioBucket, timingObjectPath, wordTimings);
+
   const audioUrl = await createSignedAudioUrl(
     supabaseAdmin,
     audioBucket,
@@ -307,6 +499,7 @@ Deno.serve(async (request) => {
       audioUrl,
       contentType: DEFAULT_CONTENT_TYPE,
       voiceId,
+      wordTimings,
     }),
     {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

@@ -14,7 +14,7 @@ import { Screen } from '../components/Screen';
 import { SurfaceCard } from '../components/SurfaceCard';
 import { Typography } from '../components/Typography';
 import { fetchPrayerScriptVariantByTitle, fetchUserPreferences } from '../lib/api/data';
-import { generatePrayerAudio } from '../lib/api/functions';
+import { generatePrayerAudio, type TimedWord } from '../lib/api/functions';
 import { configureAudioForPlayback, createPlayer, type ManagedAudioPlayer } from '../lib/audio';
 import { supabase } from '../lib/supabase';
 import { figmaV2Reference } from '../theme/figma-v2-reference';
@@ -152,6 +152,85 @@ function splitScriptIntoParagraphs(script: string) {
   return splitLongParagraph(singleParagraph);
 }
 
+interface TimedWordParagraph {
+  endIndex: number;
+  startIndex: number;
+  words: TimedWord[];
+}
+
+function groupTimedWordsIntoParagraphs(words: TimedWord[], maxWordsPerParagraph = 24) {
+  if (words.length === 0) {
+    return [] as TimedWordParagraph[];
+  }
+
+  const paragraphs: TimedWordParagraph[] = [];
+  let current: TimedWord[] = [];
+
+  const flush = () => {
+    if (current.length === 0) {
+      return;
+    }
+
+    paragraphs.push({
+      endIndex: current[current.length - 1]?.index ?? 0,
+      startIndex: current[0]?.index ?? 0,
+      words: current,
+    });
+    current = [];
+  };
+
+  words.forEach((word) => {
+    current.push(word);
+
+    const hasSentenceEnding = /[.!?]["']?$/.test(word.word);
+    const reachedMax = current.length >= maxWordsPerParagraph;
+    const shouldBreak = reachedMax || (hasSentenceEnding && current.length >= 10);
+
+    if (shouldBreak) {
+      flush();
+    }
+  });
+
+  flush();
+  return paragraphs;
+}
+
+function findActiveTimedWordIndex(words: TimedWord[], elapsedMillis: number) {
+  if (words.length === 0) {
+    return -1;
+  }
+
+  const elapsedSeconds = elapsedMillis / 1000;
+  const first = words[0];
+  const last = words[words.length - 1];
+
+  if (elapsedSeconds <= (first?.startSeconds ?? 0)) {
+    return first?.index ?? 0;
+  }
+
+  if (elapsedSeconds >= (last?.endSeconds ?? 0)) {
+    return last?.index ?? words.length - 1;
+  }
+
+  for (let index = 0; index < words.length; index += 1) {
+    const word = words[index];
+    if (!word) {
+      continue;
+    }
+
+    if (elapsedSeconds >= word.startSeconds && elapsedSeconds <= word.endSeconds) {
+      return word.index;
+    }
+
+    const next = words[index + 1];
+    if (next && elapsedSeconds > word.endSeconds && elapsedSeconds < next.startSeconds) {
+      return next.index;
+    }
+  }
+
+  return last?.index ?? words.length - 1;
+}
+
 export function SoloLiveScreen() {
   const navigation = useNavigation<SoloNavigation>();
   const route = useRoute<SoloLiveRoute>();
@@ -164,8 +243,9 @@ export function SoloLiveScreen() {
   const [isFavorite, setIsFavorite] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
-  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [elapsedMillis, setElapsedMillis] = useState(0);
   const [scriptText, setScriptText] = useState(route.params?.scriptPreset ?? '');
+  const [timedWords, setTimedWords] = useState<TimedWord[]>([]);
   const [loadingScript, setLoadingScript] = useState(false);
   const [loadingAudio, setLoadingAudio] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -178,33 +258,57 @@ export function SoloLiveScreen() {
   const fallbackScript = route.params?.scriptPreset || '';
   const resolvedScriptText = scriptText || fallbackScript;
   const totalSeconds = selectedMinutes * 60;
+  const totalMillis = totalSeconds * 1000;
 
   const progress = useMemo(() => {
-    if (totalSeconds <= 0) {
+    if (totalMillis <= 0) {
       return 0;
     }
 
-    return Math.min(1, elapsedSeconds / totalSeconds);
-  }, [elapsedSeconds, totalSeconds]);
+    return Math.min(1, elapsedMillis / totalMillis);
+  }, [elapsedMillis, totalMillis]);
 
-  const elapsedLabel = useMemo(() => formatClock(elapsedSeconds), [elapsedSeconds]);
+  const elapsedLabel = useMemo(() => formatClock(elapsedMillis / 1000), [elapsedMillis]);
   const totalLabel = useMemo(() => formatClock(totalSeconds), [totalSeconds]);
+  const activeTimedWordIndex = useMemo(
+    () => findActiveTimedWordIndex(timedWords, elapsedMillis),
+    [elapsedMillis, timedWords],
+  );
+  const timedWordParagraphs = useMemo(() => groupTimedWordsIntoParagraphs(timedWords), [timedWords]);
+  const activeTimedParagraph = useMemo(() => {
+    if (timedWordParagraphs.length === 0) {
+      return null;
+    }
+
+    if (activeTimedWordIndex < 0) {
+      return timedWordParagraphs[0] ?? null;
+    }
+
+    return (
+      timedWordParagraphs.find(
+        (paragraph) =>
+          activeTimedWordIndex >= paragraph.startIndex && activeTimedWordIndex <= paragraph.endIndex,
+      ) ??
+      timedWordParagraphs[timedWordParagraphs.length - 1] ??
+      null
+    );
+  }, [activeTimedWordIndex, timedWordParagraphs]);
   const scriptParagraphs = useMemo(
     () => splitScriptIntoParagraphs(resolvedScriptText),
     [resolvedScriptText],
   );
-  const activeParagraphIndex = useMemo(() => {
+  const fallbackParagraphIndex = useMemo(() => {
     if (scriptParagraphs.length <= 1 || totalSeconds <= 0) {
       return 0;
     }
 
-    const normalizedProgress = Math.min(0.999999, Math.max(0, elapsedSeconds / totalSeconds));
+    const normalizedProgress = Math.min(0.999999, Math.max(0, elapsedMillis / totalMillis));
     return Math.min(
       scriptParagraphs.length - 1,
       Math.floor(normalizedProgress * scriptParagraphs.length),
     );
-  }, [elapsedSeconds, scriptParagraphs.length, totalSeconds]);
-  const activeParagraph = scriptParagraphs[activeParagraphIndex] ?? '';
+  }, [elapsedMillis, scriptParagraphs.length, totalMillis, totalSeconds]);
+  const fallbackParagraph = scriptParagraphs[fallbackParagraphIndex] ?? '';
   const activeVoiceId =
     ELEVENLABS_VOICE_ID_BY_LABEL[selectedVoice] ?? DEFAULT_ELEVENLABS_VOICE_ID;
   const activeAudioKey = useMemo(
@@ -240,7 +344,7 @@ export function SoloLiveScreen() {
     }
 
     setIsRunning(false);
-    setElapsedSeconds(0);
+    setElapsedMillis(0);
   }, []);
 
   const onExitSession = useCallback(() => {
@@ -275,18 +379,35 @@ export function SoloLiveScreen() {
       const audioUrl = audioResponse?.audioUrl?.trim();
       const audioBase64 = audioResponse?.audioBase64?.trim();
       const contentType = audioResponse?.contentType?.trim() || 'audio/mpeg';
+      const nextTimedWords = (audioResponse?.wordTimings ?? [])
+        .filter(
+          (word) =>
+            typeof word?.word === 'string' &&
+            Number.isFinite(word?.startSeconds) &&
+            Number.isFinite(word?.endSeconds),
+        )
+        .sort((left, right) => left.startSeconds - right.startSeconds)
+        .map((word, index) => ({
+          ...word,
+          endSeconds: Math.max(word.startSeconds, word.endSeconds),
+          index,
+          startSeconds: Math.max(0, word.startSeconds),
+          word: word.word.trim(),
+        }))
+        .filter((word) => word.word.length > 0);
 
       if (!audioUrl && !audioBase64) {
         throw new Error('Audio generation returned an empty payload.');
       }
 
       const sourceUri = audioUrl || `data:${contentType};base64,${audioBase64}`;
+      setTimedWords(nextTimedWords);
 
       disposeActivePlayer();
 
       const player = createPlayer(sourceUri);
       activePlayerUnsubscribeRef.current = player.subscribe((status) => {
-        setElapsedSeconds(Math.max(0, Math.floor(status.positionMillis / 1000)));
+        setElapsedMillis(Math.max(0, status.positionMillis));
         if (status.didJustFinish) {
           setIsRunning(false);
         }
@@ -374,7 +495,8 @@ export function SoloLiveScreen() {
   }, [loadSelectedScript]);
 
   useEffect(() => {
-    setElapsedSeconds(0);
+    setElapsedMillis(0);
+    setTimedWords([]);
     setIsRunning(false);
     disposeActivePlayer();
   }, [activeAudioKey, disposeActivePlayer]);
@@ -387,7 +509,7 @@ export function SoloLiveScreen() {
   }, [disposeActivePlayer, stopActivePlayback]);
 
   useEffect(() => {
-    if (elapsedSeconds < totalSeconds) {
+    if (elapsedMillis < totalMillis) {
       return;
     }
 
@@ -395,7 +517,7 @@ export function SoloLiveScreen() {
     if (activePlayerRef.current) {
       void activePlayerRef.current.stop();
     }
-  }, [elapsedSeconds, totalSeconds]);
+  }, [elapsedMillis, totalMillis]);
 
   useEffect(() => {
     if (!playPulseRef.current) {
@@ -622,33 +744,40 @@ export function SoloLiveScreen() {
               </View>
             </View>
           </Pressable>
-          <Typography
-            allowFontScaling={false}
-            color={colors.textSecondary}
-            style={styles.readyLabel}
-            variant="H2"
-            weight="bold"
-          >
-            {loadingAudio ? 'Preparing audio...' : isRunning ? 'Playing' : 'Ready to begin'}
-          </Typography>
 
           <View style={styles.scriptWrap}>
             {loadingScript ? (
               <Typography allowFontScaling={false} color={colors.textSecondary} variant="Body">
                 Loading prayer script...
               </Typography>
+            ) : activeTimedParagraph?.words.length ? (
+              <View style={styles.scriptWordFlow}>
+                {activeTimedParagraph.words.map((word) => {
+                  const isActiveWord = word.index === activeTimedWordIndex;
+
+                  return (
+                    <Typography
+                      key={`${word.index}-${word.startSeconds}-${word.word}`}
+                      allowFontScaling={false}
+                      style={[styles.scriptWord, isActiveWord && styles.scriptWordActive]}
+                      variant="H2"
+                      weight={isActiveWord ? 'bold' : 'medium'}
+                    >
+                      {`${word.word} `}
+                    </Typography>
+                  );
+                })}
+              </View>
             ) : resolvedScriptText ? (
               <View style={styles.scriptSyncWrap}>
                 <Typography
-                  adjustsFontSizeToFit
                   allowFontScaling={false}
-                  minimumFontScale={0.58}
-                  numberOfLines={6}
+                  numberOfLines={5}
                   style={styles.scriptTextActive}
                   variant="H2"
                   weight="bold"
                 >
-                  {activeParagraph}
+                  {fallbackParagraph}
                 </Typography>
               </View>
             ) : (
@@ -722,7 +851,7 @@ export function SoloLiveScreen() {
 
             <Pressable
               onPress={() => {
-                setElapsedSeconds(0);
+                setElapsedMillis(0);
                 setIsRunning(false);
                 if (activePlayerRef.current) {
                   void activePlayerRef.current.stop();
@@ -926,35 +1055,54 @@ const styles = StyleSheet.create({
     height: 16,
     overflow: 'hidden',
   },
-  readyLabel: {
-    textAlign: 'center',
-    textTransform: 'none',
-  },
   screenContent: {
     flex: 1,
   },
   scriptSyncWrap: {
     alignItems: 'center',
     gap: spacing.xxs,
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
     minHeight: 0,
-    paddingBottom: spacing.xxs,
+    paddingBottom: spacing.sm,
     width: '100%',
   },
   scriptTextActive: {
     fontSize: 21,
-    lineHeight: 31,
+    lineHeight: 30,
     maxWidth: '98%',
-    paddingBottom: spacing.xxs,
+    paddingBottom: spacing.xs,
     textAlign: 'center',
+  },
+  scriptWord: {
+    color: colors.textSecondary,
+    fontSize: 22,
+    letterSpacing: 0.1,
+    lineHeight: 31,
+    marginRight: 2,
+  },
+  scriptWordActive: {
+    color: colors.textPrimary,
+    textShadowColor: figmaV2Reference.tabs.activeBorder,
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 9,
+    transform: [{ scale: 1.04 }],
+  },
+  scriptWordFlow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    maxWidth: '100%',
+    paddingHorizontal: spacing.xs,
   },
   scriptWrap: {
     alignItems: 'center',
     flex: 1,
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
     minHeight: 0,
     paddingHorizontal: spacing.xs,
-    paddingVertical: spacing.sm,
+    paddingTop: spacing.xs,
+    paddingBottom: spacing.lg,
     width: '100%',
   },
   selectorButton: {

@@ -16,11 +16,19 @@ export interface GeneratePrayerAudioInput {
   voiceId?: string;
 }
 
+export interface TimedWord {
+  endSeconds: number;
+  index: number;
+  startSeconds: number;
+  word: string;
+}
+
 export interface GeneratePrayerAudioOutput {
   audioBase64?: string;
   audioUrl?: string;
   contentType?: string;
   voiceId?: string;
+  wordTimings?: TimedWord[];
 }
 
 const DEFAULT_ELEVENLABS_VOICE_ID = 'jfIS2w2yJi0grJZPyEsk';
