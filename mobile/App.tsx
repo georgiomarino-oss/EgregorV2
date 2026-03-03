@@ -10,9 +10,14 @@ function parseCaptureTargetFromHash(): CaptureNavigationTarget | undefined {
     return undefined;
   }
 
-  const hash = window.location.hash.startsWith('#')
-    ? window.location.hash.slice(1)
-    : window.location.hash;
+  const locationHash =
+    typeof window.location?.hash === 'string' ? window.location.hash : undefined;
+
+  if (!locationHash) {
+    return undefined;
+  }
+
+  const hash = locationHash.startsWith('#') ? locationHash.slice(1) : locationHash;
 
   if (!hash || !hash.includes('figmacapture=')) {
     return undefined;
@@ -103,7 +108,10 @@ export default function App() {
       return;
     }
 
-    if (!window.location.hash.includes('figmacapture=')) {
+    const locationHash =
+      typeof window.location?.hash === 'string' ? window.location.hash : undefined;
+
+    if (!locationHash || !locationHash.includes('figmacapture=')) {
       return;
     }
 
