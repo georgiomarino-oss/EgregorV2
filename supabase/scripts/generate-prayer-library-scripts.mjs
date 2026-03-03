@@ -17,69 +17,7 @@ const LANGUAGE = 'en';
 const PRAYER_TONE = 'grounded, compassionate, and hopeful';
 const HYPHEN_LIKE_PATTERN = /[\u2010\u2011\u2012\u2013\u2014\u2015\u2212]/g;
 const SECTION_HEADING_PATTERN = /^(grounding|prayer|closing|opening|reflection)\s*:?$/i;
-
-const PRAYERS = [
-  {
-    body: 'Guide this bond with patience, trust, and healthy communication that strengthens connection.',
-    category: 'Relationships',
-    title: 'Prayer for Family Unity',
-  },
-  {
-    body: 'Bring peace to conversations and clarity to unresolved moments so healing can continue.',
-    category: 'Relationships',
-    title: 'Prayer for Reconciliation',
-  },
-  {
-    body: 'Anchor the mind, steady the breath, and restore calm energy for the day ahead.',
-    category: 'Wellbeing',
-    title: 'Prayer for Inner Calm',
-  },
-  {
-    body: 'Support healthy routines, deep rest, and resilience through every challenge.',
-    category: 'Wellbeing',
-    title: 'Prayer for Rest and Renewal',
-  },
-  {
-    body: 'Open pathways for provision, wise decisions, and meaningful opportunities.',
-    category: 'Abundance',
-    title: 'Prayer for Provision',
-  },
-  {
-    body: 'Align resources with purpose and invite generosity, discipline, and gratitude.',
-    category: 'Abundance',
-    title: 'Prayer for Responsible Growth',
-  },
-  {
-    body: 'Clarify priorities and reveal the next right step with courage and consistency.',
-    category: 'Purpose',
-    title: 'Prayer for Clear Purpose',
-  },
-  {
-    body: 'Strengthen conviction and serve with humility in every mission you are called to.',
-    category: 'Purpose',
-    title: 'Prayer for Meaningful Work',
-  },
-  {
-    body: 'Cover your home and loved ones with safety, wisdom, and steady protection.',
-    category: 'Protection',
-    title: 'Prayer for Household Protection',
-  },
-  {
-    body: 'Guard each journey with attentiveness, safe passage, and peaceful arrival.',
-    category: 'Protection',
-    title: 'Prayer for Safe Travel',
-  },
-  {
-    body: 'Center the heart in gratitude for daily gifts, lessons, and faithful support.',
-    category: 'Gratitude',
-    title: 'Prayer of Daily Gratitude',
-  },
-  {
-    body: 'Reflect with humility, celebrate progress, and carry gratitude into tomorrow.',
-    category: 'Gratitude',
-    title: 'Prayer for Evening Reflection',
-  },
-];
+const CATALOG_RELATIVE_PATH = ['supabase', 'scripts', 'prayer-catalog.json'];
 
 function readEnvFile(filePath) {
   if (!fs.existsSync(filePath)) {
@@ -115,12 +53,116 @@ function readEnvFile(filePath) {
   return env;
 }
 
+function loadPrayerCatalog(rootDir) {
+  const catalogPath = path.join(rootDir, ...CATALOG_RELATIVE_PATH);
+  if (!fs.existsSync(catalogPath)) {
+    throw new Error(`Prayer catalog missing at ${catalogPath}.`);
+  }
+
+  const raw = fs.readFileSync(catalogPath, 'utf8');
+  const parsed = JSON.parse(raw);
+  if (!Array.isArray(parsed) || parsed.length === 0) {
+    throw new Error('Prayer catalog must be a non-empty array.');
+  }
+
+  const seen = new Set();
+  const prayers = [];
+
+  parsed.forEach((entry, index) => {
+    if (!entry || typeof entry !== 'object') {
+      throw new Error(`Prayer catalog row ${index + 1} is invalid.`);
+    }
+
+    const title = typeof entry.title === 'string' ? entry.title.trim() : '';
+    const category = typeof entry.category === 'string' ? entry.category.trim() : '';
+    const body = typeof entry.body === 'string' ? entry.body.trim() : '';
+
+    if (!title || !category || !body) {
+      throw new Error(`Prayer catalog row ${index + 1} is missing title, category, or body.`);
+    }
+
+    const identity = prayerIdentity(title, category);
+    if (seen.has(identity)) {
+      throw new Error(`Duplicate prayer catalog entry detected: ${title} (${category}).`);
+    }
+
+    seen.add(identity);
+    prayers.push({ title, category, body });
+  });
+
+  return prayers;
+}
+
 function normalizeKey(value) {
   return value.trim().toLowerCase();
 }
 
 function prayerIdentity(title, category) {
   return `${normalizeKey(title)}::${normalizeKey(category ?? '')}`;
+}
+
+function sentenceKey(value) {
+  return value
+    .normalize('NFKC')
+    .toLowerCase()
+    .replace(HYPHEN_LIKE_PATTERN, ' ')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function sentenceSignatures(scriptText, maxCount = 3) {
+  if (!scriptText?.trim()) {
+    return [];
+  }
+
+  return scriptText
+    .replace(/\r\n/g, '\n')
+    .split(/(?<=[.!?])\s+/)
+    .map((sentence) => sentenceKey(sentence))
+    .filter((sentence) => sentence.length > 0)
+    .slice(0, maxCount)
+    .map((sentence) => sentence.split(/\s+/).slice(0, 14).join(' '));
+}
+
+function ngramSignatures(scriptText, n = 7) {
+  if (!scriptText?.trim()) {
+    return new Set();
+  }
+
+  const words = sentenceKey(scriptText).split(/\s+/).filter(Boolean);
+  if (words.length === 0) {
+    return new Set();
+  }
+
+  if (words.length <= n) {
+    return new Set([words.join(' ')]);
+  }
+
+  const signatures = new Set();
+  for (let index = 0; index <= words.length - n; index += 1) {
+    signatures.add(words.slice(index, index + n).join(' '));
+  }
+
+  return signatures;
+}
+
+function jaccardSimilarity(setA, setB) {
+  if (!(setA instanceof Set) || !(setB instanceof Set) || setA.size === 0 || setB.size === 0) {
+    return 0;
+  }
+
+  const [smaller, larger] = setA.size <= setB.size ? [setA, setB] : [setB, setA];
+  let intersection = 0;
+
+  for (const token of smaller) {
+    if (larger.has(token)) {
+      intersection += 1;
+    }
+  }
+
+  const union = setA.size + setB.size - intersection;
+  return union > 0 ? intersection / union : 0;
 }
 
 function countWords(text) {
@@ -330,7 +372,7 @@ async function ensureSeedProfile({ serviceRoleKey, seedUserId, supabaseUrl }) {
   });
 }
 
-async function ensurePrayerLibraryItems({ serviceRoleKey, seedUserId, supabaseUrl }) {
+async function ensurePrayerLibraryItems({ prayers, serviceRoleKey, seedUserId, supabaseUrl }) {
   const existingRows = await supabaseRestRequest({
     pathWithQuery:
       '/rest/v1/prayer_library_items?select=id,title,category,body,duration_minutes,is_public,created_by&order=created_at.asc',
@@ -343,7 +385,7 @@ async function ensurePrayerLibraryItems({ serviceRoleKey, seedUserId, supabaseUr
     existingByKey.set(prayerIdentity(row.title, row.category ?? ''), row);
   }
 
-  for (const prayer of PRAYERS) {
+  for (const prayer of prayers) {
     const key = prayerIdentity(prayer.title, prayer.category);
     const existing = existingByKey.get(key);
 
@@ -402,12 +444,14 @@ async function ensurePrayerLibraryItems({ serviceRoleKey, seedUserId, supabaseUr
 
   return refreshed.filter((row) => {
     const key = prayerIdentity(row.title, row.category ?? '');
-    return PRAYERS.some((prayer) => prayerIdentity(prayer.title, prayer.category) === key);
+    return prayers.some((prayer) => prayerIdentity(prayer.title, prayer.category) === key);
   });
 }
 
 async function generateScriptWithRetry({
   attempt = 1,
+  forbiddenSentences = [],
+  globalHints = [],
   openAiApiKey,
   prayer,
   priorDurations,
@@ -420,6 +464,14 @@ async function generateScriptWithRetry({
           .map((entry) => `${entry.duration} minute opening: ${entry.preview}`)
           .join('\n')
       : 'No prior scripts for this prayer in this run.';
+  const crossPrayerHints =
+    globalHints.length > 0
+      ? globalHints.map((hint, index) => `${index + 1}. ${hint}`).join('\n')
+      : 'No cross-prayer opening constraints.';
+  const forbiddenSentenceHints =
+    forbiddenSentences.length > 0
+      ? forbiddenSentences.map((sentence, index) => `${index + 1}. ${sentence}`).join('\n')
+      : 'None.';
 
   const prompt = [
     `Write a spiritually grounded prayer script for "${prayer.title}" in the "${prayer.category}" category.`,
@@ -437,6 +489,10 @@ async function generateScriptWithRetry({
     'Return plain spoken prose only.',
     'Previously generated scripts for this same prayer (avoid these openings and repeated phrases):',
     openingHints,
+    'Recent opening style hints from other prayers (do not mirror these openings):',
+    crossPrayerHints,
+    'Forbidden opening sentence signatures (must not appear):',
+    forbiddenSentenceHints,
   ].join('\n');
 
   try {
@@ -483,6 +539,8 @@ async function generateScriptWithRetry({
     await sleep(attempt * 1000);
     return generateScriptWithRetry({
       attempt: attempt + 1,
+      forbiddenSentences,
+      globalHints,
       openAiApiKey,
       prayer,
       priorDurations,
@@ -546,10 +604,84 @@ async function upsertPrayerScript({
   });
 }
 
+function scriptVariantKey(prayerLibraryItemId, durationMinutes, language = LANGUAGE) {
+  return `${prayerLibraryItemId}|${durationMinutes}|${language}`;
+}
+
+async function listPrayerScripts({ serviceRoleKey, supabaseUrl }) {
+  const pageSize = 500;
+  const rows = [];
+  let offset = 0;
+
+  while (true) {
+    const page = await supabaseRestRequest({
+      pathWithQuery: `/rest/v1/prayer_library_scripts?select=id,prayer_library_item_id,duration_minutes,language,script_text&order=updated_at.desc&limit=${pageSize}&offset=${offset}`,
+      serviceRoleKey,
+      supabaseUrl,
+    });
+
+    if (!Array.isArray(page) || page.length === 0) {
+      break;
+    }
+
+    rows.push(...page);
+
+    if (page.length < pageSize) {
+      break;
+    }
+
+    offset += pageSize;
+  }
+
+  return rows;
+}
+
+async function generateUniqueScriptVariant({
+  ngramSignatureSets,
+  openAiApiKey,
+  prayer,
+  priorDurations,
+  sentenceSignatureSet,
+  targetDuration,
+}) {
+  const maxUniqueAttempts = 5;
+  const recentSignatureHints = Array.from(sentenceSignatureSet).slice(-24);
+  const globalHints = recentSignatureHints.slice(0, 12);
+
+  for (let attempt = 1; attempt <= maxUniqueAttempts; attempt += 1) {
+    const scriptText = await generateScriptWithRetry({
+      forbiddenSentences: recentSignatureHints,
+      globalHints,
+      openAiApiKey,
+      prayer,
+      priorDurations,
+      targetDuration,
+    });
+
+    const signatures = sentenceSignatures(scriptText, 3);
+    const ngrams = ngramSignatures(scriptText, 7);
+    const hasCollision = signatures.some((signature) => sentenceSignatureSet.has(signature));
+    const hasNgramOverlap = ngramSignatureSets.some(
+      (referenceSet) => jaccardSimilarity(ngrams, referenceSet) >= 0.12,
+    );
+
+    if ((!hasCollision && !hasNgramOverlap) || (signatures.length === 0 && !hasNgramOverlap)) {
+      signatures.forEach((signature) => sentenceSignatureSet.add(signature));
+      ngramSignatureSets.push(ngrams);
+      return scriptText;
+    }
+  }
+
+  throw new Error(
+    `Could not generate a unique script for "${prayer.title}" (${targetDuration} min) after ${maxUniqueAttempts} attempts.`,
+  );
+}
+
 async function main() {
   const rootDir = path.resolve(path.dirname(process.argv[1]), '..', '..');
   const supabaseEnvPath = path.join(rootDir, 'supabase', '.env');
   const env = readEnvFile(supabaseEnvPath);
+  const prayers = loadPrayerCatalog(rootDir);
 
   const openAiApiKey = process.env.OPENAI_API_KEY || env.OPENAI_API_KEY;
   if (!openAiApiKey) {
@@ -568,8 +700,8 @@ async function main() {
   const seedUserId = await ensureSeedUser({ serviceRoleKey, supabaseUrl });
   await ensureSeedProfile({ seedUserId, serviceRoleKey, supabaseUrl });
 
-  console.log('Ensuring prayer_library_items entries...');
-  const items = await ensurePrayerLibraryItems({ serviceRoleKey, seedUserId, supabaseUrl });
+  console.log(`Ensuring prayer_library_items entries from catalog (${prayers.length} prayers)...`);
+  const items = await ensurePrayerLibraryItems({ prayers, serviceRoleKey, seedUserId, supabaseUrl });
 
   const targetItems = items
     .map((item) => ({
@@ -580,19 +712,69 @@ async function main() {
     }))
     .sort((a, b) => a.title.localeCompare(b.title));
 
-  console.log(`Generating scripts for ${targetItems.length} prayers x ${DURATIONS.length} durations...`);
+  const existingScriptRows = await listPrayerScripts({ serviceRoleKey, supabaseUrl });
+  const existingByVariant = new Map();
+  const sentenceSignatureSet = new Set();
+  const ngramSignatureSets = [];
+
+  for (const row of existingScriptRows) {
+    const itemId =
+      typeof row.prayer_library_item_id === 'string' ? row.prayer_library_item_id.trim() : '';
+    const durationMinutes = Number(row.duration_minutes);
+    const language = typeof row.language === 'string' ? row.language.trim() : '';
+    const scriptText = typeof row.script_text === 'string' ? row.script_text.trim() : '';
+
+    if (!itemId || !Number.isFinite(durationMinutes) || !language || !scriptText) {
+      continue;
+    }
+
+    existingByVariant.set(scriptVariantKey(itemId, durationMinutes, language), scriptText);
+    sentenceSignatures(scriptText, 3).forEach((signature) => sentenceSignatureSet.add(signature));
+    ngramSignatureSets.push(ngramSignatures(scriptText, 7));
+  }
+
+  const total = targetItems.length * DURATIONS.length;
+  const existingVariants = targetItems.reduce((acc, prayer) => {
+    return (
+      acc +
+      DURATIONS.filter((duration) =>
+        existingByVariant.has(scriptVariantKey(prayer.id, duration, LANGUAGE)),
+      ).length
+    );
+  }, 0);
+
+  console.log(
+    `Preparing scripts for ${targetItems.length} prayers x ${DURATIONS.length} durations (${total} variants). Existing variants found: ${existingVariants}.`,
+  );
 
   let completed = 0;
-  const total = targetItems.length * DURATIONS.length;
+  let generated = 0;
+  let skipped = 0;
 
   for (const prayer of targetItems) {
     const priorDurations = [];
 
     for (const duration of DURATIONS) {
-      const scriptText = await generateScriptWithRetry({
+      const variantKey = scriptVariantKey(prayer.id, duration, LANGUAGE);
+      const existingScript = existingByVariant.get(variantKey);
+
+      if (existingScript) {
+        priorDurations.push({
+          duration,
+          preview: existingScript.slice(0, 160).replace(/\s+/g, ' ').trim(),
+        });
+        completed += 1;
+        skipped += 1;
+        console.log(`[${completed}/${total}] ${prayer.title} (${duration} min) already exists, skipped.`);
+        continue;
+      }
+
+      const scriptText = await generateUniqueScriptVariant({
+        ngramSignatureSets,
         openAiApiKey,
         prayer,
         priorDurations,
+        sentenceSignatureSet,
         targetDuration: duration,
       });
 
@@ -604,6 +786,7 @@ async function main() {
         serviceRoleKey,
         supabaseUrl,
       });
+      existingByVariant.set(variantKey, scriptText);
 
       priorDurations.push({
         duration,
@@ -611,6 +794,7 @@ async function main() {
       });
 
       completed += 1;
+      generated += 1;
       console.log(`[${completed}/${total}] ${prayer.title} (${duration} min) saved.`);
       await sleep(300);
     }
@@ -622,7 +806,7 @@ async function main() {
     supabaseUrl,
   });
 
-  console.log(`Done. Total stored script variants (en): ${savedRows.length}.`);
+  console.log(`Done. Generated ${generated}, skipped ${skipped}. Total stored script variants (en): ${savedRows.length}.`);
 }
 
 main().catch((error) => {

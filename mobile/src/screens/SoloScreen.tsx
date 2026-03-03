@@ -1,6 +1,6 @@
 import ambientAnimation from '../../assets/lottie/cosmic-ambient.json';
-import { useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
 
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
@@ -10,6 +10,11 @@ import type { SoloStackParamList } from '../app/navigation/types';
 import { Screen } from '../components/Screen';
 import { SurfaceCard } from '../components/SurfaceCard';
 import { Typography } from '../components/Typography';
+import {
+  fetchPrayerLibraryItems,
+  incrementPrayerLibraryStart,
+  type PrayerLibraryItem,
+} from '../lib/api/data';
 import { HOME_CARD_GAP, PROFILE_SECTION_GAP, SCREEN_PAD_X } from '../theme/figmaV2Layout';
 import { figmaV2Reference } from '../theme/figma-v2-reference';
 import { CARD_PADDING_LG } from '../theme/layout';
@@ -17,133 +22,12 @@ import { colors, radii, spacing } from '../theme/tokens';
 
 type SoloNavigation = NativeStackNavigationProp<SoloStackParamList, 'SoloHome'>;
 type LibraryMode = 'favorites' | 'recent' | null;
-type PrayerCategory =
-  | 'Relationships'
-  | 'Wellbeing'
-  | 'Abundance'
-  | 'Purpose'
-  | 'Protection'
-  | 'Gratitude';
+type CategoryFilter = 'All' | string | null;
 
-type CategoryFilter = 'All' | PrayerCategory;
-
-interface PrayerCardItem {
-  category: PrayerCategory;
-  body: string;
-  durationLabel: string;
-  id: string;
-  tags: string;
-  title: string;
+function normalizeCategory(category: string | null | undefined) {
+  const value = category?.trim();
+  return value && value.length > 0 ? value : 'General';
 }
-
-const CATEGORY_FILTERS: readonly CategoryFilter[] = [
-  'All',
-  'Relationships',
-  'Wellbeing',
-  'Abundance',
-  'Purpose',
-  'Protection',
-  'Gratitude',
-];
-
-const SOLO_PRAYER_LIBRARY: readonly PrayerCardItem[] = [
-  {
-    body: 'Guide this bond with patience, trust, and healthy communication that strengthens connection.',
-    category: 'Relationships',
-    durationLabel: '3-10 min',
-    id: 'relationships-1',
-    tags: 'Connection - Harmony',
-    title: 'Prayer for Family Unity',
-  },
-  {
-    body: 'Bring peace to conversations and clarity to unresolved moments so healing can continue.',
-    category: 'Relationships',
-    durationLabel: '5-12 min',
-    id: 'relationships-2',
-    tags: 'Reconciliation - Peace',
-    title: 'Prayer for Reconciliation',
-  },
-  {
-    body: 'Anchor the mind, steady the breath, and restore calm energy for the day ahead.',
-    category: 'Wellbeing',
-    durationLabel: '3-8 min',
-    id: 'wellbeing-1',
-    tags: 'Calm - Recovery',
-    title: 'Prayer for Inner Calm',
-  },
-  {
-    body: 'Support healthy routines, deep rest, and resilience through every challenge.',
-    category: 'Wellbeing',
-    durationLabel: '5-10 min',
-    id: 'wellbeing-2',
-    tags: 'Rest - Strength',
-    title: 'Prayer for Rest and Renewal',
-  },
-  {
-    body: 'Open pathways for provision, wise decisions, and meaningful opportunities.',
-    category: 'Abundance',
-    durationLabel: '4-9 min',
-    id: 'abundance-1',
-    tags: 'Provision - Opportunity',
-    title: 'Prayer for Provision',
-  },
-  {
-    body: 'Align resources with purpose and invite generosity, discipline, and gratitude.',
-    category: 'Abundance',
-    durationLabel: '5-11 min',
-    id: 'abundance-2',
-    tags: 'Stewardship - Gratitude',
-    title: 'Prayer for Responsible Growth',
-  },
-  {
-    body: 'Clarify priorities and reveal the next right step with courage and consistency.',
-    category: 'Purpose',
-    durationLabel: '4-8 min',
-    id: 'purpose-1',
-    tags: 'Direction - Focus',
-    title: 'Prayer for Clear Purpose',
-  },
-  {
-    body: 'Strengthen conviction and serve with humility in every mission you are called to.',
-    category: 'Purpose',
-    durationLabel: '5-10 min',
-    id: 'purpose-2',
-    tags: 'Calling - Service',
-    title: 'Prayer for Meaningful Work',
-  },
-  {
-    body: 'Cover your home and loved ones with safety, wisdom, and steady protection.',
-    category: 'Protection',
-    durationLabel: '3-7 min',
-    id: 'protection-1',
-    tags: 'Safety - Home',
-    title: 'Prayer for Household Protection',
-  },
-  {
-    body: 'Guard each journey with attentiveness, safe passage, and peaceful arrival.',
-    category: 'Protection',
-    durationLabel: '3-6 min',
-    id: 'protection-2',
-    tags: 'Travel - Protection',
-    title: 'Prayer for Safe Travel',
-  },
-  {
-    body: 'Center the heart in gratitude for daily gifts, lessons, and faithful support.',
-    category: 'Gratitude',
-    durationLabel: '3-6 min',
-    id: 'gratitude-1',
-    tags: 'Thankfulness - Joy',
-    title: 'Prayer of Daily Gratitude',
-  },
-  {
-    body: 'Reflect with humility, celebrate progress, and carry gratitude into tomorrow.',
-    category: 'Gratitude',
-    durationLabel: '4-8 min',
-    id: 'gratitude-2',
-    tags: 'Reflection - Hope',
-    title: 'Prayer for Evening Reflection',
-  },
-];
 
 function FilterChip({
   active,
@@ -185,38 +69,92 @@ function FilterChip({
 export function SoloScreen() {
   const navigation = useNavigation<SoloNavigation>();
   const { width: windowWidth } = useWindowDimensions();
-  const [libraryMode, setLibraryMode] = useState<LibraryMode>('recent');
-  const [selectedCategory, setSelectedCategory] = useState<CategoryFilter | null>('All');
-  const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
-  const [activeSlideByCategory, setActiveSlideByCategory] = useState<
-    Partial<Record<PrayerCategory, number>>
-  >({});
-  const [prayerRailWidth, setPrayerRailWidth] = useState<number | null>(null);
 
-  const favoriteCount = favoriteIds.length;
-  const recentCount = SOLO_PRAYER_LIBRARY.length;
+  const [libraryMode, setLibraryMode] = useState<LibraryMode>('recent');
+  const [selectedCategory, setSelectedCategory] = useState<CategoryFilter>('All');
+  const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
+  const [activeSlideByCategory, setActiveSlideByCategory] = useState<Partial<Record<string, number>>>(
+    {},
+  );
+  const [prayerRailWidth, setPrayerRailWidth] = useState<number | null>(null);
+  const [libraryItems, setLibraryItems] = useState<PrayerLibraryItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+
+    const loadLibrary = async () => {
+      setLoading(true);
+      try {
+        const items = await fetchPrayerLibraryItems();
+        if (!active) {
+          return;
+        }
+        setLibraryItems(items);
+        setError(null);
+      } catch (nextError) {
+        if (!active) {
+          return;
+        }
+        const message =
+          nextError instanceof Error ? nextError.message : 'Failed to load prayer library.';
+        setError(message);
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
+      }
+    };
+
+    void loadLibrary();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const favoriteCount = favoriteIds.filter((id) => libraryItems.some((item) => item.id === id)).length;
+  const recentCount = libraryItems.length;
 
   const visibleLibrary = useMemo(() => {
     if (libraryMode === 'favorites') {
-      return SOLO_PRAYER_LIBRARY.filter((item) => favoriteIds.includes(item.id));
+      return libraryItems.filter((item) => favoriteIds.includes(item.id));
     }
 
-    return SOLO_PRAYER_LIBRARY;
-  }, [favoriteIds, libraryMode]);
+    return libraryItems;
+  }, [favoriteIds, libraryItems, libraryMode]);
+
+  const availableCategories = useMemo(() => {
+    return Array.from(new Set(visibleLibrary.map((item) => normalizeCategory(item.category)))).sort(
+      (left, right) => left.localeCompare(right),
+    );
+  }, [visibleLibrary]);
+
+  const categoryFilters = useMemo(
+    () => ['All', ...availableCategories],
+    [availableCategories],
+  );
+
+  useEffect(() => {
+    if (selectedCategory && selectedCategory !== 'All' && !availableCategories.includes(selectedCategory)) {
+      setSelectedCategory('All');
+    }
+  }, [availableCategories, selectedCategory]);
 
   const sections = useMemo(() => {
-    const categories =
+    const scopedCategories =
       !selectedCategory || selectedCategory === 'All'
-        ? CATEGORY_FILTERS.filter((item): item is PrayerCategory => item !== 'All')
-        : [selectedCategory];
+        ? availableCategories
+        : availableCategories.filter((category) => category === selectedCategory);
 
-    return categories
+    return scopedCategories
       .map((category) => ({
         category,
-        items: visibleLibrary.filter((item) => item.category === category),
+        items: visibleLibrary.filter((item) => normalizeCategory(item.category) === category),
       }))
       .filter((section) => section.items.length > 0);
-  }, [selectedCategory, visibleLibrary]);
+  }, [availableCategories, selectedCategory, visibleLibrary]);
 
   const fallbackPrayerCardWidth = useMemo(() => {
     const laneWidth = windowWidth - SCREEN_PAD_X * 2 - CARD_PADDING_LG * 2 - 2;
@@ -235,6 +173,17 @@ export function SoloScreen() {
       }
 
       return [...current, itemId];
+    });
+  };
+
+  const onStartPrayer = (item: PrayerLibraryItem) => {
+    void incrementPrayerLibraryStart(item.id).catch(() => {
+      // Non-blocking engagement metric update.
+    });
+
+    navigation.navigate('SoloLive', {
+      intention: item.title,
+      scriptPreset: item.body,
     });
   };
 
@@ -271,7 +220,7 @@ export function SoloScreen() {
         contentContainerStyle={styles.categoryRail}
         showsHorizontalScrollIndicator={false}
       >
-        {CATEGORY_FILTERS.map((category) => (
+        {categoryFilters.map((category) => (
           <FilterChip
             key={category}
             active={selectedCategory === category}
@@ -284,7 +233,24 @@ export function SoloScreen() {
         ))}
       </ScrollView>
 
-      {sections.length === 0 ? (
+      {loading ? (
+        <View style={styles.loadingWrap}>
+          <ActivityIndicator color={colors.accentMintStart} />
+        </View>
+      ) : null}
+
+      {error ? (
+        <SurfaceCard radius="xl" style={styles.emptyStateCard} variant="homeAlert">
+          <Typography allowFontScaling={false} variant="H2" weight="bold">
+            Could not load prayers
+          </Typography>
+          <Typography allowFontScaling={false} color={colors.textSecondary}>
+            {error}
+          </Typography>
+        </SurfaceCard>
+      ) : null}
+
+      {!loading && !error && sections.length === 0 ? (
         <SurfaceCard radius="xl" style={styles.emptyStateCard} variant="homeAlert">
           <Typography allowFontScaling={false} variant="H2" weight="bold">
             No prayers in this filter yet
@@ -293,144 +259,132 @@ export function SoloScreen() {
             Save prayers to favorites or choose another category to continue.
           </Typography>
         </SurfaceCard>
-      ) : (
-        sections.map((section) => (
-          <SurfaceCard key={section.category} radius="xl" style={styles.categorySection}>
-            <View style={styles.sectionHeaderRow}>
-              <Typography allowFontScaling={false} variant="H2" weight="bold">
-                {section.category}
-              </Typography>
-              <Typography
-                allowFontScaling={false}
-                color={colors.textSecondary}
-                variant="Body"
-                weight="bold"
+      ) : null}
+
+      {!loading && !error
+        ? sections.map((section) => (
+            <SurfaceCard key={section.category} radius="xl" style={styles.categorySection}>
+              <View style={styles.sectionHeaderRow}>
+                <Typography allowFontScaling={false} variant="H2" weight="bold">
+                  {section.category}
+                </Typography>
+                <Typography
+                  allowFontScaling={false}
+                  color={colors.textSecondary}
+                  variant="Body"
+                  weight="bold"
+                >
+                  {`${section.items.length} prayers`}
+                </Typography>
+              </View>
+
+              <ScrollView
+                horizontal
+                decelerationRate="fast"
+                onLayout={(event) => {
+                  const measuredWidth = event.nativeEvent.layout.width;
+                  if (
+                    measuredWidth > 0 &&
+                    (prayerRailWidth === null || Math.abs(prayerRailWidth - measuredWidth) > 1)
+                  ) {
+                    setPrayerRailWidth(measuredWidth);
+                  }
+                }}
+                onMomentumScrollEnd={(event) => {
+                  const nextIndex = Math.round(event.nativeEvent.contentOffset.x / prayerCardStep);
+                  const clampedIndex = Math.max(0, Math.min(section.items.length - 1, nextIndex));
+                  setActiveSlideByCategory((current) => ({
+                    ...current,
+                    [section.category]: clampedIndex,
+                  }));
+                }}
+                snapToAlignment="start"
+                snapToInterval={prayerCardStep}
+                contentContainerStyle={styles.prayerRail}
+                showsHorizontalScrollIndicator={false}
               >
-                {`${section.items.length} prayers`}
-              </Typography>
-            </View>
-
-            <ScrollView
-              horizontal
-              decelerationRate="fast"
-              onLayout={(event) => {
-                const measuredWidth = event.nativeEvent.layout.width;
-                if (
-                  measuredWidth > 0 &&
-                  (prayerRailWidth === null || Math.abs(prayerRailWidth - measuredWidth) > 1)
-                ) {
-                  setPrayerRailWidth(measuredWidth);
-                }
-              }}
-              onMomentumScrollEnd={(event) => {
-                const nextIndex = Math.round(event.nativeEvent.contentOffset.x / prayerCardStep);
-                const clampedIndex = Math.max(0, Math.min(section.items.length - 1, nextIndex));
-                setActiveSlideByCategory((current) => ({
-                  ...current,
-                  [section.category]: clampedIndex,
-                }));
-              }}
-              snapToAlignment="start"
-              snapToInterval={prayerCardStep}
-              contentContainerStyle={styles.prayerRail}
-              showsHorizontalScrollIndicator={false}
-            >
-              {section.items.map((item) => {
-                const isFavorite = favoriteIds.includes(item.id);
-
-                return (
-                  <Pressable
-                    key={item.id}
-                    onPress={() =>
-                      navigation.navigate('SoloLive', {
-                        intention: item.title,
-                        scriptPreset: item.body,
-                      })
-                    }
-                    style={({ pressed }) => [pressed && styles.prayerCardPressed]}
-                  >
-                    <SurfaceCard
-                      contentPadding={spacing.sm}
-                      radius="md"
-                      style={[styles.prayerCard, { width: prayerCardWidth }]}
-                      variant="homeStatSmall"
-                    >
-                      <View style={styles.prayerCardHeader}>
-                        <Typography
-                          allowFontScaling={false}
-                          style={styles.prayerTitle}
-                          variant="H2"
-                          weight="bold"
-                        >
-                          {item.title}
-                        </Typography>
-                        <Pressable
-                          accessibilityLabel={
-                            isFavorite ? 'Remove from favorites' : 'Add to favorites'
-                          }
-                          onPress={(event) => {
-                            event.stopPropagation();
-                            toggleFavorite(item.id);
-                          }}
-                          style={({ pressed }) => [
-                            styles.favoriteButton,
-                            isFavorite && styles.favoriteButtonActive,
-                            pressed && styles.favoritePressed,
-                          ]}
-                        >
-                          <MaterialCommunityIcons
-                            color={isFavorite ? colors.textOnSky : colors.textSecondary}
-                            name={isFavorite ? 'heart' : 'heart-outline'}
-                            size={18}
-                          />
-                        </Pressable>
-                      </View>
-
-                      <Typography
-                        allowFontScaling={false}
-                        color={colors.textSecondary}
-                        style={styles.prayerBody}
-                      >
-                        {item.body}
-                      </Typography>
-                      <Typography
-                        allowFontScaling={false}
-                        color={colors.accentSkyStart}
-                        variant="Body"
-                        weight="bold"
-                      >
-                        {`${item.durationLabel} - ${item.category}`}
-                      </Typography>
-                      <Typography
-                        allowFontScaling={false}
-                        color={colors.textCaption}
-                        variant="Caption"
-                      >
-                        {item.tags}
-                      </Typography>
-                    </SurfaceCard>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
-
-            {section.items.length > 1 ? (
-              <View style={styles.dotRow}>
-                {section.items.map((item, index) => {
-                  const isActive = (activeSlideByCategory[section.category] ?? 0) === index;
+                {section.items.map((item) => {
+                  const isFavorite = favoriteIds.includes(item.id);
+                  const category = normalizeCategory(item.category);
 
                   return (
-                    <View
-                      key={`${section.category}-${item.id}-dot`}
-                      style={[styles.dot, isActive ? styles.dotActive : styles.dotInactive]}
-                    />
+                    <Pressable
+                      key={item.id}
+                      onPress={() => onStartPrayer(item)}
+                      style={({ pressed }) => [pressed && styles.prayerCardPressed]}
+                    >
+                      <SurfaceCard
+                        contentPadding={spacing.sm}
+                        radius="md"
+                        style={[styles.prayerCard, { width: prayerCardWidth }]}
+                        variant="homeStatSmall"
+                      >
+                        <View style={styles.prayerCardHeader}>
+                          <Typography
+                            allowFontScaling={false}
+                            style={styles.prayerTitle}
+                            variant="H2"
+                            weight="bold"
+                          >
+                            {item.title}
+                          </Typography>
+                          <Pressable
+                            accessibilityLabel={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+                            onPress={(event) => {
+                              event.stopPropagation();
+                              toggleFavorite(item.id);
+                            }}
+                            style={({ pressed }) => [
+                              styles.favoriteButton,
+                              isFavorite && styles.favoriteButtonActive,
+                              pressed && styles.favoritePressed,
+                            ]}
+                          >
+                            <MaterialCommunityIcons
+                              color={isFavorite ? colors.textOnSky : colors.textSecondary}
+                              name={isFavorite ? 'heart' : 'heart-outline'}
+                              size={18}
+                            />
+                          </Pressable>
+                        </View>
+
+                        <Typography allowFontScaling={false} color={colors.textSecondary} style={styles.prayerBody}>
+                          {item.body}
+                        </Typography>
+                        <Typography
+                          allowFontScaling={false}
+                          color={colors.accentSkyStart}
+                          variant="Body"
+                          weight="bold"
+                        >
+                          {`${item.durationMinutes} min - ${category}`}
+                        </Typography>
+                        <Typography allowFontScaling={false} color={colors.textCaption} variant="Caption">
+                          {`${item.startsCount} starts`}
+                        </Typography>
+                      </SurfaceCard>
+                    </Pressable>
                   );
                 })}
-              </View>
-            ) : null}
-          </SurfaceCard>
-        ))
-      )}
+              </ScrollView>
+
+              {section.items.length > 1 ? (
+                <View style={styles.dotRow}>
+                  {section.items.map((item, index) => {
+                    const isActive = (activeSlideByCategory[section.category] ?? 0) === index;
+
+                    return (
+                      <View
+                        key={`${section.category}-${item.id}-dot`}
+                        style={[styles.dot, isActive ? styles.dotActive : styles.dotInactive]}
+                      />
+                    );
+                  })}
+                </View>
+              ) : null}
+            </SurfaceCard>
+          ))
+        : null}
     </Screen>
   );
 }
@@ -529,6 +483,11 @@ const styles = StyleSheet.create({
   heroTitle: {
     fontSize: 27,
     lineHeight: 30,
+  },
+  loadingWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 44,
   },
   prayerBody: {
     minHeight: 68,
