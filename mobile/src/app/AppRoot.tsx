@@ -12,6 +12,7 @@ import { envValidation } from '../lib/env';
 import { colors } from '../theme/tokens';
 import { MissingEnvScreen } from '../screens/MissingEnvScreen';
 import { AuthGate } from './navigation/AuthGate';
+import type { CaptureNavigationTarget } from './navigation/types';
 
 const navigationTheme = {
   ...DarkTheme,
@@ -26,7 +27,11 @@ const navigationTheme = {
   },
 };
 
-export function AppRoot() {
+interface AppRootProps {
+  captureTarget?: CaptureNavigationTarget;
+}
+
+export function AppRoot({ captureTarget }: AppRootProps) {
   const [continueWithoutOptionalEnv, setContinueWithoutOptionalEnv] = useState(false);
   const [fontsLoaded] = useFonts({
     Sora_400Regular,
@@ -64,7 +69,7 @@ export function AppRoot() {
     <SafeAreaProvider>
       <NavigationContainer theme={navigationTheme}>
         <StatusBar style="light" />
-        <AuthGate />
+        <AuthGate {...(captureTarget ? { captureTarget } : {})} />
       </NavigationContainer>
     </SafeAreaProvider>
   );

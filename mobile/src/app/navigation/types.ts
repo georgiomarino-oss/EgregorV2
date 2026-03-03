@@ -30,3 +30,12 @@ export type EventsStackParamList = {
 export type ProfileStackParamList = {
   ProfileHome: undefined;
 };
+
+export interface CaptureNavigationTarget {
+  communityRoute?: keyof CommunityStackParamList;
+  eventsRoute?: keyof EventsStackParamList;
+  root?: 'auth' | 'main';
+  profileRoute?: keyof ProfileStackParamList;
+  soloRoute?: keyof SoloStackParamList;
+  tab?: keyof MainTabParamList;
+}

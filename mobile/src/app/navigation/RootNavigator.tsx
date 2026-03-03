@@ -14,6 +14,7 @@ import { SoloLiveScreen } from '../../screens/SoloLiveScreen';
 import { SoloScreen } from '../../screens/SoloScreen';
 import { SoloSetupScreen } from '../../screens/SoloSetupScreen';
 import type {
+  CaptureNavigationTarget,
   CommunityStackParamList,
   EventsStackParamList,
   MainTabParamList,
@@ -33,9 +34,14 @@ const sharedStackOptions = {
   headerShown: false,
 };
 
-function SoloStackNavigator() {
+interface SoloStackNavigatorProps {
+  initialRouteName?: keyof SoloStackParamList;
+}
+
+function SoloStackNavigator({ initialRouteName }: SoloStackNavigatorProps) {
+  const navigatorProps = initialRouteName ? { initialRouteName } : {};
   return (
-    <SoloStack.Navigator screenOptions={sharedStackOptions}>
+    <SoloStack.Navigator {...navigatorProps} screenOptions={sharedStackOptions}>
       <SoloStack.Screen name="SoloHome" component={SoloScreen} />
       <SoloStack.Screen name="PrayerLibrary" component={PrayerLibraryScreen} />
       <SoloStack.Screen name="SoloSetup" component={SoloSetupScreen} />
@@ -44,17 +50,27 @@ function SoloStackNavigator() {
   );
 }
 
-function CommunityStackNavigator() {
+interface CommunityStackNavigatorProps {
+  initialRouteName?: keyof CommunityStackParamList;
+}
+
+function CommunityStackNavigator({ initialRouteName }: CommunityStackNavigatorProps) {
+  const navigatorProps = initialRouteName ? { initialRouteName } : {};
   return (
-    <CommunityStack.Navigator screenOptions={sharedStackOptions}>
+    <CommunityStack.Navigator {...navigatorProps} screenOptions={sharedStackOptions}>
       <CommunityStack.Screen name="CommunityHome" component={CommunityScreen} />
     </CommunityStack.Navigator>
   );
 }
 
-function EventsStackNavigator() {
+interface EventsStackNavigatorProps {
+  initialRouteName?: keyof EventsStackParamList;
+}
+
+function EventsStackNavigator({ initialRouteName }: EventsStackNavigatorProps) {
+  const navigatorProps = initialRouteName ? { initialRouteName } : {};
   return (
-    <EventsStack.Navigator screenOptions={sharedStackOptions}>
+    <EventsStack.Navigator {...navigatorProps} screenOptions={sharedStackOptions}>
       <EventsStack.Screen name="EventsHome" component={EventsScreen} />
       <EventsStack.Screen name="EventDetails" component={EventDetailsScreen} />
       <EventsStack.Screen name="EventRoom" component={EventRoomScreen} />
@@ -62,17 +78,29 @@ function EventsStackNavigator() {
   );
 }
 
-function ProfileStackNavigator() {
+interface ProfileStackNavigatorProps {
+  initialRouteName?: keyof ProfileStackParamList;
+}
+
+function ProfileStackNavigator({ initialRouteName }: ProfileStackNavigatorProps) {
+  const navigatorProps = initialRouteName ? { initialRouteName } : {};
   return (
-    <ProfileStack.Navigator screenOptions={sharedStackOptions}>
+    <ProfileStack.Navigator {...navigatorProps} screenOptions={sharedStackOptions}>
       <ProfileStack.Screen name="ProfileHome" component={ProfileScreen} />
     </ProfileStack.Navigator>
   );
 }
 
-function MainTabs() {
+interface MainTabsProps {
+  captureTarget?: CaptureNavigationTarget;
+}
+
+function MainTabs({ captureTarget }: MainTabsProps) {
+  const tabNavigatorProps = captureTarget?.tab ? { initialRouteName: captureTarget.tab } : {};
+
   return (
     <Tab.Navigator
+      {...tabNavigatorProps}
       screenOptions={{
         headerShown: false,
       }}
@@ -80,12 +108,22 @@ function MainTabs() {
     >
       <Tab.Screen
         name="CommunityTab"
-        component={CommunityStackNavigator}
+        children={() => (
+          <CommunityStackNavigator
+            {...(captureTarget?.communityRoute
+              ? { initialRouteName: captureTarget.communityRoute }
+              : {})}
+          />
+        )}
         options={{ title: 'Community' }}
       />
       <Tab.Screen
         name="SoloTab"
-        component={SoloStackNavigator}
+        children={() => (
+          <SoloStackNavigator
+            {...(captureTarget?.soloRoute ? { initialRouteName: captureTarget.soloRoute } : {})}
+          />
+        )}
         options={({ route }) => {
           const nestedRouteName = getFocusedRouteNameFromRoute(route) ?? 'SoloHome';
           const hideTabBar = nestedRouteName === 'SoloLive';
@@ -96,10 +134,26 @@ function MainTabs() {
           };
         }}
       />
-      <Tab.Screen name="EventsTab" component={EventsStackNavigator} options={{ title: 'Events' }} />
+      <Tab.Screen
+        name="EventsTab"
+        children={() => (
+          <EventsStackNavigator
+            {...(captureTarget?.eventsRoute
+              ? { initialRouteName: captureTarget.eventsRoute }
+              : {})}
+          />
+        )}
+        options={{ title: 'Events' }}
+      />
       <Tab.Screen
         name="ProfileTab"
-        component={ProfileStackNavigator}
+        children={() => (
+          <ProfileStackNavigator
+            {...(captureTarget?.profileRoute
+              ? { initialRouteName: captureTarget.profileRoute }
+              : {})}
+          />
+        )}
         options={{ title: 'Profile' }}
       />
     </Tab.Navigator>
@@ -107,14 +161,17 @@ function MainTabs() {
 }
 
 interface RootNavigatorProps {
+  captureTarget?: CaptureNavigationTarget;
   isAuthenticated: boolean;
 }
 
-export function RootNavigator({ isAuthenticated }: RootNavigatorProps) {
+export function RootNavigator({ captureTarget, isAuthenticated }: RootNavigatorProps) {
   return (
     <RootStack.Navigator screenOptions={{ headerShown: false }}>
       {isAuthenticated ? (
-        <RootStack.Screen name="MainTabs" component={MainTabs} />
+        <RootStack.Screen name="MainTabs">
+          {() => <MainTabs {...(captureTarget ? { captureTarget } : {})} />}
+        </RootStack.Screen>
       ) : (
         <RootStack.Screen name="Auth" component={AuthScreen} />
       )}

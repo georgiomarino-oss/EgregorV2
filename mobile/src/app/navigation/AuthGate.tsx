@@ -7,12 +7,28 @@ import { Typography } from '../../components/Typography';
 import { supabase } from '../../lib/supabase';
 import { colors } from '../../theme/tokens';
 import { RootNavigator } from './RootNavigator';
+import type { CaptureNavigationTarget } from './types';
 
-export function AuthGate() {
+interface AuthGateProps {
+  captureTarget?: CaptureNavigationTarget;
+}
+
+export function AuthGate({ captureTarget }: AuthGateProps) {
   const [session, setSession] = useState<Session | null>(null);
   const [initializing, setInitializing] = useState(true);
+  const forcedAuthState =
+    captureTarget?.root === 'auth'
+      ? false
+      : captureTarget?.root === 'main'
+        ? true
+        : null;
 
   useEffect(() => {
+    if (forcedAuthState !== null) {
+      setInitializing(false);
+      return;
+    }
+
     let active = true;
 
     const bootstrap = async () => {
@@ -42,7 +58,16 @@ export function AuthGate() {
       active = false;
       subscription.unsubscribe();
     };
-  }, []);
+  }, [forcedAuthState]);
+
+  if (forcedAuthState !== null) {
+    return (
+      <RootNavigator
+        {...(captureTarget ? { captureTarget } : {})}
+        isAuthenticated={forcedAuthState}
+      />
+    );
+  }
 
   if (initializing) {
     return (
@@ -53,7 +78,12 @@ export function AuthGate() {
     );
   }
 
-  return <RootNavigator isAuthenticated={Boolean(session)} />;
+  return (
+    <RootNavigator
+      {...(captureTarget ? { captureTarget } : {})}
+      isAuthenticated={Boolean(session)}
+    />
+  );
 }
 
 const styles = StyleSheet.create({
