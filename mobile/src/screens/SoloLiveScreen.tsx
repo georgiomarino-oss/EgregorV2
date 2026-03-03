@@ -27,6 +27,9 @@ type SoloNavigation = NativeStackNavigationProp<SoloStackParamList, 'SoloLive'>;
 const VOICE_OPTIONS = ['Oliver', 'Amaya', 'Rainbird', 'Dominic'] as const;
 const MINUTE_OPTIONS = [3, 5, 10] as const;
 const DEFAULT_ELEVENLABS_VOICE_ID = 'jfIS2w2yJi0grJZPyEsk';
+const MAX_SCRIPT_PARAGRAPH_CHARS = 96;
+const MAX_TIMED_WORDS_PER_PARAGRAPH = 14;
+const MAX_SCRIPT_LINES = 4;
 const ELEVENLABS_VOICE_ID_BY_LABEL: Partial<
   Record<(typeof VOICE_OPTIONS)[number], string>
 > = {
@@ -54,7 +57,7 @@ function sanitizeScriptParagraph(paragraph: string) {
   return withoutMarkdownHeadings.trim();
 }
 
-function splitLongParagraph(paragraph: string, maxChars = 130) {
+function splitLongParagraph(paragraph: string, maxChars = MAX_SCRIPT_PARAGRAPH_CHARS) {
   if (paragraph.length <= maxChars) {
     return [paragraph];
   }
@@ -158,7 +161,10 @@ interface TimedWordParagraph {
   words: TimedWord[];
 }
 
-function groupTimedWordsIntoParagraphs(words: TimedWord[], maxWordsPerParagraph = 24) {
+function groupTimedWordsIntoParagraphs(
+  words: TimedWord[],
+  maxWordsPerParagraph = MAX_TIMED_WORDS_PER_PARAGRAPH,
+) {
   if (words.length === 0) {
     return [] as TimedWordParagraph[];
   }
@@ -193,6 +199,36 @@ function groupTimedWordsIntoParagraphs(words: TimedWord[], maxWordsPerParagraph 
 
   flush();
   return paragraphs;
+}
+
+function buildPreviewParagraphsFromScript(script: string) {
+  const normalized = script
+    .replace(/\r\n/g, '\n')
+    .split(/\n+/)
+    .map((line) => sanitizeScriptParagraph(line))
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!normalized) {
+    return [] as string[];
+  }
+
+  const words = normalized.split(/\s+/).filter((word) => word.length > 0);
+  if (words.length === 0) {
+    return [] as string[];
+  }
+
+  const pseudoTimedWords: TimedWord[] = words.map((word, index) => ({
+    endSeconds: index + 0.2,
+    index,
+    startSeconds: index,
+    word,
+  }));
+
+  return groupTimedWordsIntoParagraphs(pseudoTimedWords, MAX_TIMED_WORDS_PER_PARAGRAPH).map(
+    (paragraph) => paragraph.words.map((word) => word.word).join(' ').trim(),
+  );
 }
 
 function findActiveTimedWordIndex(words: TimedWord[], elapsedMillis: number) {
@@ -293,10 +329,14 @@ export function SoloLiveScreen() {
       null
     );
   }, [activeTimedWordIndex, timedWordParagraphs]);
-  const scriptParagraphs = useMemo(
-    () => splitScriptIntoParagraphs(resolvedScriptText),
-    [resolvedScriptText],
-  );
+  const scriptParagraphs = useMemo(() => {
+    const previewParagraphs = buildPreviewParagraphsFromScript(resolvedScriptText);
+    if (previewParagraphs.length > 0) {
+      return previewParagraphs;
+    }
+
+    return splitScriptIntoParagraphs(resolvedScriptText);
+  }, [resolvedScriptText]);
   const fallbackParagraphIndex = useMemo(() => {
     if (scriptParagraphs.length <= 1 || totalSeconds <= 0) {
       return 0;
@@ -772,7 +812,7 @@ export function SoloLiveScreen() {
               <View style={styles.scriptSyncWrap}>
                 <Typography
                   allowFontScaling={false}
-                  numberOfLines={5}
+                  numberOfLines={MAX_SCRIPT_LINES}
                   style={styles.scriptTextActive}
                   variant="H2"
                   weight="bold"
@@ -1062,22 +1102,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.xxs,
     justifyContent: 'flex-start',
+    maxHeight: 156,
     minHeight: 0,
-    paddingBottom: spacing.sm,
+    overflow: 'hidden',
     width: '100%',
   },
   scriptTextActive: {
-    fontSize: 21,
-    lineHeight: 30,
+    fontSize: 20,
+    lineHeight: 29,
     maxWidth: '98%',
-    paddingBottom: spacing.xs,
     textAlign: 'center',
   },
   scriptWord: {
     color: colors.textSecondary,
-    fontSize: 22,
+    fontSize: 20,
     letterSpacing: 0.1,
-    lineHeight: 31,
+    lineHeight: 29,
     marginRight: 2,
   },
   scriptWordActive: {
@@ -1092,7 +1132,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'center',
-    maxWidth: '100%',
+    maxHeight: 156,
+    maxWidth: '98%',
+    overflow: 'hidden',
     paddingHorizontal: spacing.xs,
   },
   scriptWrap: {
@@ -1100,9 +1142,10 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'flex-start',
     minHeight: 0,
+    overflow: 'hidden',
     paddingHorizontal: spacing.xs,
     paddingTop: spacing.xs,
-    paddingBottom: spacing.lg,
+    paddingBottom: spacing.xs,
     width: '100%',
   },
   selectorButton: {
