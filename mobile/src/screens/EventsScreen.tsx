@@ -22,11 +22,17 @@ import { SurfaceCard } from '../components/SurfaceCard';
 import { Typography } from '../components/Typography';
 import {
   fetchEventLibraryItems,
+  fetchEventNotificationState,
   fetchEvents,
-  incrementEventLibraryStart,
+  fetchNewsDrivenEvents,
+  setAllEventNotifications,
+  setEventNotificationSubscription,
   type AppEvent,
   type EventLibraryItem,
+  type NewsDrivenEventItem,
 } from '../lib/api/data';
+import { generateNewsDrivenEvents } from '../lib/api/functions';
+import { supabase } from '../lib/supabase';
 import {
   EVENTS_PANEL_HEIGHT,
   HOME_CARD_GAP,
@@ -43,6 +49,25 @@ import { colors, radii, spacing } from '../theme/tokens';
 type EventsNavigation = NativeStackNavigationProp<EventsStackParamList, 'EventsHome'>;
 type LibraryMode = 'favorites' | 'recent' | null;
 type CategoryFilter = 'All' | string | null;
+type EventStatusChip = 'live' | 'soon' | 'upcoming';
+
+type ScheduledEventOccurrence = {
+  body: string;
+  category: string;
+  durationMinutes: number;
+  favoriteKey: string;
+  occurrenceKey: string;
+  script: string;
+  source: 'news' | 'template';
+  startsAt: string;
+  startsCount: number;
+  status: EventStatusChip;
+  title: string;
+};
+
+const HORIZON_DAYS = 7;
+const SOON_WINDOW_MS = 2 * 60 * 60 * 1000;
+const SCHEDULE_HOURS_LOCAL = [0, 3, 6, 9, 12, 15, 18, 21];
 
 function normalizeCategory(category: string | null | undefined) {
   const value = category?.trim();
@@ -72,15 +97,139 @@ function formatEventSubtitle(event: AppEvent) {
   return `Starts in ${days}d`;
 }
 
+function toOccurrenceStatus(startIso: string, durationMinutes: number, nowMillis: number): EventStatusChip {
+  const startMillis = new Date(startIso).getTime();
+  const endMillis = startMillis + durationMinutes * 60 * 1000;
+
+  if (nowMillis >= startMillis && nowMillis < endMillis) {
+    return 'live';
+  }
+
+  if (startMillis > nowMillis && startMillis - nowMillis <= SOON_WINDOW_MS) {
+    return 'soon';
+  }
+
+  return 'upcoming';
+}
+
+function formatOccurrenceStartLabel(startIso: string) {
+  const date = new Date(startIso);
+  if (Number.isNaN(date.getTime())) {
+    return 'Upcoming';
+  }
+
+  return date.toLocaleString([], {
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    month: 'short',
+  });
+}
+
+function buildTemplateScheduleSlots(nowDate: Date) {
+  const nowMillis = nowDate.getTime();
+  const horizonMillis = nowMillis + HORIZON_DAYS * 24 * 60 * 60 * 1000;
+  const slots: Date[] = [];
+
+  const startOfToday = new Date(nowDate);
+  startOfToday.setHours(0, 0, 0, 0);
+
+  for (let dayOffset = 0; dayOffset < HORIZON_DAYS; dayOffset += 1) {
+    for (const hour of SCHEDULE_HOURS_LOCAL) {
+      const startAt = new Date(startOfToday);
+      startAt.setDate(startOfToday.getDate() + dayOffset);
+      startAt.setHours(hour, 0, 0, 0);
+
+      const endAt = new Date(startAt.getTime() + 15 * 60 * 1000);
+      if (endAt.getTime() <= nowMillis) {
+        continue;
+      }
+
+      if (startAt.getTime() > horizonMillis) {
+        continue;
+      }
+
+      slots.push(startAt);
+    }
+  }
+
+  return slots;
+}
+
+function buildScheduledTemplateEvents(items: EventLibraryItem[], nowDate: Date): ScheduledEventOccurrence[] {
+  const slots = buildTemplateScheduleSlots(nowDate);
+  if (slots.length === 0 || items.length === 0) {
+    return [];
+  }
+
+  const sortedItems = items.slice().sort((left, right) => left.title.localeCompare(right.title));
+  const maxCount = Math.min(sortedItems.length, slots.length);
+  const nowMillis = nowDate.getTime();
+
+  return Array.from({ length: maxCount }).map((_, index) => {
+    const item = sortedItems[index];
+    const slot = slots[index];
+    const startsAt = (slot ?? new Date(nowDate.getTime() + index * 60 * 60 * 1000)).toISOString();
+    const status = toOccurrenceStatus(startsAt, item?.durationMinutes ?? 10, nowMillis);
+
+    return {
+      body: item?.body ?? '',
+      category: normalizeCategory(item?.category),
+      durationMinutes: item?.durationMinutes ?? 10,
+      favoriteKey: item?.id ?? `template-${index}`,
+      occurrenceKey: `template:${item?.id}:${startsAt}`,
+      script: item?.script ?? item?.body ?? '',
+      source: 'template',
+      startsAt,
+      startsCount: item?.startsCount ?? 0,
+      status,
+      title: item?.title ?? 'Manifestation Event',
+    } satisfies ScheduledEventOccurrence;
+  });
+}
+
+function buildScheduledNewsEvents(items: NewsDrivenEventItem[], nowDate: Date): ScheduledEventOccurrence[] {
+  const nowMillis = nowDate.getTime();
+  const horizonMillis = nowMillis + HORIZON_DAYS * 24 * 60 * 60 * 1000;
+
+  return items
+    .filter((item) => {
+      const startMillis = new Date(item.startsAt).getTime();
+      if (!Number.isFinite(startMillis)) {
+        return false;
+      }
+      const endMillis = startMillis + item.durationMinutes * 60 * 1000;
+      return endMillis > nowMillis && startMillis <= horizonMillis;
+    })
+    .map((item) => {
+      return {
+        body: item.summary,
+        category: `News - ${normalizeCategory(item.category)}`,
+        durationMinutes: item.durationMinutes,
+        favoriteKey: item.id,
+        occurrenceKey: `news:${item.id}:${item.startsAt}`,
+        script: item.script,
+        source: 'news',
+        startsAt: item.startsAt,
+        startsCount: 0,
+        status: toOccurrenceStatus(item.startsAt, item.durationMinutes, nowMillis),
+        title: item.title,
+      } satisfies ScheduledEventOccurrence;
+    })
+    .sort((left, right) => new Date(left.startsAt).getTime() - new Date(right.startsAt).getTime());
+}
+
 function FilterChip({
   active,
   fill = false,
+  icon,
   label,
   onPress,
   size = 'md',
 }: {
   active: boolean;
   fill?: boolean;
+  icon?: keyof typeof MaterialCommunityIcons.glyphMap;
   label: string;
   onPress: () => void;
   size?: 'md' | 'sm';
@@ -96,15 +245,24 @@ function FilterChip({
         pressed && styles.chipPressed,
       ]}
     >
-      <Typography
-        allowFontScaling={false}
-        color={active ? figmaV2Reference.text.activeTab : colors.textLabel}
-        style={styles.chipText}
-        variant="Caption"
-        weight="bold"
-      >
-        {label}
-      </Typography>
+      <View style={styles.chipContentRow}>
+        {icon ? (
+          <MaterialCommunityIcons
+            color={active ? figmaV2Reference.text.activeTab : colors.textLabel}
+            name={icon}
+            size={14}
+          />
+        ) : null}
+        <Typography
+          allowFontScaling={false}
+          color={active ? figmaV2Reference.text.activeTab : colors.textLabel}
+          style={styles.chipText}
+          variant="Caption"
+          weight="bold"
+        >
+          {label}
+        </Typography>
+      </View>
     </Pressable>
   );
 }
@@ -127,6 +285,14 @@ export function EventsScreen() {
   const [activeSlideByCategory, setActiveSlideByCategory] = useState<Partial<Record<string, number>>>({});
   const [libraryRailWidth, setLibraryRailWidth] = useState<number | null>(null);
 
+  const [newsItems, setNewsItems] = useState<NewsDrivenEventItem[]>([]);
+
+  const [userId, setUserId] = useState<string | null>(null);
+  const [subscribedAll, setSubscribedAll] = useState(false);
+  const [subscribedKeys, setSubscribedKeys] = useState<string[]>([]);
+  const [updatingSubscriptionKey, setUpdatingSubscriptionKey] = useState<string | null>(null);
+
+  const [nowTick, setNowTick] = useState(() => Date.now());
   const loadEvents = useCallback(async (refresh = false) => {
     if (refresh) {
       setRefreshing(true);
@@ -160,24 +326,105 @@ export function EventsScreen() {
     }
   }, []);
 
+  const syncNewsEvents = useCallback(async () => {
+    try {
+      await generateNewsDrivenEvents();
+      const nextNewsItems = await fetchNewsDrivenEvents(80);
+      setNewsItems(nextNewsItems);
+    } catch {
+
+      try {
+        const fallbackNewsItems = await fetchNewsDrivenEvents(80);
+        setNewsItems(fallbackNewsItems);
+      } catch {
+        // Ignore secondary failure.
+      }
+    }
+  }, []);
+
+  const loadNotificationState = useCallback(async (nextUserId: string) => {
+    try {
+      const state = await fetchEventNotificationState(nextUserId);
+      setSubscribedAll(state.subscribedAll);
+      setSubscribedKeys(state.subscriptionKeys);
+    } catch {
+      setSubscribedAll(false);
+      setSubscribedKeys([]);
+    }
+  }, []);
+
   useEffect(() => {
     void loadEvents();
     void loadLibrary();
-  }, [loadEvents, loadLibrary]);
+    void syncNewsEvents();
+  }, [loadEvents, loadLibrary, syncNewsEvents]);
+
+  useEffect(() => {
+    let active = true;
+
+    const hydrateUser = async () => {
+      const { data } = await supabase.auth.getUser();
+      const nextUserId = data.user?.id ?? null;
+      if (!active) {
+        return;
+      }
+
+      setUserId(nextUserId);
+      if (nextUserId) {
+        await loadNotificationState(nextUserId);
+      }
+    };
+
+    void hydrateUser();
+
+    return () => {
+      active = false;
+    };
+  }, [loadNotificationState]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setNowTick(Date.now());
+    }, 30000);
+
+    return () => {
+      clearInterval(interval);
+    };
+  }, []);
 
   const visibleEvents = useMemo(() => events.slice(0, 2), [events]);
   const primaryEventId = visibleEvents[0]?.id;
 
-  const favoriteCount = favoriteIds.filter((id) => libraryItems.some((item) => item.id === id)).length;
-  const recentCount = libraryItems.length;
+  const scheduledTemplateEvents = useMemo(
+    () => buildScheduledTemplateEvents(libraryItems, new Date(nowTick)),
+    [libraryItems, nowTick],
+  );
+
+  const scheduledNewsEvents = useMemo(
+    () => buildScheduledNewsEvents(newsItems, new Date(nowTick)),
+    [newsItems, nowTick],
+  );
+
+  const allScheduledEvents = useMemo(
+    () =>
+      [...scheduledTemplateEvents, ...scheduledNewsEvents].sort(
+        (left, right) => new Date(left.startsAt).getTime() - new Date(right.startsAt).getTime(),
+      ),
+    [scheduledNewsEvents, scheduledTemplateEvents],
+  );
+
+  const favoriteCount = favoriteIds.filter((id) =>
+    allScheduledEvents.some((item) => item.favoriteKey === id),
+  ).length;
+  const recentCount = allScheduledEvents.length;
 
   const visibleLibrary = useMemo(() => {
     if (libraryMode === 'favorites') {
-      return libraryItems.filter((item) => favoriteIds.includes(item.id));
+      return allScheduledEvents.filter((item) => favoriteIds.includes(item.favoriteKey));
     }
 
-    return libraryItems;
-  }, [favoriteIds, libraryItems, libraryMode]);
+    return allScheduledEvents;
+  }, [allScheduledEvents, favoriteIds, libraryMode]);
 
   const availableCategories = useMemo(() => {
     return Array.from(new Set(visibleLibrary.map((item) => normalizeCategory(item.category)))).sort(
@@ -217,22 +464,108 @@ export function EventsScreen() {
 
   const eventCardStep = useMemo(() => eventCardWidth + HOME_CARD_GAP, [eventCardWidth]);
 
-  const toggleFavorite = (itemId: string) => {
+  const toggleFavorite = (favoriteKey: string) => {
     setFavoriteIds((current) => {
-      if (current.includes(itemId)) {
-        return current.filter((id) => id !== itemId);
+      if (current.includes(favoriteKey)) {
+        return current.filter((id) => id !== favoriteKey);
       }
 
-      return [...current, itemId];
+      return [...current, favoriteKey];
     });
   };
 
-  const onOpenEventTemplate = (item: EventLibraryItem) => {
-    void incrementEventLibraryStart(item.id).catch(() => {
-      // Non-blocking engagement metric update.
-    });
+  const onOpenOccurrence = (occurrence: ScheduledEventOccurrence) => {
+    const params: EventsStackParamList['EventRoom'] = {
+      durationMinutes: occurrence.durationMinutes,
+      eventSource: occurrence.source,
+      eventTitle: occurrence.title,
+      occurrenceKey: occurrence.occurrenceKey,
+      scheduledStartAt: occurrence.startsAt,
+      scriptText: occurrence.script,
+      ...(occurrence.source === 'template' ? { eventTemplateId: occurrence.favoriteKey } : {}),
+    };
 
-    navigation.navigate('EventDetails', { eventTemplateId: item.id });
+    navigation.navigate('EventRoom', params);
+  };
+
+  const toggleSubscribeAll = async () => {
+    if (!userId) {
+      setError('Sign in to subscribe for event notifications.');
+      return;
+    }
+
+    setUpdatingSubscriptionKey('all');
+    try {
+      const nextValue = !subscribedAll;
+      await setAllEventNotifications(userId, nextValue);
+      setSubscribedAll(nextValue);
+      setError(null);
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : 'Failed to update subscriptions.');
+    } finally {
+      setUpdatingSubscriptionKey(null);
+    }
+  };
+
+  const toggleOccurrenceSubscription = async (occurrenceKey: string) => {
+    if (!userId) {
+      setError('Sign in to subscribe for event notifications.');
+      return;
+    }
+
+    setUpdatingSubscriptionKey(occurrenceKey);
+    try {
+      if (subscribedAll) {
+        await setAllEventNotifications(userId, false);
+        await setEventNotificationSubscription({
+          enabled: true,
+          subscriptionKey: occurrenceKey,
+          userId,
+        });
+        setSubscribedAll(false);
+        setSubscribedKeys([occurrenceKey]);
+      } else if (subscribedKeys.includes(occurrenceKey)) {
+        await setEventNotificationSubscription({
+          enabled: false,
+          subscriptionKey: occurrenceKey,
+          userId,
+        });
+        setSubscribedKeys((current) => current.filter((value) => value !== occurrenceKey));
+      } else {
+        await setEventNotificationSubscription({
+          enabled: true,
+          subscriptionKey: occurrenceKey,
+          userId,
+        });
+        setSubscribedKeys((current) => [...current, occurrenceKey]);
+      }
+
+      setError(null);
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : 'Failed to update subscriptions.');
+    } finally {
+      setUpdatingSubscriptionKey(null);
+    }
+  };
+
+  const statusChipStyle = (status: EventStatusChip) => {
+    if (status === 'live') {
+      return styles.statusChipLive;
+    }
+    if (status === 'soon') {
+      return styles.statusChipSoon;
+    }
+    return styles.statusChipUpcoming;
+  };
+
+  const statusLabel = (status: EventStatusChip) => {
+    if (status === 'live') {
+      return 'Live';
+    }
+    if (status === 'soon') {
+      return 'Soon';
+    }
+    return 'Upcoming';
   };
 
   return (
@@ -298,7 +631,14 @@ export function EventsScreen() {
           title="Open map event timeline"
           variant="primary"
         />
-        <Button loading={refreshing} onPress={() => void loadEvents(true)} title="Refresh events" variant="secondary" />
+        <Button
+          loading={refreshing}
+          onPress={() => {
+            void Promise.all([loadEvents(true), syncNewsEvents()]);
+          }}
+          title="Refresh events"
+          variant="secondary"
+        />
       </SurfaceCard>
 
       <View style={styles.topFilterRow}>
@@ -313,6 +653,14 @@ export function EventsScreen() {
           fill
           label={`Recent (${recentCount})`}
           onPress={() => setLibraryMode((current) => (current === 'recent' ? null : 'recent'))}
+        />
+        <FilterChip
+          active={subscribedAll}
+          icon={subscribedAll ? 'bell-ring' : 'bell-outline'}
+          label="All alerts"
+          onPress={() => {
+            void toggleSubscribeAll();
+          }}
         />
       </View>
 
@@ -349,10 +697,10 @@ export function EventsScreen() {
       {!libraryLoading && !libraryError && sections.length === 0 ? (
         <SurfaceCard radius="xl" style={styles.emptyStateCard} variant="homeAlert">
           <Typography allowFontScaling={false} variant="H2" weight="bold">
-            No event templates in this filter
+            No events in this filter
           </Typography>
           <Typography allowFontScaling={false} color={colors.textSecondary}>
-            Save templates to favorites or choose another category.
+            Try another category or switch filters.
           </Typography>
         </SurfaceCard>
       ) : null}
@@ -395,11 +743,14 @@ export function EventsScreen() {
                 showsHorizontalScrollIndicator={false}
               >
                 {section.items.map((item) => {
-                  const isFavorite = favoriteIds.includes(item.id);
-                  const category = normalizeCategory(item.category);
+                  const isFavorite = favoriteIds.includes(item.favoriteKey);
+                  const isSubscribed = subscribedAll || subscribedKeys.includes(item.occurrenceKey);
+                  const isUpdatingBell = updatingSubscriptionKey === item.occurrenceKey;
+                  const status = statusLabel(item.status);
+                  const statusStyle = statusChipStyle(item.status);
 
                   return (
-                    <Pressable key={item.id} onPress={() => onOpenEventTemplate(item)} style={({ pressed }) => [pressed && styles.prayerCardPressed]}>
+                    <Pressable key={item.occurrenceKey} onPress={() => onOpenOccurrence(item)} style={({ pressed }) => [pressed && styles.prayerCardPressed]}>
                       <SurfaceCard
                         contentPadding={spacing.sm}
                         radius="md"
@@ -407,37 +758,64 @@ export function EventsScreen() {
                         variant="homeStatSmall"
                       >
                         <View style={styles.prayerCardHeader}>
-                          <Typography allowFontScaling={false} style={styles.prayerTitle} variant="H2" weight="bold">
-                            {item.title}
-                          </Typography>
-                          <Pressable
-                            accessibilityLabel={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
-                            onPress={(event) => {
-                              event.stopPropagation();
-                              toggleFavorite(item.id);
-                            }}
-                            style={({ pressed }) => [
-                              styles.favoriteButton,
-                              isFavorite && styles.favoriteButtonActive,
-                              pressed && styles.favoritePressed,
-                            ]}
-                          >
-                            <MaterialCommunityIcons
-                              color={isFavorite ? colors.textOnSky : colors.textSecondary}
-                              name={isFavorite ? 'heart' : 'heart-outline'}
-                              size={18}
-                            />
-                          </Pressable>
+                          <View style={styles.cardTitleWrap}>
+                            <Typography allowFontScaling={false} numberOfLines={2} style={styles.prayerTitle} variant="H2" weight="bold">
+                              {item.title}
+                            </Typography>
+                            <View style={[styles.statusChip, statusStyle]}>
+                              <Typography allowFontScaling={false} color={colors.textOnSky} style={styles.statusChipText} variant="Caption" weight="bold">
+                                {status}
+                              </Typography>
+                            </View>
+                          </View>
+                          <View style={styles.cardActionRow}>
+                            <Pressable
+                              accessibilityLabel={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+                              onPress={(event) => {
+                                event.stopPropagation();
+                                toggleFavorite(item.favoriteKey);
+                              }}
+                              style={({ pressed }) => [
+                                styles.actionButton,
+                                isFavorite && styles.favoriteButtonActive,
+                                pressed && styles.favoritePressed,
+                              ]}
+                            >
+                              <MaterialCommunityIcons
+                                color={isFavorite ? colors.textOnSky : colors.textSecondary}
+                                name={isFavorite ? 'heart' : 'heart-outline'}
+                                size={18}
+                              />
+                            </Pressable>
+                            <Pressable
+                              accessibilityLabel={isSubscribed ? 'Disable event alerts' : 'Enable event alerts'}
+                              onPress={(event) => {
+                                event.stopPropagation();
+                                void toggleOccurrenceSubscription(item.occurrenceKey);
+                              }}
+                              style={({ pressed }) => [
+                                styles.actionButton,
+                                isSubscribed && styles.subscriptionButtonActive,
+                                pressed && styles.favoritePressed,
+                              ]}
+                            >
+                              <MaterialCommunityIcons
+                                color={isSubscribed ? colors.textOnSky : colors.textSecondary}
+                                name={isUpdatingBell ? 'bell-ring-outline' : isSubscribed ? 'bell-ring' : 'bell-outline'}
+                                size={18}
+                              />
+                            </Pressable>
+                          </View>
                         </View>
 
                         <Typography allowFontScaling={false} color={colors.textSecondary} style={styles.prayerBody}>
                           {item.body}
                         </Typography>
                         <Typography allowFontScaling={false} color={colors.accentSkyStart} variant="Body" weight="bold">
-                          {`${item.durationMinutes} min - ${category}`}
+                          {`${item.durationMinutes} min - ${item.category}`}
                         </Typography>
                         <Typography allowFontScaling={false} color={colors.textCaption} variant="Caption">
-                          {`${item.startsCount} starts`}
+                          {formatOccurrenceStartLabel(item.startsAt)}
                         </Typography>
                       </SurfaceCard>
                     </Pressable>
@@ -451,7 +829,7 @@ export function EventsScreen() {
                     const isActive = (activeSlideByCategory[section.category] ?? 0) === index;
 
                     return (
-                      <View key={`${section.category}-${item.id}-dot`} style={[styles.dot, isActive ? styles.dotActive : styles.dotInactive]} />
+                      <View key={`${section.category}-${item.occurrenceKey}-dot`} style={[styles.dot, isActive ? styles.dotActive : styles.dotInactive]} />
                     );
                   })}
                 </View>
@@ -464,6 +842,25 @@ export function EventsScreen() {
 }
 
 const styles = StyleSheet.create({
+  actionButton: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: figmaV2Reference.buttons.secondary.background,
+    borderColor: figmaV2Reference.buttons.secondary.border,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    height: 32,
+    justifyContent: 'center',
+    width: 32,
+  },
+  cardActionRow: {
+    flexDirection: 'row',
+    gap: spacing.xxs,
+  },
+  cardTitleWrap: {
+    flex: 1,
+    gap: spacing.xxs,
+  },
   categoryRail: {
     gap: spacing.sm,
     paddingRight: spacing.sm,
@@ -477,6 +874,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     justifyContent: 'center',
     paddingHorizontal: spacing.xxs,
+  },
+  chipContentRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: spacing.xxs,
   },
   chipFill: {
     flex: 1,
@@ -531,18 +933,6 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
     minHeight: 148,
   },
-  favoriteButton: {
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    backgroundColor: figmaV2Reference.buttons.secondary.background,
-    borderColor: figmaV2Reference.buttons.secondary.border,
-    borderRadius: radii.pill,
-    borderWidth: 1,
-    justifyContent: 'center',
-    minHeight: 32,
-    paddingHorizontal: spacing.xs,
-    width: 36,
-  },
   favoriteButtonActive: {
     backgroundColor: figmaV2Reference.buttons.sky.from,
     borderColor: figmaV2Reference.buttons.sky.border,
@@ -579,12 +969,12 @@ const styles = StyleSheet.create({
   },
   prayerCard: {
     gap: spacing.xs,
-    minHeight: 208,
+    minHeight: 220,
   },
   prayerCardHeader: {
     alignItems: 'flex-start',
     flexDirection: 'row',
-    gap: spacing.sm,
+    gap: spacing.xs,
     justifyContent: 'space-between',
   },
   prayerCardPressed: {
@@ -604,6 +994,33 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
+  },
+  statusChip: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    paddingHorizontal: spacing.xs,
+    paddingVertical: 2,
+  },
+  statusChipLive: {
+    backgroundColor: colors.live,
+    borderColor: colors.live,
+  },
+  statusChipSoon: {
+    backgroundColor: colors.warning,
+    borderColor: colors.warning,
+  },
+  statusChipText: {
+    textTransform: 'uppercase',
+  },
+  statusChipUpcoming: {
+    backgroundColor: colors.accentSkyStart,
+    borderColor: colors.accentSkyStart,
+  },
+  subscriptionButtonActive: {
+    backgroundColor: colors.success,
+    borderColor: colors.success,
   },
   topFilterRow: {
     flexDirection: 'row',

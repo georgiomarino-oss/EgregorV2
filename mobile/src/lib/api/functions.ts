@@ -31,6 +31,25 @@ export interface GeneratePrayerAudioOutput {
   wordTimings?: TimedWord[];
 }
 
+export interface GeneratedNewsDrivenEvent {
+  category: string;
+  duration_minutes: number;
+  event_day: string;
+  headline: string;
+  id: string;
+  script_text: string;
+  source_title: string | null;
+  source_url: string;
+  starts_at: string;
+  summary: string;
+}
+
+export interface GenerateNewsDrivenEventsOutput {
+  events: GeneratedNewsDrivenEvent[];
+  generated: number;
+  pulled?: number;
+}
+
 const DEFAULT_ELEVENLABS_VOICE_ID = 'jfIS2w2yJi0grJZPyEsk';
 
 async function parseEdgeError(response: Response) {
@@ -125,4 +144,8 @@ export async function generatePrayerAudio(input: GeneratePrayerAudioInput) {
   };
 
   return invokeEdgeFunction<GeneratePrayerAudioOutput>('generate-prayer-audio', payload);
+}
+
+export async function generateNewsDrivenEvents() {
+  return invokeEdgeFunction<GenerateNewsDrivenEventsOutput>('generate-news-driven-events', {});
 }

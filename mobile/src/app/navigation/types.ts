@@ -25,7 +25,18 @@ export type CommunityStackParamList = {
 
 export type EventsStackParamList = {
   EventDetails: { eventId?: string; eventTemplateId?: string } | undefined;
-  EventRoom: { eventId?: string; eventTitle?: string } | undefined;
+  EventRoom:
+    | {
+        durationMinutes?: number;
+        eventId?: string;
+        eventSource?: 'news' | 'template';
+        eventTemplateId?: string;
+        eventTitle?: string;
+        occurrenceKey?: string;
+        scheduledStartAt?: string;
+        scriptText?: string;
+      }
+    | undefined;
   EventsHome: undefined;
 };
 

@@ -53,6 +53,19 @@ interface EventLibraryRow {
   title: string;
 }
 
+interface NewsDrivenEventRow {
+  category: string;
+  duration_minutes: number;
+  event_day: string;
+  headline: string;
+  id: string;
+  script_text: string;
+  source_title: string | null;
+  source_url: string;
+  starts_at: string;
+  summary: string;
+}
+
 interface ProfileRow {
   display_name: string | null;
   high_contrast_mode: boolean | null;
@@ -93,6 +106,11 @@ interface UserJournalEntryRow {
   created_at: string;
   id: string;
   updated_at: string;
+}
+
+interface UserEventSubscriptionRow {
+  scope: 'all' | 'event';
+  subscription_key: string;
 }
 
 export interface AppEvent {
@@ -145,6 +163,23 @@ export interface EventLibraryItem {
   startsCount: number;
   subtitle: string;
   title: string;
+}
+
+export interface NewsDrivenEventItem {
+  category: string;
+  durationMinutes: number;
+  id: string;
+  script: string;
+  sourceTitle: string | null;
+  sourceUrl: string;
+  startsAt: string;
+  summary: string;
+  title: string;
+}
+
+export interface EventNotificationState {
+  subscribedAll: boolean;
+  subscriptionKeys: string[];
 }
 
 export interface UserPreferences {
@@ -261,6 +296,20 @@ function mapEventLibraryRow(row: EventLibraryRow): EventLibraryItem {
   };
 }
 
+function mapNewsDrivenEventRow(row: NewsDrivenEventRow): NewsDrivenEventItem {
+  return {
+    category: row.category?.trim() || 'Humanitarian',
+    durationMinutes: row.duration_minutes ?? 10,
+    id: row.id,
+    script: row.script_text,
+    sourceTitle: row.source_title?.trim() || null,
+    sourceUrl: row.source_url,
+    startsAt: row.starts_at,
+    summary: row.summary,
+    title: row.headline,
+  };
+}
+
 function minutesFromSeconds(totalSeconds: number) {
   if (totalSeconds <= 0) {
     return 0;
@@ -301,6 +350,17 @@ function toSupabaseErrorMessage(error: unknown, fallback: string) {
   }
 
   return fallback;
+}
+
+function isMissingTableMessage(message: string, tableName: string) {
+  const normalized = message.toLowerCase();
+  const normalizedTable = tableName.toLowerCase();
+  return (
+    normalized.includes(normalizedTable) &&
+    (normalized.includes('schema cache') ||
+      normalized.includes('does not exist') ||
+      normalized.includes('relation'))
+  );
 }
 
 function mapEventRow(row: EventRow, participants: number): AppEvent {
@@ -578,6 +638,150 @@ export async function incrementEventLibraryStart(itemId: string) {
 
   if (updateError) {
     throw new Error(toSupabaseErrorMessage(updateError, 'Failed to update event usage.'));
+  }
+}
+
+export async function fetchNewsDrivenEvents(limit = 80): Promise<NewsDrivenEventItem[]> {
+  const nowIso = new Date().toISOString();
+  const endIso = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+
+  const { data, error } = await supabase
+    .from('news_driven_events')
+    .select(
+      'id,headline,summary,script_text,category,duration_minutes,starts_at,source_title,source_url,event_day',
+    )
+    .gte('starts_at', nowIso)
+    .lte('starts_at', endIso)
+    .order('starts_at', { ascending: true })
+    .limit(limit);
+
+  if (error) {
+    const message = toSupabaseErrorMessage(error, 'Failed to load news driven events.');
+    if (isMissingTableMessage(message, 'news_driven_events')) {
+      return [];
+    }
+    throw new Error(message);
+  }
+
+  return ((data ?? []) as NewsDrivenEventRow[]).map(mapNewsDrivenEventRow);
+}
+
+export async function fetchEventNotificationState(userId: string): Promise<EventNotificationState> {
+  const { data, error } = await supabase
+    .from('user_event_subscriptions')
+    .select('scope,subscription_key')
+    .eq('user_id', userId);
+
+  if (error) {
+    const message = toSupabaseErrorMessage(error, 'Failed to load event notification settings.');
+    if (isMissingTableMessage(message, 'user_event_subscriptions')) {
+      return {
+        subscribedAll: false,
+        subscriptionKeys: [],
+      };
+    }
+    throw new Error(message);
+  }
+
+  const rows = (data ?? []) as UserEventSubscriptionRow[];
+  const subscriptionKeys = rows
+    .filter((row) => row.scope === 'event')
+    .map((row) => row.subscription_key)
+    .filter((value) => value.trim().length > 0);
+  const subscribedAll = rows.some((row) => row.scope === 'all');
+
+  return {
+    subscribedAll,
+    subscriptionKeys,
+  };
+}
+
+export async function setAllEventNotifications(userId: string, enabled: boolean) {
+  if (enabled) {
+    const { error } = await supabase.from('user_event_subscriptions').upsert(
+      {
+        scope: 'all',
+        subscription_key: '*',
+        user_id: userId,
+      },
+      {
+        onConflict: 'user_id,scope,subscription_key',
+      },
+    );
+
+    if (error) {
+      const message = toSupabaseErrorMessage(error, 'Failed to update all-event notifications.');
+      if (isMissingTableMessage(message, 'user_event_subscriptions')) {
+        return;
+      }
+      throw new Error(message);
+    }
+
+    return;
+  }
+
+  const { error } = await supabase
+    .from('user_event_subscriptions')
+    .delete()
+    .eq('user_id', userId)
+    .eq('scope', 'all')
+    .eq('subscription_key', '*');
+
+  if (error) {
+    const message = toSupabaseErrorMessage(error, 'Failed to update all-event notifications.');
+    if (isMissingTableMessage(message, 'user_event_subscriptions')) {
+      return;
+    }
+    throw new Error(message);
+  }
+}
+
+export async function setEventNotificationSubscription(input: {
+  enabled: boolean;
+  subscriptionKey: string;
+  userId: string;
+}) {
+  const subscriptionKey = input.subscriptionKey.trim();
+  if (!subscriptionKey) {
+    return;
+  }
+
+  if (input.enabled) {
+    const { error } = await supabase.from('user_event_subscriptions').upsert(
+      {
+        scope: 'event',
+        subscription_key: subscriptionKey,
+        user_id: input.userId,
+      },
+      {
+        onConflict: 'user_id,scope,subscription_key',
+      },
+    );
+
+    if (error) {
+      const message = toSupabaseErrorMessage(error, 'Failed to save event notification.');
+      if (isMissingTableMessage(message, 'user_event_subscriptions')) {
+        return;
+      }
+      throw new Error(message);
+    }
+
+    return;
+  }
+
+  const { error } = await supabase
+    .from('user_event_subscriptions')
+    .delete()
+    .eq('user_id', input.userId)
+    .eq('scope', 'event')
+    .eq('subscription_key', subscriptionKey);
+
+  if (error) {
+    const message = toSupabaseErrorMessage(error, 'Failed to save event notification.');
+    if (isMissingTableMessage(message, 'user_event_subscriptions')) {
+      return;
+    }
+    throw new Error(message);
   }
 }
 

@@ -147,7 +147,15 @@ function MainTabs({ captureTarget }: MainTabsProps) {
               : {})}
           />
         )}
-        options={{ title: 'Events' }}
+        options={({ route }) => {
+          const nestedRouteName = getFocusedRouteNameFromRoute(route) ?? 'EventsHome';
+          const hideTabBar = nestedRouteName === 'EventRoom';
+
+          return {
+            title: 'Events',
+            ...(hideTabBar ? { tabBarStyle: { display: 'none' } } : {}),
+          };
+        }}
       />
       <Tab.Screen
         name="ProfileTab"
