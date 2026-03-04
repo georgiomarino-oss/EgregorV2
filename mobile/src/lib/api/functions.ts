@@ -33,10 +33,12 @@ export interface GeneratePrayerAudioOutput {
 
 export interface GeneratedNewsDrivenEvent {
   category: string;
+  country_code?: string | null;
   duration_minutes: number;
   event_day: string;
   headline: string;
   id: string;
+  location_hint?: string | null;
   script_text: string;
   source_title: string | null;
   source_url: string;
@@ -71,10 +73,7 @@ async function parseEdgeError(response: Response) {
   }
 }
 
-async function invokeEdgeFunction<TOutput>(
-  functionName: string,
-  body: unknown,
-): Promise<TOutput> {
+async function invokeEdgeFunction<TOutput>(functionName: string, body: unknown): Promise<TOutput> {
   if (!clientEnv.supabaseUrl || !clientEnv.supabaseAnonKey) {
     throw new Error('Missing Supabase environment variables in mobile/.env.');
   }

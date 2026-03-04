@@ -4,6 +4,7 @@ import type { ComponentType } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -59,8 +60,10 @@ type EventStatusChip = 'live' | 'soon' | 'upcoming';
 type ScheduledEventOccurrence = {
   body: string;
   category: string;
+  countryCode?: string | null;
   durationMinutes: number;
   favoriteKey: string;
+  locationHint?: string | null;
   occurrenceKey: string;
   script: string;
   source: 'news' | 'template';
@@ -85,6 +88,7 @@ const GLOBE_AUTO_ROTATE_ANIMATION_MS = 140;
 const GLOBE_INTERACTION_IDLE_MS = 2400;
 const GLOBE_RESET_ANIMATION_MS = 720;
 const GLOBE_PROGRAMMATIC_CAMERA_GUARD_MS = 220;
+const GLOBE_FULLSCREEN_FEATURE_TAP_GUARD_MS = 280;
 const TRANSPARENT_GLOBE_STYLE_JSON = JSON.stringify({
   version: 8,
   sources: {
@@ -198,9 +202,11 @@ const MAJOR_CITY_COORDINATES: Coordinate[] = [
 ];
 
 const COUNTRY_CODE_TO_COORDINATE: Record<string, Coordinate> = {
+  AF: [69.2075, 34.5553],
   AE: [55.2708, 25.2048],
   AR: [-58.3816, -34.6037],
   AU: [151.2093, -33.8688],
+  BD: [90.4125, 23.8103],
   BR: [-46.6333, -23.5505],
   CA: [-79.3832, 43.6532],
   CN: [116.4074, 39.9042],
@@ -209,17 +215,24 @@ const COUNTRY_CODE_TO_COORDINATE: Record<string, Coordinate> = {
   ES: [-3.7038, 40.4168],
   FR: [2.3522, 48.8566],
   GB: [-0.1276, 51.5072],
+  IL: [35.2137, 31.7683],
+  IR: [51.389, 35.6892],
   IN: [77.209, 28.6139],
   IT: [12.4964, 41.9028],
   JP: [139.6917, 35.6895],
   KE: [36.8219, -1.2921],
   KR: [126.978, 37.5665],
+  LB: [35.5018, 33.8938],
+  MM: [96.1735, 16.8409],
   MX: [-99.1332, 19.4326],
   NG: [3.3792, 6.5244],
   NZ: [174.7633, -36.8485],
   PK: [67.0099, 24.8615],
+  PS: [35.2137, 31.7683],
   PT: [-9.1393, 38.7223],
   RU: [37.6173, 55.7558],
+  SD: [32.5599, 15.5007],
+  SY: [36.2913, 33.5138],
   TR: [28.9784, 41.0082],
   UA: [30.5234, 50.4501],
   US: [-74.006, 40.7128],
@@ -227,6 +240,7 @@ const COUNTRY_CODE_TO_COORDINATE: Record<string, Coordinate> = {
 };
 
 const LOCATION_KEYWORDS: Array<{ coordinate: Coordinate; keywords: string[] }> = [
+  { coordinate: [51.389, 35.6892], keywords: ['iran', 'tehran', 'isfahan', 'mashhad'] },
   { coordinate: [35.2137, 31.7683], keywords: ['palestine', 'gaza', 'west bank', 'jerusalem'] },
   { coordinate: [30.5234, 50.4501], keywords: ['ukraine', 'kyiv', 'kiev'] },
   { coordinate: [36.2913, 33.5138], keywords: ['syria', 'damascus'] },
@@ -277,11 +291,13 @@ function coordinateFromKeyword(text: string): Coordinate | null {
 function resolveEventCoordinate(input: {
   countryCode?: string | null;
   description?: string | null;
+  locationHint?: string | null;
   region?: string | null;
   seed: string;
   title: string;
 }): Coordinate {
-  const text = `${input.title} ${input.description ?? ''} ${input.region ?? ''}`.trim();
+  const text =
+    `${input.title} ${input.description ?? ''} ${input.locationHint ?? ''} ${input.region ?? ''}`.trim();
   const keywordCoordinate = coordinateFromKeyword(text);
   if (keywordCoordinate) {
     return jitterCoordinate(keywordCoordinate, input.seed, 0.35);
@@ -484,6 +500,7 @@ function buildScheduledNewsEvents(
   const horizonMillis = nowMillis + HORIZON_DAYS * 24 * 60 * 60 * 1000;
 
   return items
+    .filter((item) => Boolean(item.countryCode || item.locationHint))
     .filter((item) => {
       const startMillis = new Date(item.startsAt).getTime();
       if (!Number.isFinite(startMillis)) {
@@ -496,8 +513,10 @@ function buildScheduledNewsEvents(
       return {
         body: item.summary,
         category: `News - ${normalizeCategory(item.category)}`,
+        countryCode: item.countryCode,
         durationMinutes: item.durationMinutes,
         favoriteKey: item.id,
+        locationHint: item.locationHint,
         occurrenceKey: `news:${item.id}:${item.startsAt}`,
         script: item.script,
         source: 'news',
@@ -570,6 +589,7 @@ export function EventsScreen() {
   const globeLongitudeRef = useRef(0);
   const interactionIdleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const programmaticCameraUntilRef = useRef(0);
+  const lastShapeSourcePressAtRef = useRef(0);
 
   const [events, setEvents] = useState<AppEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -593,6 +613,7 @@ export function EventsScreen() {
   const [pulseTick, setPulseTick] = useState(0);
   const [isGlobeMapLoaded, setIsGlobeMapLoaded] = useState(false);
   const [isGlobeInteracting, setIsGlobeInteracting] = useState(false);
+  const [isGlobeFullscreen, setIsGlobeFullscreen] = useState(false);
 
   const [userId, setUserId] = useState<string | null>(null);
   const [subscribedAll, setSubscribedAll] = useState(false);
@@ -744,6 +765,10 @@ export function EventsScreen() {
       setIsGlobeMapLoaded(false);
     }
   }, [mapboxReady]);
+
+  useEffect(() => {
+    setIsGlobeMapLoaded(false);
+  }, [isGlobeFullscreen]);
 
   useEffect(() => {
     if (!mapboxReady) {
@@ -938,10 +963,7 @@ export function EventsScreen() {
     () => (pulseTick % RIPPLE_FRAME_COUNT) / RIPPLE_FRAME_COUNT,
     [pulseTick],
   );
-  const pulsePhaseSecondary = useMemo(
-    () => (pulsePhasePrimary + 0.5) % 1,
-    [pulsePhasePrimary],
-  );
+  const pulsePhaseSecondary = useMemo(() => (pulsePhasePrimary + 0.5) % 1, [pulsePhasePrimary]);
 
   const eventCoordinatesById = useMemo(() => {
     const byId = new Map<string, Coordinate>();
@@ -990,18 +1012,16 @@ export function EventsScreen() {
       }
 
       const coordinate = resolveEventCoordinate({
+        countryCode: occurrence.countryCode ?? null,
         description: occurrence.body,
+        locationHint: occurrence.locationHint ?? null,
         region: occurrence.category,
         seed: occurrence.occurrenceKey,
         title: occurrence.title,
       });
 
       const kind: GlobePointKind =
-        occurrence.status === 'live'
-          ? 'live'
-          : occurrence.source === 'news'
-            ? 'news'
-            : 'scheduled';
+        occurrence.status === 'live' ? 'live' : occurrence.source === 'news' ? 'news' : 'scheduled';
 
       points.push({
         coordinate,
@@ -1174,22 +1194,26 @@ export function EventsScreen() {
     });
   };
 
-  const onOpenOccurrence = useCallback((occurrence: ScheduledEventOccurrence) => {
-    const params: EventsStackParamList['EventRoom'] = {
-      durationMinutes: occurrence.durationMinutes,
-      eventSource: occurrence.source,
-      eventTitle: occurrence.title,
-      occurrenceKey: occurrence.occurrenceKey,
-      scheduledStartAt: occurrence.startsAt,
-      scriptText: occurrence.script,
-      ...(occurrence.source === 'template' ? { eventTemplateId: occurrence.favoriteKey } : {}),
-    };
+  const onOpenOccurrence = useCallback(
+    (occurrence: ScheduledEventOccurrence) => {
+      const params: EventsStackParamList['EventRoom'] = {
+        durationMinutes: occurrence.durationMinutes,
+        eventSource: occurrence.source,
+        eventTitle: occurrence.title,
+        occurrenceKey: occurrence.occurrenceKey,
+        scheduledStartAt: occurrence.startsAt,
+        scriptText: occurrence.script,
+        ...(occurrence.source === 'template' ? { eventTemplateId: occurrence.favoriteKey } : {}),
+      };
 
-    navigation.navigate('EventRoom', params);
-  }, [navigation]);
+      navigation.navigate('EventRoom', params);
+    },
+    [navigation],
+  );
 
   const onMapPointPress = useCallback(
     (pressEvent: unknown) => {
+      lastShapeSourcePressAtRef.current = Date.now();
       markGlobeInteraction();
       const pointId = extractPressedMapFeatureId(pressEvent);
       if (!pointId) {
@@ -1215,6 +1239,202 @@ export function EventsScreen() {
       });
     },
     [mapEventByPointId, mapOccurrenceByPointId, markGlobeInteraction, navigation, onOpenOccurrence],
+  );
+
+  const openGlobeFullscreen = useCallback(() => {
+    setIsGlobeFullscreen(true);
+  }, []);
+
+  const closeGlobeFullscreen = useCallback(() => {
+    setIsGlobeFullscreen(false);
+  }, []);
+
+  const handleInlineMapPress = useCallback(
+    (pressEvent: unknown) => {
+      markGlobeInteraction();
+
+      const now = Date.now();
+      if (now - lastShapeSourcePressAtRef.current < GLOBE_FULLSCREEN_FEATURE_TAP_GUARD_MS) {
+        return;
+      }
+
+      const featureId = extractPressedMapFeatureId(pressEvent);
+      if (featureId) {
+        return;
+      }
+
+      openGlobeFullscreen();
+    },
+    [markGlobeInteraction, openGlobeFullscreen],
+  );
+
+  const renderGlobeView = useCallback(
+    (mode: 'inline' | 'fullscreen') => {
+      const isFullscreenMode = mode === 'fullscreen';
+      const frameStyle = isFullscreenMode ? styles.globeMapFrameFullscreen : styles.globeMapFrame;
+      const maskStyle = isFullscreenMode ? styles.globeMapMaskFullscreen : styles.globeMapMask;
+      const mapStyle = isFullscreenMode ? styles.globeMapFullscreen : styles.globeMap;
+      const fallbackWrapStyle = isFullscreenMode
+        ? styles.globeFallbackWrapFullscreen
+        : styles.globeFallbackWrap;
+
+      if (mapboxReady) {
+        return (
+          <View style={frameStyle}>
+            <View style={maskStyle}>
+              <MapboxMapViewComponent
+                attributionEnabled={false}
+                compassEnabled={false}
+                localizeLabels={false}
+                logoEnabled={false}
+                onCameraChanged={onMapCameraChanged}
+                onDidFinishLoadingMap={() => {
+                  setIsGlobeMapLoaded(true);
+                }}
+                onPress={isFullscreenMode ? markGlobeInteraction : handleInlineMapPress}
+                onTouchStart={markGlobeInteraction}
+                pitchEnabled={false}
+                projection="globe"
+                rotateEnabled
+                scaleBarEnabled={false}
+                scrollEnabled
+                style={mapStyle}
+                styleJSON={TRANSPARENT_GLOBE_STYLE_JSON}
+                surfaceView={false}
+                zoomEnabled
+              >
+                <MapboxCameraComponent
+                  ref={globeCameraRef}
+                  defaultSettings={{
+                    centerCoordinate: GLOBE_CAMERA_CENTER,
+                    heading: 0,
+                    pitch: 0,
+                    zoomLevel: GLOBE_CAMERA_ZOOM_LEVEL,
+                  }}
+                />
+
+                {liveRingGeoJson.features.length > 0 ? (
+                  <MapboxShapeSourceComponent
+                    hitbox={MAP_TAP_HITBOX}
+                    id={`events-live-source-${mode}`}
+                    onPress={onMapPointPress}
+                    shape={liveRingGeoJson}
+                  >
+                    <MapboxCircleLayerComponent
+                      id={`events-live-ring-${mode}`}
+                      style={ringLayerStyle(MAP_COLORS.live, 8.5, pulsePhasePrimary, 1)}
+                    />
+                    <MapboxCircleLayerComponent
+                      id={`events-live-ring-secondary-${mode}`}
+                      style={ringLayerStyle(MAP_COLORS.live, 8.5, pulsePhaseSecondary, 0.8)}
+                    />
+                    <MapboxCircleLayerComponent
+                      id={`events-live-core-${mode}`}
+                      style={coreLayerStyle(MAP_COLORS.live, 3.8)}
+                    />
+                  </MapboxShapeSourceComponent>
+                ) : null}
+
+                {scheduledRingGeoJson.features.length > 0 ? (
+                  <MapboxShapeSourceComponent
+                    hitbox={MAP_TAP_HITBOX}
+                    id={`events-scheduled-source-${mode}`}
+                    onPress={onMapPointPress}
+                    shape={scheduledRingGeoJson}
+                  >
+                    <MapboxCircleLayerComponent
+                      id={`events-scheduled-ring-${mode}`}
+                      style={ringLayerStyle(MAP_COLORS.scheduled, 7.8, pulsePhasePrimary, 1)}
+                    />
+                    <MapboxCircleLayerComponent
+                      id={`events-scheduled-ring-secondary-${mode}`}
+                      style={ringLayerStyle(MAP_COLORS.scheduled, 7.8, pulsePhaseSecondary, 0.8)}
+                    />
+                    <MapboxCircleLayerComponent
+                      id={`events-scheduled-core-${mode}`}
+                      style={coreLayerStyle(MAP_COLORS.scheduled, 3.4)}
+                    />
+                  </MapboxShapeSourceComponent>
+                ) : null}
+
+                {newsRingGeoJson.features.length > 0 ? (
+                  <MapboxShapeSourceComponent
+                    hitbox={MAP_TAP_HITBOX}
+                    id={`events-news-source-${mode}`}
+                    onPress={onMapPointPress}
+                    shape={newsRingGeoJson}
+                  >
+                    <MapboxCircleLayerComponent
+                      id={`events-news-ring-${mode}`}
+                      style={ringLayerStyle(MAP_COLORS.news, 8.2, pulsePhasePrimary, 1)}
+                    />
+                    <MapboxCircleLayerComponent
+                      id={`events-news-ring-secondary-${mode}`}
+                      style={ringLayerStyle(MAP_COLORS.news, 8.2, pulsePhaseSecondary, 0.8)}
+                    />
+                    <MapboxCircleLayerComponent
+                      id={`events-news-core-${mode}`}
+                      style={coreLayerStyle(MAP_COLORS.news, 3.4)}
+                    />
+                  </MapboxShapeSourceComponent>
+                ) : null}
+
+                {userGeoJson.features.length > 0 ? (
+                  <MapboxShapeSourceComponent
+                    id={`events-online-users-source-${mode}`}
+                    shape={userGeoJson}
+                  >
+                    <MapboxCircleLayerComponent
+                      id={`events-online-users-core-${mode}`}
+                      style={coreLayerStyle(MAP_COLORS.user, 3.2)}
+                    />
+                  </MapboxShapeSourceComponent>
+                ) : null}
+              </MapboxMapViewComponent>
+            </View>
+          </View>
+        );
+      }
+
+      return (
+        <Pressable
+          disabled={isFullscreenMode}
+          onPress={openGlobeFullscreen}
+          style={fallbackWrapStyle}
+        >
+          <LottieView autoPlay loop source={globeFallbackAnimation} style={styles.globeAnimation} />
+          <Typography
+            allowFontScaling={false}
+            color={colors.textSecondary}
+            style={styles.mapFallbackText}
+            variant="Caption"
+          >
+            {mapFallbackReason}
+          </Typography>
+        </Pressable>
+      );
+    },
+    [
+      MapboxCameraComponent,
+      MapboxCircleLayerComponent,
+      MapboxMapViewComponent,
+      MapboxShapeSourceComponent,
+      coreLayerStyle,
+      handleInlineMapPress,
+      liveRingGeoJson,
+      mapFallbackReason,
+      mapboxReady,
+      markGlobeInteraction,
+      newsRingGeoJson,
+      onMapCameraChanged,
+      onMapPointPress,
+      openGlobeFullscreen,
+      pulsePhasePrimary,
+      pulsePhaseSecondary,
+      ringLayerStyle,
+      scheduledRingGeoJson,
+      userGeoJson,
+    ],
   );
 
   const toggleSubscribeAll = async () => {
@@ -1314,135 +1534,17 @@ export function EventsScreen() {
 
       <SurfaceCard radius="xl" style={[styles.section, styles.globePanel]} variant="eventsPanel">
         <View style={styles.globeWrap}>
-          {mapboxReady ? (
-            <View style={styles.globeMapFrame}>
-              <View style={styles.globeMapMask}>
-                <MapboxMapViewComponent
-                  attributionEnabled={false}
-                  compassEnabled={false}
-                  onDidFinishLoadingMap={() => {
-                    setIsGlobeMapLoaded(true);
-                  }}
-                  localizeLabels={false}
-                  logoEnabled={false}
-                  onCameraChanged={onMapCameraChanged}
-                  onPress={markGlobeInteraction}
-                  onTouchStart={markGlobeInteraction}
-                  surfaceView={false}
-                  pitchEnabled={false}
-                  projection="globe"
-                  rotateEnabled
-                  scaleBarEnabled={false}
-                  scrollEnabled
-                  style={styles.globeMap}
-                  styleJSON={TRANSPARENT_GLOBE_STYLE_JSON}
-                  zoomEnabled
-                >
-                  <MapboxCameraComponent
-                    ref={globeCameraRef}
-                    defaultSettings={{
-                      centerCoordinate: GLOBE_CAMERA_CENTER,
-                      heading: 0,
-                      pitch: 0,
-                      zoomLevel: GLOBE_CAMERA_ZOOM_LEVEL,
-                    }}
-                  />
-
-                  {liveRingGeoJson.features.length > 0 ? (
-                    <MapboxShapeSourceComponent
-                      hitbox={MAP_TAP_HITBOX}
-                      id="events-live-source"
-                      onPress={onMapPointPress}
-                      shape={liveRingGeoJson}
-                    >
-                      <MapboxCircleLayerComponent
-                        id="events-live-ring"
-                        style={ringLayerStyle(MAP_COLORS.live, 8.5, pulsePhasePrimary, 1)}
-                      />
-                      <MapboxCircleLayerComponent
-                        id="events-live-ring-secondary"
-                        style={ringLayerStyle(MAP_COLORS.live, 8.5, pulsePhaseSecondary, 0.8)}
-                      />
-                      <MapboxCircleLayerComponent
-                        id="events-live-core"
-                        style={coreLayerStyle(MAP_COLORS.live, 3.8)}
-                      />
-                    </MapboxShapeSourceComponent>
-                  ) : null}
-
-                  {scheduledRingGeoJson.features.length > 0 ? (
-                    <MapboxShapeSourceComponent
-                      hitbox={MAP_TAP_HITBOX}
-                      id="events-scheduled-source"
-                      onPress={onMapPointPress}
-                      shape={scheduledRingGeoJson}
-                    >
-                      <MapboxCircleLayerComponent
-                        id="events-scheduled-ring"
-                        style={ringLayerStyle(MAP_COLORS.scheduled, 7.8, pulsePhasePrimary, 1)}
-                      />
-                      <MapboxCircleLayerComponent
-                        id="events-scheduled-ring-secondary"
-                        style={ringLayerStyle(MAP_COLORS.scheduled, 7.8, pulsePhaseSecondary, 0.8)}
-                      />
-                      <MapboxCircleLayerComponent
-                        id="events-scheduled-core"
-                        style={coreLayerStyle(MAP_COLORS.scheduled, 3.4)}
-                      />
-                    </MapboxShapeSourceComponent>
-                  ) : null}
-
-                  {newsRingGeoJson.features.length > 0 ? (
-                    <MapboxShapeSourceComponent
-                      hitbox={MAP_TAP_HITBOX}
-                      id="events-news-source"
-                      onPress={onMapPointPress}
-                      shape={newsRingGeoJson}
-                    >
-                      <MapboxCircleLayerComponent
-                        id="events-news-ring"
-                        style={ringLayerStyle(MAP_COLORS.news, 8.2, pulsePhasePrimary, 1)}
-                      />
-                      <MapboxCircleLayerComponent
-                        id="events-news-ring-secondary"
-                        style={ringLayerStyle(MAP_COLORS.news, 8.2, pulsePhaseSecondary, 0.8)}
-                      />
-                      <MapboxCircleLayerComponent
-                        id="events-news-core"
-                        style={coreLayerStyle(MAP_COLORS.news, 3.4)}
-                      />
-                    </MapboxShapeSourceComponent>
-                  ) : null}
-
-                  {userGeoJson.features.length > 0 ? (
-                    <MapboxShapeSourceComponent id="events-online-users-source" shape={userGeoJson}>
-                      <MapboxCircleLayerComponent
-                        id="events-online-users-core"
-                        style={coreLayerStyle(MAP_COLORS.user, 3.2)}
-                      />
-                    </MapboxShapeSourceComponent>
-                  ) : null}
-                </MapboxMapViewComponent>
-              </View>
-            </View>
-          ) : (
-            <View style={styles.globeFallbackWrap}>
-              <LottieView
-                autoPlay
-                loop
-                source={globeFallbackAnimation}
-                style={styles.globeAnimation}
-              />
-              <Typography
-                allowFontScaling={false}
-                color={colors.textSecondary}
-                style={styles.mapFallbackText}
-                variant="Caption"
-              >
-                {mapFallbackReason}
-              </Typography>
-            </View>
-          )}
+          {!isGlobeFullscreen ? renderGlobeView('inline') : null}
+          <Pressable
+            accessibilityLabel="Open fullscreen globe"
+            onPress={openGlobeFullscreen}
+            style={({ pressed }) => [
+              styles.fullscreenTrigger,
+              pressed ? styles.fullscreenTriggerPressed : null,
+            ]}
+          >
+            <MaterialCommunityIcons color={colors.textPrimary} name="fullscreen" size={18} />
+          </Pressable>
         </View>
 
         {loading && events.length === 0 ? (
@@ -1482,6 +1584,30 @@ export function EventsScreen() {
           </SurfaceCard>
         ))}
       </SurfaceCard>
+
+      <Modal
+        animationType="fade"
+        onRequestClose={closeGlobeFullscreen}
+        presentationStyle="fullScreen"
+        statusBarTranslucent
+        visible={isGlobeFullscreen}
+      >
+        <View style={styles.fullscreenRoot}>
+          <View style={styles.fullscreenHeader}>
+            <Pressable
+              accessibilityLabel="Close fullscreen globe"
+              onPress={closeGlobeFullscreen}
+              style={({ pressed }) => [
+                styles.fullscreenCloseButton,
+                pressed ? styles.fullscreenTriggerPressed : null,
+              ]}
+            >
+              <MaterialCommunityIcons color={colors.textPrimary} name="close" size={20} />
+            </Pressable>
+          </View>
+          <View style={styles.fullscreenGlobeWrap}>{renderGlobeView('fullscreen')}</View>
+        </View>
+      </Modal>
 
       <View style={styles.topFilterRow}>
         <FilterChip
@@ -1830,6 +1956,48 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
     minHeight: 148,
   },
+  fullscreenCloseButton: {
+    alignItems: 'center',
+    backgroundColor: colors.surfaceStrong,
+    borderColor: colors.borderStrong,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    height: 44,
+    justifyContent: 'center',
+    width: 44,
+  },
+  fullscreenGlobeWrap: {
+    flex: 1,
+    width: '100%',
+  },
+  fullscreenHeader: {
+    alignItems: 'flex-end',
+    paddingHorizontal: spacing.sm,
+    paddingTop: spacing.sm,
+    width: '100%',
+  },
+  fullscreenRoot: {
+    backgroundColor: colors.bgEventsStart,
+    flex: 1,
+    justifyContent: 'center',
+    paddingBottom: spacing.sm,
+  },
+  fullscreenTrigger: {
+    alignItems: 'center',
+    backgroundColor: colors.surfaceStrong,
+    borderColor: colors.borderStrong,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    bottom: spacing.xs,
+    height: 36,
+    justifyContent: 'center',
+    position: 'absolute',
+    right: spacing.xs,
+    width: 36,
+  },
+  fullscreenTriggerPressed: {
+    transform: [{ scale: 0.96 }],
+  },
   favoriteButtonActive: {
     backgroundColor: figmaV2Reference.buttons.sky.from,
     borderColor: figmaV2Reference.buttons.sky.border,
@@ -1850,15 +2018,42 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     width: '100%',
   },
+  globeFallbackWrapFullscreen: {
+    alignItems: 'center',
+    flex: 1,
+    gap: spacing.sm,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.lg,
+    width: '100%',
+  },
   globeMap: {
     backgroundColor: 'transparent',
     height: '100%',
+    width: '100%',
+  },
+  globeMapFrameFullscreen: {
+    alignItems: 'center',
+    flex: 1,
+    justifyContent: 'center',
     width: '100%',
   },
   globeMapFrame: {
     alignItems: 'center',
     height: 260,
     justifyContent: 'center',
+    width: '100%',
+  },
+  globeMapFullscreen: {
+    backgroundColor: 'transparent',
+    flex: 1,
+    width: '100%',
+  },
+  globeMapMaskFullscreen: {
+    backgroundColor: 'transparent',
+    borderRadius: radii.xl,
+    flex: 1,
+    marginHorizontal: spacing.sm,
+    overflow: 'hidden',
     width: '100%',
   },
   globeMapMask: {
@@ -1872,6 +2067,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: 260,
+    position: 'relative',
   },
   globePanel: {
     borderWidth: 0,

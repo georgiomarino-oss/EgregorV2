@@ -55,10 +55,12 @@ interface EventLibraryRow {
 
 interface NewsDrivenEventRow {
   category: string;
+  country_code: string | null;
   duration_minutes: number;
   event_day: string;
   headline: string;
   id: string;
+  location_hint: string | null;
   script_text: string;
   source_title: string | null;
   source_url: string;
@@ -167,8 +169,10 @@ export interface EventLibraryItem {
 
 export interface NewsDrivenEventItem {
   category: string;
+  countryCode: string | null;
   durationMinutes: number;
   id: string;
+  locationHint: string | null;
   script: string;
   sourceTitle: string | null;
   sourceUrl: string;
@@ -305,8 +309,10 @@ function mapEventLibraryRow(row: EventLibraryRow): EventLibraryItem {
 function mapNewsDrivenEventRow(row: NewsDrivenEventRow): NewsDrivenEventItem {
   return {
     category: row.category?.trim() || 'Humanitarian',
+    countryCode: row.country_code?.trim().toUpperCase() || null,
     durationMinutes: row.duration_minutes ?? 10,
     id: row.id,
+    locationHint: row.location_hint?.trim() || null,
     script: row.script_text,
     sourceTitle: row.source_title?.trim() || null,
     sourceUrl: row.source_url,
@@ -679,7 +685,7 @@ export async function fetchNewsDrivenEvents(limit = 80): Promise<NewsDrivenEvent
   const { data, error } = await supabase
     .from('news_driven_events')
     .select(
-      'id,headline,summary,script_text,category,duration_minutes,starts_at,source_title,source_url,event_day',
+      'id,headline,summary,script_text,category,country_code,location_hint,duration_minutes,starts_at,source_title,source_url,event_day',
     )
     .gte('starts_at', nowIso)
     .lte('starts_at', endIso)
