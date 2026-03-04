@@ -65,6 +65,18 @@ interface UserIntentionRow {
   intention: string;
 }
 
+interface PrayerCircleMemberRpcRow {
+  display_name: string | null;
+  is_owner: boolean;
+  joined_at: string;
+  user_id: string;
+}
+
+interface PrayerCircleUserRpcRow {
+  display_name: string | null;
+  user_id: string;
+}
+
 export interface AppEvent {
   countryCode: string | null;
   description: string | null;
@@ -135,6 +147,18 @@ export interface EventRoomSnapshot {
   event: AppEvent;
   isJoined: boolean;
   joinedCount: number;
+}
+
+export interface PrayerCircleMember {
+  displayName: string;
+  isOwner: boolean;
+  joinedAt: string;
+  userId: string;
+}
+
+export interface PrayerCircleUserSuggestion {
+  displayName: string;
+  userId: string;
 }
 
 function startOfDay(date: Date) {
@@ -397,6 +421,96 @@ export async function fetchPrayerLibraryItems(): Promise<PrayerLibraryItem[]> {
       title: row.title,
     };
   });
+}
+
+export async function fetchPrayerCircleMembers(): Promise<PrayerCircleMember[]> {
+  const { data, error } = await supabase.rpc('get_prayer_circle_members');
+
+  if (error) {
+    throw new Error(toSupabaseErrorMessage(error, 'Failed to load prayer circle members.'));
+  }
+
+  return ((data ?? []) as PrayerCircleMemberRpcRow[]).map((row) => ({
+    displayName: row.display_name?.trim() || 'Member',
+    isOwner: Boolean(row.is_owner),
+    joinedAt: row.joined_at,
+    userId: row.user_id,
+  }));
+}
+
+export async function fetchEventsCircleMembers(): Promise<PrayerCircleMember[]> {
+  const { data, error } = await supabase.rpc('get_events_circle_members');
+
+  if (error) {
+    throw new Error(toSupabaseErrorMessage(error, 'Failed to load events circle members.'));
+  }
+
+  return ((data ?? []) as PrayerCircleMemberRpcRow[]).map((row) => ({
+    displayName: row.display_name?.trim() || 'Member',
+    isOwner: Boolean(row.is_owner),
+    joinedAt: row.joined_at,
+    userId: row.user_id,
+  }));
+}
+
+export async function searchUsersForPrayerCircle(
+  query: string,
+  limit = 20,
+): Promise<PrayerCircleUserSuggestion[]> {
+  const sanitized = query.trim();
+  const { data, error } = await supabase.rpc('search_app_users_for_circle', {
+    p_limit: limit,
+    p_query: sanitized.length > 0 ? sanitized : null,
+  });
+
+  if (error) {
+    throw new Error(toSupabaseErrorMessage(error, 'Failed to search users.'));
+  }
+
+  return ((data ?? []) as PrayerCircleUserRpcRow[]).map((row) => ({
+    displayName: row.display_name?.trim() || 'Member',
+    userId: row.user_id,
+  }));
+}
+
+export async function addPrayerCircleMember(targetUserId: string) {
+  const { error } = await supabase.rpc('add_user_to_prayer_circle', {
+    p_target_user_id: targetUserId,
+  });
+
+  if (error) {
+    throw new Error(toSupabaseErrorMessage(error, 'Failed to add user to prayer circle.'));
+  }
+}
+
+export async function addEventsCircleMember(targetUserId: string) {
+  const { error } = await supabase.rpc('add_user_to_events_circle', {
+    p_target_user_id: targetUserId,
+  });
+
+  if (error) {
+    throw new Error(toSupabaseErrorMessage(error, 'Failed to add user to events circle.'));
+  }
+}
+
+export async function removePrayerCircleMember(targetUserId: string) {
+  const { error } = await supabase.rpc('remove_user_from_prayer_circle', {
+    p_target_user_id: targetUserId,
+  });
+
+  if (error) {
+    throw new Error(toSupabaseErrorMessage(error, 'Failed to remove user from prayer circle.'));
+  }
+}
+
+export async function removeEventsCircleMember(targetUserId: string) {
+  const { error } = await supabase.rpc('remove_user_from_events_circle', {
+    p_target_user_id: targetUserId,
+  });
+
+  if (error) {
+    throw new Error(toSupabaseErrorMessage(error, 'Failed to remove user from events circle.'));
+  }
 }
 
 export async function incrementPrayerLibraryStart(itemId: string) {

@@ -7,7 +7,9 @@ import { AuthScreen } from '../../screens/AuthScreen';
 import { CommunityScreen } from '../../screens/CommunityScreen';
 import { EventDetailsScreen } from '../../screens/EventDetailsScreen';
 import { EventRoomScreen } from '../../screens/EventRoomScreen';
+import { EventsCircleScreen } from '../../screens/EventsCircleScreen';
 import { EventsScreen } from '../../screens/EventsScreen';
+import { PrayerCircleScreen } from '../../screens/PrayerCircleScreen';
 import { PrayerLibraryScreen } from '../../screens/PrayerLibraryScreen';
 import { ProfileScreen } from '../../screens/ProfileScreen';
 import { SoloLiveScreen } from '../../screens/SoloLiveScreen';
@@ -59,6 +61,8 @@ function CommunityStackNavigator({ initialRouteName }: CommunityStackNavigatorPr
   return (
     <CommunityStack.Navigator {...navigatorProps} screenOptions={sharedStackOptions}>
       <CommunityStack.Screen name="CommunityHome" component={CommunityScreen} />
+      <CommunityStack.Screen name="EventsCircle" component={EventsCircleScreen} />
+      <CommunityStack.Screen name="PrayerCircle" component={PrayerCircleScreen} />
     </CommunityStack.Navigator>
   );
 }

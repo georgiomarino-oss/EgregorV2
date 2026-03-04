@@ -19,6 +19,8 @@ export type SoloStackParamList = {
 
 export type CommunityStackParamList = {
   CommunityHome: undefined;
+  EventsCircle: undefined;
+  PrayerCircle: undefined;
 };
 
 export type EventsStackParamList = {

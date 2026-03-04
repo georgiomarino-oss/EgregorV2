@@ -85,6 +85,9 @@ export function CommunityScreen() {
     void loadSnapshot(true);
   };
 
+  const prayerCircleCount = snapshot?.liveEvents ?? 0;
+  const eventsCircleCount = snapshot?.events.length ?? 0;
+
   return (
     <Screen ambientSource={ambientAnimation} contentContainerStyle={styles.content} variant="home">
       <View style={styles.headerBlock}>
@@ -156,14 +159,50 @@ export function CommunityScreen() {
       ) : null}
 
       {!loading && (snapshot?.alerts.length ?? 0) === 0 ? (
-        <SurfaceCard radius="sm" style={styles.feedCard} variant="homeAlert">
-          <Typography allowFontScaling={false} variant="H2" weight="bold">
-            No live alerts right now
-          </Typography>
-          <Typography allowFontScaling={false} color={colors.textCaption} variant="Caption">
-            New event updates appear here as soon as rooms go live.
-          </Typography>
-        </SurfaceCard>
+        <>
+          <SurfaceCard radius="sm" style={styles.feedCard} variant="homeAlert">
+            <Typography allowFontScaling={false} variant="H2" weight="bold">
+              No live alerts right now
+            </Typography>
+            <Typography allowFontScaling={false} color={colors.textCaption} variant="Caption">
+              New event updates appear here as soon as rooms go live.
+            </Typography>
+          </SurfaceCard>
+
+          <View style={styles.row}>
+            <Pressable
+              onPress={() => navigation.navigate('PrayerCircle')}
+              style={({ pressed }) => [styles.metricCardPressable, pressed && styles.pressedScale]}
+            >
+              <SurfaceCard radius="md" style={styles.metricCard} variant="homeStatSmall">
+                <Typography allowFontScaling={false} color={colors.textBodySoft} variant="Label">
+                  Prayer Circle
+                </Typography>
+                <Typography allowFontScaling={false} variant="H2" weight="bold">
+                  {prayerCircleCount}
+                </Typography>
+              </SurfaceCard>
+            </Pressable>
+            <Pressable
+              onPress={() => navigation.navigate('EventsCircle')}
+              style={({ pressed }) => [styles.metricCardPressable, pressed && styles.pressedScale]}
+            >
+              <SurfaceCard
+                contentPadding={10}
+                radius="md"
+                style={[styles.metricCard, styles.eventsCircleCardCompact]}
+                variant="homeStatSmall"
+              >
+                <Typography allowFontScaling={false} color={colors.textBodySoft} variant="Label">
+                  Events Circle
+                </Typography>
+                <Typography allowFontScaling={false} variant="H2" weight="bold">
+                  {eventsCircleCount}
+                </Typography>
+              </SurfaceCard>
+            </Pressable>
+          </View>
+        </>
       ) : (
         snapshot?.alerts.map((alert) => (
           <Pressable
@@ -201,6 +240,13 @@ const styles = StyleSheet.create({
   metricCard: {
     flex: 1,
     gap: PROFILE_ROW_GAP,
+  },
+  metricCardPressable: {
+    flex: 1,
+    borderRadius: radii.md,
+  },
+  eventsCircleCardCompact: {
+    minHeight: 56,
   },
   pressedScale: {
     transform: [{ scale: 0.99 }],

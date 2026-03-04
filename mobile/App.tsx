@@ -61,6 +61,8 @@ function parseCaptureTargetFromHash(): CaptureNavigationTarget | undefined {
 
   const communityRouteMap: Record<string, CaptureNavigationTarget['communityRoute']> = {
     communityhome: 'CommunityHome',
+    eventscircle: 'EventsCircle',
+    prayercircle: 'PrayerCircle',
   };
 
   const target: CaptureNavigationTarget = {};
