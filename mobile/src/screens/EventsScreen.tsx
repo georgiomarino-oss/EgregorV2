@@ -40,7 +40,6 @@ import { clientEnv } from '../lib/env';
 import { supabase } from '../lib/supabase';
 import { loadMapboxModule } from './events/loadMapboxModule';
 import {
-  EVENTS_PANEL_HEIGHT,
   HOME_CARD_GAP,
   PROFILE_ROW_GAP,
   PROFILE_SECTION_GAP,
@@ -75,9 +74,44 @@ const HORIZON_DAYS = 7;
 const SOON_WINDOW_MS = 2 * 60 * 60 * 1000;
 const NEXT_24_HOURS_MS = 24 * 60 * 60 * 1000;
 const SCHEDULE_HOURS_LOCAL = [0, 3, 6, 9, 12, 15, 18, 21];
+const GLOBE_CAMERA_CENTER: Coordinate = [0, 0];
+const GLOBE_CAMERA_ZOOM_LEVEL = 0;
+const RIPPLE_FRAME_COUNT = 24;
+const GLOBE_DIAMETER = 248;
+const MAP_TAP_HITBOX = { height: 48, width: 48 };
+const GLOBE_AUTO_ROTATE_DEGREES_PER_SECOND = 6;
+const GLOBE_AUTO_ROTATE_TICK_MS = 80;
+const GLOBE_AUTO_ROTATE_ANIMATION_MS = 140;
+const GLOBE_INTERACTION_IDLE_MS = 2400;
+const GLOBE_RESET_ANIMATION_MS = 720;
+const GLOBE_PROGRAMMATIC_CAMERA_GUARD_MS = 220;
+const TRANSPARENT_GLOBE_STYLE_JSON = JSON.stringify({
+  version: 8,
+  sources: {
+    satellite: {
+      tileSize: 256,
+      type: 'raster',
+      url: 'mapbox://mapbox.satellite',
+    },
+  },
+  layers: [
+    {
+      id: 'background',
+      paint: {
+        'background-color': 'rgba(0,0,0,0)',
+      },
+      type: 'background',
+    },
+    {
+      id: 'satellite',
+      source: 'satellite',
+      type: 'raster',
+    },
+  ],
+});
 
 type Coordinate = [number, number];
-type GlobePointKind = 'live' | 'news' | 'prayer' | 'scheduled' | 'user';
+type GlobePointKind = 'live' | 'news' | 'scheduled' | 'user';
 type MapboxComponent = ComponentType<Record<string, unknown>>;
 
 interface GlobePoint {
@@ -95,6 +129,10 @@ interface MapboxGlobeModule {
   setAccessToken?: (token: string) => void;
 }
 
+interface MapboxCameraRefLike {
+  setCamera?: (config: Record<string, unknown>) => void;
+}
+
 interface MapFeatureCollection {
   features: Array<{
     geometry: {
@@ -109,10 +147,16 @@ interface MapFeatureCollection {
   type: 'FeatureCollection';
 }
 
+interface MapPressFeature {
+  id?: unknown;
+  properties?: {
+    id?: unknown;
+  };
+}
+
 const MAP_COLORS = {
   live: '#ff4040',
   news: '#ffd65a',
-  prayer: '#a974ff',
   scheduled: '#4a8fff',
   user: '#37cf7a',
 } as const;
@@ -280,9 +324,35 @@ function toFeatureCollection(points: GlobePoint[]): MapFeatureCollection {
   };
 }
 
+function extractPressedMapFeatureId(pressEvent: unknown): string | null {
+  const eventObject = pressEvent as { features?: MapPressFeature[] };
+  const features = eventObject?.features;
+  if (!Array.isArray(features)) {
+    return null;
+  }
+
+  for (const feature of features) {
+    const idFromProps = feature?.properties?.id;
+    if (typeof idFromProps === 'string' && idFromProps.length > 0) {
+      return idFromProps;
+    }
+
+    if (typeof feature?.id === 'string' && feature.id.length > 0) {
+      return feature.id;
+    }
+  }
+
+  return null;
+}
+
 function normalizeCategory(category: string | null | undefined) {
   const value = category?.trim();
   return value && value.length > 0 ? value : 'Manifestation';
+}
+
+function easeOutCubic(value: number) {
+  const clamped = Math.max(0, Math.min(1, value));
+  return 1 - Math.pow(1 - clamped, 3);
 }
 
 function formatEventSubtitle(event: AppEvent) {
@@ -496,13 +566,13 @@ export function EventsScreen() {
   const MapboxCamera = mapboxModule?.Camera as MapboxComponent | undefined;
   const MapboxShapeSource = mapboxModule?.ShapeSource as MapboxComponent | undefined;
   const MapboxCircleLayer = mapboxModule?.CircleLayer as MapboxComponent | undefined;
-  const globeCameraRef = useRef<{ setCamera?: (config: Record<string, unknown>) => void } | null>(
-    null,
-  );
+  const globeCameraRef = useRef<MapboxCameraRefLike | null>(null);
+  const globeLongitudeRef = useRef(0);
+  const interactionIdleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const programmaticCameraUntilRef = useRef(0);
 
   const [events, setEvents] = useState<AppEvent[]>([]);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [libraryItems, setLibraryItems] = useState<EventLibraryItem[]>([]);
@@ -517,10 +587,12 @@ export function EventsScreen() {
   const [libraryRailWidth, setLibraryRailWidth] = useState<number | null>(null);
 
   const [newsItems, setNewsItems] = useState<NewsDrivenEventItem[]>([]);
+  const [newsSyncError, setNewsSyncError] = useState<string | null>(null);
   const [activePresence, setActivePresence] = useState<ActiveEventUserPresence[]>([]);
   const [deviceCoordinate, setDeviceCoordinate] = useState<Coordinate | null>(null);
-  const [globeHeading, setGlobeHeading] = useState(0);
   const [pulseTick, setPulseTick] = useState(0);
+  const [isGlobeMapLoaded, setIsGlobeMapLoaded] = useState(false);
+  const [isGlobeInteracting, setIsGlobeInteracting] = useState(false);
 
   const [userId, setUserId] = useState<string | null>(null);
   const [subscribedAll, setSubscribedAll] = useState(false);
@@ -539,13 +611,8 @@ export function EventsScreen() {
   const MapboxShapeSourceComponent = MapboxShapeSource as MapboxComponent;
   const MapboxCircleLayerComponent = MapboxCircleLayer as MapboxComponent;
 
-  const loadEvents = useCallback(async (refresh = false) => {
-    if (refresh) {
-      setRefreshing(true);
-    } else {
-      setLoading(true);
-    }
-
+  const loadEvents = useCallback(async () => {
+    setLoading(true);
     try {
       const nextEvents = await fetchEvents(120);
       setEvents(nextEvents);
@@ -554,7 +621,6 @@ export function EventsScreen() {
       setError(nextError instanceof Error ? nextError.message : 'Failed to load events.');
     } finally {
       setLoading(false);
-      setRefreshing(false);
     }
   }, []);
 
@@ -579,11 +645,23 @@ export function EventsScreen() {
       await generateNewsDrivenEvents();
       const nextNewsItems = await fetchNewsDrivenEvents(80);
       setNewsItems(nextNewsItems);
+      setNewsSyncError(null);
     } catch {
       try {
         const fallbackNewsItems = await fetchNewsDrivenEvents(80);
         setNewsItems(fallbackNewsItems);
+        if (fallbackNewsItems.length === 0) {
+          setNewsSyncError(
+            'News-driven events are unavailable right now. Check Supabase function secrets and deployment.',
+          );
+        } else {
+          setNewsSyncError(null);
+        }
       } catch {
+        setNewsItems([]);
+        setNewsSyncError(
+          'Could not load news-driven events. Check function deployment and table access.',
+        );
         // Ignore secondary failure.
       }
     }
@@ -663,6 +741,12 @@ export function EventsScreen() {
 
   useEffect(() => {
     if (!mapboxReady) {
+      setIsGlobeMapLoaded(false);
+    }
+  }, [mapboxReady]);
+
+  useEffect(() => {
+    if (!mapboxReady) {
       return;
     }
 
@@ -700,36 +784,83 @@ export function EventsScreen() {
     }
 
     const pulseInterval = setInterval(() => {
-      setPulseTick((current) => (current + 1) % 1000);
-    }, 450);
-
-    const rotationInterval = setInterval(() => {
-      setGlobeHeading((current) => (current + 0.6) % 360);
-    }, 120);
+      setPulseTick((current) => (current + 1) % RIPPLE_FRAME_COUNT);
+    }, 150);
 
     return () => {
       clearInterval(pulseInterval);
-      clearInterval(rotationInterval);
     };
   }, [mapboxReady]);
 
   useEffect(() => {
-    if (!mapboxReady) {
+    return () => {
+      if (interactionIdleTimerRef.current) {
+        clearTimeout(interactionIdleTimerRef.current);
+        interactionIdleTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!mapboxReady || !isGlobeMapLoaded || isGlobeInteracting) {
       return;
     }
 
-    globeCameraRef.current?.setCamera?.({
-      animationDuration: 120,
+    const camera = globeCameraRef.current;
+    if (!camera?.setCamera) {
+      return;
+    }
+
+    programmaticCameraUntilRef.current = Date.now() + GLOBE_RESET_ANIMATION_MS + 200;
+    globeLongitudeRef.current = 0;
+    camera.setCamera({
+      animationDuration: GLOBE_RESET_ANIMATION_MS,
       animationMode: 'linearTo',
-      centerCoordinate: [0, 20],
-      heading: globeHeading,
+      centerCoordinate: [globeLongitudeRef.current, 0],
+      heading: 0,
       pitch: 0,
-      zoomLevel: 0.9,
+      zoomLevel: GLOBE_CAMERA_ZOOM_LEVEL,
     });
-  }, [globeHeading, mapboxReady]);
+  }, [isGlobeInteracting, isGlobeMapLoaded, mapboxReady]);
+
+  useEffect(() => {
+    if (!mapboxReady || !isGlobeMapLoaded || isGlobeInteracting) {
+      return;
+    }
+
+    let lastTimestamp = Date.now();
+    const interval = setInterval(() => {
+      const now = Date.now();
+      const deltaMs = Math.max(0, now - lastTimestamp);
+      lastTimestamp = now;
+
+      const elapsedSeconds = deltaMs / 1000;
+      const nextLongitude =
+        globeLongitudeRef.current - elapsedSeconds * GLOBE_AUTO_ROTATE_DEGREES_PER_SECOND;
+      globeLongitudeRef.current = nextLongitude;
+
+      const liveCamera = globeCameraRef.current;
+      if (!liveCamera?.setCamera) {
+        return;
+      }
+
+      programmaticCameraUntilRef.current = Date.now() + GLOBE_PROGRAMMATIC_CAMERA_GUARD_MS;
+      liveCamera.setCamera({
+        animationDuration: GLOBE_AUTO_ROTATE_ANIMATION_MS,
+        animationMode: 'linearTo',
+        centerCoordinate: [nextLongitude, 0],
+        heading: 0,
+        pitch: 0,
+        zoomLevel: GLOBE_CAMERA_ZOOM_LEVEL,
+      });
+    }, GLOBE_AUTO_ROTATE_TICK_MS);
+
+    return () => {
+      clearInterval(interval);
+    };
+  }, [isGlobeInteracting, isGlobeMapLoaded, mapboxReady]);
 
   const visibleEvents = useMemo(() => events.slice(0, 2), [events]);
-  const primaryEventId = visibleEvents[0]?.id;
 
   const scheduledTemplateEvents = useMemo(
     () => buildScheduledTemplateEvents(libraryItems, new Date(nowTick)),
@@ -803,9 +934,13 @@ export function EventsScreen() {
     libraryRailWidth && libraryRailWidth > 0 ? libraryRailWidth : fallbackEventCardWidth;
 
   const eventCardStep = useMemo(() => eventCardWidth + HOME_CARD_GAP, [eventCardWidth]);
-  const pulseProgress = useMemo(
-    () => (Math.sin((pulseTick / 10) * Math.PI * 2) + 1) / 2,
+  const pulsePhasePrimary = useMemo(
+    () => (pulseTick % RIPPLE_FRAME_COUNT) / RIPPLE_FRAME_COUNT,
     [pulseTick],
+  );
+  const pulsePhaseSecondary = useMemo(
+    () => (pulsePhasePrimary + 0.5) % 1,
+    [pulsePhasePrimary],
   );
 
   const eventCoordinatesById = useMemo(() => {
@@ -862,7 +997,11 @@ export function EventsScreen() {
       });
 
       const kind: GlobePointKind =
-        occurrence.status === 'live' ? 'live' : occurrence.source === 'news' ? 'news' : 'prayer';
+        occurrence.status === 'live'
+          ? 'live'
+          : occurrence.source === 'news'
+            ? 'news'
+            : 'scheduled';
 
       points.push({
         coordinate,
@@ -926,10 +1065,6 @@ export function EventsScreen() {
     () => toFeatureCollection(mapRingPoints.filter((point) => point.kind === 'scheduled')),
     [mapRingPoints],
   );
-  const prayerRingGeoJson = useMemo(
-    () => toFeatureCollection(mapRingPoints.filter((point) => point.kind === 'prayer')),
-    [mapRingPoints],
-  );
   const newsRingGeoJson = useMemo(
     () => toFeatureCollection(mapRingPoints.filter((point) => point.kind === 'news')),
     [mapRingPoints],
@@ -937,14 +1072,18 @@ export function EventsScreen() {
   const userGeoJson = useMemo(() => toFeatureCollection(mapUserPoints), [mapUserPoints]);
 
   const ringLayerStyle = useCallback(
-    (color: string, baseRadius: number) => ({
-      circleColor: 'rgba(0,0,0,0)',
-      circleRadius: baseRadius + pulseProgress * 8,
-      circleStrokeColor: color,
-      circleStrokeOpacity: 0.2 + (1 - pulseProgress) * 0.45,
-      circleStrokeWidth: 2,
-    }),
-    [pulseProgress],
+    (color: string, baseRadius: number, phase: number, intensity = 1) => {
+      const ripple = easeOutCubic(phase);
+      return {
+        circleBlur: 0.08 + ripple * 0.32,
+        circleColor: 'rgba(0,0,0,0)',
+        circleRadius: baseRadius + ripple * (12 * intensity),
+        circleStrokeColor: color,
+        circleStrokeOpacity: Math.max(0.06, (1 - ripple) * 0.56 * intensity),
+        circleStrokeWidth: Math.max(0.9, 2.4 - ripple * 1.5),
+      };
+    },
+    [],
   );
 
   const coreLayerStyle = useCallback((color: string, radius: number) => {
@@ -957,14 +1096,6 @@ export function EventsScreen() {
     };
   }, []);
 
-  const mapboxStyleUrl = useMemo(() => {
-    const styleByModule = mapboxModule?.StyleURL?.SatelliteStreet;
-    if (typeof styleByModule === 'string' && styleByModule.length > 0) {
-      return styleByModule;
-    }
-    return 'mapbox://styles/mapbox/satellite-streets-v12';
-  }, [mapboxModule]);
-
   const mapFallbackReason = useMemo(() => {
     if (!clientEnv.mapboxToken) {
       return 'Missing EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN in mobile/.env.';
@@ -974,6 +1105,64 @@ export function EventsScreen() {
     }
     return '';
   }, [mapboxReady]);
+
+  const markGlobeInteraction = useCallback(() => {
+    if (!mapboxReady) {
+      return;
+    }
+
+    setIsGlobeInteracting(true);
+
+    if (interactionIdleTimerRef.current) {
+      clearTimeout(interactionIdleTimerRef.current);
+    }
+
+    interactionIdleTimerRef.current = setTimeout(() => {
+      setIsGlobeInteracting(false);
+      interactionIdleTimerRef.current = null;
+    }, GLOBE_INTERACTION_IDLE_MS);
+  }, [mapboxReady]);
+
+  const onMapCameraChanged = useCallback(
+    (event: unknown) => {
+      if (Date.now() < programmaticCameraUntilRef.current) {
+        return;
+      }
+
+      const cameraEvent = event as {
+        gestures?: {
+          isGestureActive?: boolean;
+        };
+      };
+
+      if (cameraEvent?.gestures?.isGestureActive) {
+        markGlobeInteraction();
+      }
+    },
+    [markGlobeInteraction],
+  );
+
+  const mapEventByPointId = useMemo(() => {
+    const byPointId = new Map<string, AppEvent>();
+    for (const event of events) {
+      if (!isWithinNext24Hours(event.startsAt, event.durationMinutes, nowTick)) {
+        continue;
+      }
+      byPointId.set(`event-${event.id}`, event);
+    }
+    return byPointId;
+  }, [events, nowTick]);
+
+  const mapOccurrenceByPointId = useMemo(() => {
+    const byPointId = new Map<string, ScheduledEventOccurrence>();
+    for (const occurrence of allScheduledEvents) {
+      if (!isWithinNext24Hours(occurrence.startsAt, occurrence.durationMinutes, nowTick)) {
+        continue;
+      }
+      byPointId.set(`occurrence-${occurrence.occurrenceKey}`, occurrence);
+    }
+    return byPointId;
+  }, [allScheduledEvents, nowTick]);
 
   const toggleFavorite = (favoriteKey: string) => {
     setFavoriteIds((current) => {
@@ -985,7 +1174,7 @@ export function EventsScreen() {
     });
   };
 
-  const onOpenOccurrence = (occurrence: ScheduledEventOccurrence) => {
+  const onOpenOccurrence = useCallback((occurrence: ScheduledEventOccurrence) => {
     const params: EventsStackParamList['EventRoom'] = {
       durationMinutes: occurrence.durationMinutes,
       eventSource: occurrence.source,
@@ -997,7 +1186,36 @@ export function EventsScreen() {
     };
 
     navigation.navigate('EventRoom', params);
-  };
+  }, [navigation]);
+
+  const onMapPointPress = useCallback(
+    (pressEvent: unknown) => {
+      markGlobeInteraction();
+      const pointId = extractPressedMapFeatureId(pressEvent);
+      if (!pointId) {
+        return;
+      }
+
+      const occurrence = mapOccurrenceByPointId.get(pointId);
+      if (occurrence) {
+        onOpenOccurrence(occurrence);
+        return;
+      }
+
+      const event = mapEventByPointId.get(pointId);
+      if (!event) {
+        return;
+      }
+
+      navigation.navigate('EventRoom', {
+        durationMinutes: event.durationMinutes,
+        eventId: event.id,
+        eventTitle: event.title,
+        scheduledStartAt: event.startsAt,
+      });
+    },
+    [mapEventByPointId, mapOccurrenceByPointId, markGlobeInteraction, navigation, onOpenOccurrence],
+  );
 
   const toggleSubscribeAll = async () => {
     if (!userId) {
@@ -1087,105 +1305,125 @@ export function EventsScreen() {
     >
       <View style={styles.headerBlock}>
         <Typography allowFontScaling={false} variant="H1" weight="bold">
-          Earth in prayer
+          Collective Intention
         </Typography>
         <Typography allowFontScaling={false} color={colors.textSecondary}>
           Join active circles and upcoming events from around the world.
         </Typography>
       </View>
 
-      <SurfaceCard radius="xl" style={[styles.section, styles.mainPanel]} variant="eventsPanel">
+      <SurfaceCard radius="xl" style={[styles.section, styles.globePanel]} variant="eventsPanel">
         <View style={styles.globeWrap}>
           {mapboxReady ? (
             <View style={styles.globeMapFrame}>
-              <MapboxMapViewComponent
-                attributionEnabled={false}
-                compassEnabled={false}
-                localizeLabels={false}
-                logoEnabled={false}
-                pitchEnabled={false}
-                projection="globe"
-                rotateEnabled={false}
-                scaleBarEnabled={false}
-                scrollEnabled={false}
-                style={styles.globeMap}
-                styleURL={mapboxStyleUrl}
-                zoomEnabled
-              >
-                <MapboxCameraComponent
-                  ref={globeCameraRef}
-                  animationDuration={120}
-                  animationMode="linearTo"
-                  centerCoordinate={[0, 20]}
-                  heading={globeHeading}
-                  pitch={0}
-                  zoomLevel={0.9}
-                />
+              <View style={styles.globeMapMask}>
+                <MapboxMapViewComponent
+                  attributionEnabled={false}
+                  compassEnabled={false}
+                  onDidFinishLoadingMap={() => {
+                    setIsGlobeMapLoaded(true);
+                  }}
+                  localizeLabels={false}
+                  logoEnabled={false}
+                  onCameraChanged={onMapCameraChanged}
+                  onPress={markGlobeInteraction}
+                  onTouchStart={markGlobeInteraction}
+                  surfaceView={false}
+                  pitchEnabled={false}
+                  projection="globe"
+                  rotateEnabled
+                  scaleBarEnabled={false}
+                  scrollEnabled
+                  style={styles.globeMap}
+                  styleJSON={TRANSPARENT_GLOBE_STYLE_JSON}
+                  zoomEnabled
+                >
+                  <MapboxCameraComponent
+                    ref={globeCameraRef}
+                    defaultSettings={{
+                      centerCoordinate: GLOBE_CAMERA_CENTER,
+                      heading: 0,
+                      pitch: 0,
+                      zoomLevel: GLOBE_CAMERA_ZOOM_LEVEL,
+                    }}
+                  />
 
-                {liveRingGeoJson.features.length > 0 ? (
-                  <MapboxShapeSourceComponent id="events-live-source" shape={liveRingGeoJson}>
-                    <MapboxCircleLayerComponent
-                      id="events-live-ring"
-                      style={ringLayerStyle(MAP_COLORS.live, 10)}
-                    />
-                    <MapboxCircleLayerComponent
-                      id="events-live-core"
-                      style={coreLayerStyle(MAP_COLORS.live, 3.8)}
-                    />
-                  </MapboxShapeSourceComponent>
-                ) : null}
+                  {liveRingGeoJson.features.length > 0 ? (
+                    <MapboxShapeSourceComponent
+                      hitbox={MAP_TAP_HITBOX}
+                      id="events-live-source"
+                      onPress={onMapPointPress}
+                      shape={liveRingGeoJson}
+                    >
+                      <MapboxCircleLayerComponent
+                        id="events-live-ring"
+                        style={ringLayerStyle(MAP_COLORS.live, 8.5, pulsePhasePrimary, 1)}
+                      />
+                      <MapboxCircleLayerComponent
+                        id="events-live-ring-secondary"
+                        style={ringLayerStyle(MAP_COLORS.live, 8.5, pulsePhaseSecondary, 0.8)}
+                      />
+                      <MapboxCircleLayerComponent
+                        id="events-live-core"
+                        style={coreLayerStyle(MAP_COLORS.live, 3.8)}
+                      />
+                    </MapboxShapeSourceComponent>
+                  ) : null}
 
-                {scheduledRingGeoJson.features.length > 0 ? (
-                  <MapboxShapeSourceComponent
-                    id="events-scheduled-source"
-                    shape={scheduledRingGeoJson}
-                  >
-                    <MapboxCircleLayerComponent
-                      id="events-scheduled-ring"
-                      style={ringLayerStyle(MAP_COLORS.scheduled, 9)}
-                    />
-                    <MapboxCircleLayerComponent
-                      id="events-scheduled-core"
-                      style={coreLayerStyle(MAP_COLORS.scheduled, 3.4)}
-                    />
-                  </MapboxShapeSourceComponent>
-                ) : null}
+                  {scheduledRingGeoJson.features.length > 0 ? (
+                    <MapboxShapeSourceComponent
+                      hitbox={MAP_TAP_HITBOX}
+                      id="events-scheduled-source"
+                      onPress={onMapPointPress}
+                      shape={scheduledRingGeoJson}
+                    >
+                      <MapboxCircleLayerComponent
+                        id="events-scheduled-ring"
+                        style={ringLayerStyle(MAP_COLORS.scheduled, 7.8, pulsePhasePrimary, 1)}
+                      />
+                      <MapboxCircleLayerComponent
+                        id="events-scheduled-ring-secondary"
+                        style={ringLayerStyle(MAP_COLORS.scheduled, 7.8, pulsePhaseSecondary, 0.8)}
+                      />
+                      <MapboxCircleLayerComponent
+                        id="events-scheduled-core"
+                        style={coreLayerStyle(MAP_COLORS.scheduled, 3.4)}
+                      />
+                    </MapboxShapeSourceComponent>
+                  ) : null}
 
-                {prayerRingGeoJson.features.length > 0 ? (
-                  <MapboxShapeSourceComponent id="events-prayer-source" shape={prayerRingGeoJson}>
-                    <MapboxCircleLayerComponent
-                      id="events-prayer-ring"
-                      style={ringLayerStyle(MAP_COLORS.prayer, 9.5)}
-                    />
-                    <MapboxCircleLayerComponent
-                      id="events-prayer-core"
-                      style={coreLayerStyle(MAP_COLORS.prayer, 3.4)}
-                    />
-                  </MapboxShapeSourceComponent>
-                ) : null}
+                  {newsRingGeoJson.features.length > 0 ? (
+                    <MapboxShapeSourceComponent
+                      hitbox={MAP_TAP_HITBOX}
+                      id="events-news-source"
+                      onPress={onMapPointPress}
+                      shape={newsRingGeoJson}
+                    >
+                      <MapboxCircleLayerComponent
+                        id="events-news-ring"
+                        style={ringLayerStyle(MAP_COLORS.news, 8.2, pulsePhasePrimary, 1)}
+                      />
+                      <MapboxCircleLayerComponent
+                        id="events-news-ring-secondary"
+                        style={ringLayerStyle(MAP_COLORS.news, 8.2, pulsePhaseSecondary, 0.8)}
+                      />
+                      <MapboxCircleLayerComponent
+                        id="events-news-core"
+                        style={coreLayerStyle(MAP_COLORS.news, 3.4)}
+                      />
+                    </MapboxShapeSourceComponent>
+                  ) : null}
 
-                {newsRingGeoJson.features.length > 0 ? (
-                  <MapboxShapeSourceComponent id="events-news-source" shape={newsRingGeoJson}>
-                    <MapboxCircleLayerComponent
-                      id="events-news-ring"
-                      style={ringLayerStyle(MAP_COLORS.news, 9.5)}
-                    />
-                    <MapboxCircleLayerComponent
-                      id="events-news-core"
-                      style={coreLayerStyle(MAP_COLORS.news, 3.4)}
-                    />
-                  </MapboxShapeSourceComponent>
-                ) : null}
-
-                {userGeoJson.features.length > 0 ? (
-                  <MapboxShapeSourceComponent id="events-online-users-source" shape={userGeoJson}>
-                    <MapboxCircleLayerComponent
-                      id="events-online-users-core"
-                      style={coreLayerStyle(MAP_COLORS.user, 3.2)}
-                    />
-                  </MapboxShapeSourceComponent>
-                ) : null}
-              </MapboxMapViewComponent>
+                  {userGeoJson.features.length > 0 ? (
+                    <MapboxShapeSourceComponent id="events-online-users-source" shape={userGeoJson}>
+                      <MapboxCircleLayerComponent
+                        id="events-online-users-core"
+                        style={coreLayerStyle(MAP_COLORS.user, 3.2)}
+                      />
+                    </MapboxShapeSourceComponent>
+                  ) : null}
+                </MapboxMapViewComponent>
+              </View>
             </View>
           ) : (
             <View style={styles.globeFallbackWrap}>
@@ -1222,48 +1460,27 @@ export function EventsScreen() {
           </SurfaceCard>
         ) : null}
 
-        {!loading && visibleEvents.length === 0 ? (
+        {newsSyncError ? (
           <SurfaceCard radius="sm" style={styles.feedCard} variant="homeAlert">
             <Typography allowFontScaling={false} variant="H2" weight="bold">
-              No live or scheduled events yet
+              News-driven events unavailable
             </Typography>
             <Typography allowFontScaling={false} color={colors.textCaption} variant="Caption">
-              Create an event in Supabase to populate this feed.
+              {newsSyncError}
             </Typography>
           </SurfaceCard>
-        ) : (
-          visibleEvents.map((event) => (
-            <SurfaceCard key={event.id} radius="sm" style={styles.feedCard} variant="homeAlert">
-              <Typography allowFontScaling={false} variant="H2" weight="bold">
-                {event.title}
-              </Typography>
-              <Typography allowFontScaling={false} color={colors.textCaption} variant="Caption">
-                {formatEventSubtitle(event)}
-              </Typography>
-            </SurfaceCard>
-          ))
-        )}
+        ) : null}
 
-        <Button
-          disabled={!primaryEventId}
-          onPress={() => {
-            if (primaryEventId) {
-              navigation.navigate('EventDetails', { eventId: primaryEventId });
-              return;
-            }
-            navigation.navigate('EventDetails');
-          }}
-          title="Open map event timeline"
-          variant="primary"
-        />
-        <Button
-          loading={refreshing}
-          onPress={() => {
-            void Promise.all([loadEvents(true), syncNewsEvents(), loadActivePresence()]);
-          }}
-          title="Refresh events"
-          variant="secondary"
-        />
+        {visibleEvents.map((event) => (
+          <SurfaceCard key={event.id} radius="sm" style={styles.feedCard} variant="homeAlert">
+            <Typography allowFontScaling={false} variant="H2" weight="bold">
+              {event.title}
+            </Typography>
+            <Typography allowFontScaling={false} color={colors.textCaption} variant="Caption">
+              {formatEventSubtitle(event)}
+            </Typography>
+          </SurfaceCard>
+        ))}
       </SurfaceCard>
 
       <View style={styles.topFilterRow}>
@@ -1634,23 +1851,31 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   globeMap: {
-    borderRadius: radii.lg,
-    height: 260,
-    overflow: 'hidden',
+    backgroundColor: 'transparent',
+    height: '100%',
     width: '100%',
   },
   globeMapFrame: {
-    borderColor: colors.borderSoft,
-    borderRadius: radii.lg,
-    borderWidth: 1,
+    alignItems: 'center',
     height: 260,
-    overflow: 'hidden',
+    justifyContent: 'center',
     width: '100%',
+  },
+  globeMapMask: {
+    backgroundColor: 'transparent',
+    borderRadius: GLOBE_DIAMETER / 2,
+    height: GLOBE_DIAMETER,
+    overflow: 'hidden',
+    width: GLOBE_DIAMETER,
   },
   globeWrap: {
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: 260,
+  },
+  globePanel: {
+    borderWidth: 0,
+    minHeight: 0,
   },
   headerBlock: {
     gap: TITLE_TO_SUBTITLE_GAP,
@@ -1663,9 +1888,6 @@ const styles = StyleSheet.create({
   },
   mapFallbackText: {
     textAlign: 'center',
-  },
-  mainPanel: {
-    minHeight: EVENTS_PANEL_HEIGHT,
   },
   prayerBody: {
     minHeight: 68,

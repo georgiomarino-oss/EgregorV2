@@ -35,8 +35,18 @@ interface NewsScriptCandidate {
   title: string;
 }
 
+interface GdeltResponse {
+  articles?: Array<{
+    domain?: string;
+    seendate?: string;
+    title?: string;
+    url?: string;
+  }>;
+}
+
 const MAX_NEWS_EVENTS_PER_DAY = 5;
 const MAX_RETURN_DAYS = 7;
+const MAX_GENERATION_PER_RUN = 12;
 const GOOGLE_RSS_FEEDS = [
   'https://news.google.com/rss/search?q=natural+disaster+humanitarian+aid',
   'https://news.google.com/rss/search?q=war+humanitarian+crisis+aid',
@@ -44,6 +54,14 @@ const GOOGLE_RSS_FEEDS = [
   'https://news.google.com/rss/search?q=refugee+humanitarian+support',
   'https://news.google.com/rss/search?q=earthquake+flood+wildfire+response',
 ];
+const FALLBACK_RSS_FEEDS = [
+  'https://reliefweb.int/updates?format=xml',
+  'https://feeds.bbci.co.uk/news/world/rss.xml',
+  'https://rss.nytimes.com/services/xml/rss/nyt/World.xml',
+];
+const GDELT_API_URL =
+  'https://api.gdeltproject.org/api/v2/doc/doc?query=(humanitarian%20OR%20refugee%20OR%20earthquake%20OR%20flood%20OR%20wildfire%20OR%20famine%20OR%20conflict)&mode=ArtList&format=json&maxrecords=40&sort=DateDesc';
+const RSS_FETCH_TIMEOUT_MS = 12_000;
 const NEWS_RELEVANCE_KEYWORDS = [
   'humanitarian',
   'aid',
@@ -154,37 +172,67 @@ function parseRssEntries(xml: string) {
     return [] as RssEntry[];
   }
 
-  const itemNodes = Array.from(document.querySelectorAll('item'));
+  const rssItems = Array.from(document.querySelectorAll('item')).map((node) => {
+    const title = node.querySelector('title')?.textContent?.trim() ?? '';
+    const link = node.querySelector('link')?.textContent?.trim() ?? '';
+    const description = node.querySelector('description')?.textContent?.trim() ?? '';
+    const sourceTitle = node.querySelector('source')?.textContent?.trim() ?? '';
+    const publishedAt = node.querySelector('pubDate')?.textContent?.trim() ?? '';
 
-  return itemNodes
-    .map((node) => {
-      const title = node.querySelector('title')?.textContent?.trim() ?? '';
-      const link = node.querySelector('link')?.textContent?.trim() ?? '';
-      const description = node.querySelector('description')?.textContent?.trim() ?? '';
-      const sourceTitle = node.querySelector('source')?.textContent?.trim() ?? '';
-      const publishedAt = node.querySelector('pubDate')?.textContent?.trim() ?? '';
+    return {
+      description,
+      link,
+      publishedAt,
+      sourceTitle,
+      title,
+    } satisfies RssEntry;
+  });
 
-      return {
-        description,
-        link,
-        publishedAt,
-        sourceTitle,
-        title,
-      } satisfies RssEntry;
-    })
-    .filter((item) => item.title && item.link);
+  const atomEntries = Array.from(document.querySelectorAll('entry')).map((node) => {
+    const title = node.querySelector('title')?.textContent?.trim() ?? '';
+    const description =
+      node.querySelector('summary')?.textContent?.trim() ??
+      node.querySelector('content')?.textContent?.trim() ??
+      '';
+    const sourceTitle =
+      node.querySelector('source > title')?.textContent?.trim() ??
+      node.querySelector('author > name')?.textContent?.trim() ??
+      '';
+    const publishedAt =
+      node.querySelector('updated')?.textContent?.trim() ??
+      node.querySelector('published')?.textContent?.trim() ??
+      '';
+    const href = node.querySelector('link')?.getAttribute('href')?.trim() ?? '';
+    const link = href || (node.querySelector('link')?.textContent?.trim() ?? '');
+
+    return {
+      description,
+      link,
+      publishedAt,
+      sourceTitle,
+      title,
+    } satisfies RssEntry;
+  });
+
+  return [...rssItems, ...atomEntries].filter((item) => item.title && item.link);
 }
 
 async function fetchRssEntries() {
   const allEntries: RssEntry[] = [];
+  const allFeeds = [...GOOGLE_RSS_FEEDS, ...FALLBACK_RSS_FEEDS];
 
-  for (const feedUrl of GOOGLE_RSS_FEEDS) {
+  for (const feedUrl of allFeeds) {
     try {
+      const timeoutSignal = AbortSignal.timeout(RSS_FETCH_TIMEOUT_MS);
       // eslint-disable-next-line no-await-in-loop
       const response = await fetch(feedUrl, {
         headers: {
           Accept: 'application/rss+xml, application/xml;q=0.9, text/xml;q=0.8, */*;q=0.1',
+          'Accept-Language': 'en-GB,en;q=0.9',
+          Referer: 'https://news.google.com/',
+          'User-Agent': 'Mozilla/5.0 (compatible; EgregorNewsBot/1.0; +https://egregor.world)',
         },
+        signal: timeoutSignal,
       });
 
       if (!response.ok) {
@@ -211,9 +259,115 @@ async function fetchRssEntries() {
   return Array.from(deduped.values());
 }
 
+async function fetchGdeltEntries() {
+  try {
+    const response = await fetch(GDELT_API_URL, {
+      headers: {
+        Accept: 'application/json',
+        'User-Agent': 'Mozilla/5.0 (compatible; EgregorNewsBot/1.0; +https://egregor.world)',
+      },
+      signal: AbortSignal.timeout(RSS_FETCH_TIMEOUT_MS),
+    });
+
+    if (!response.ok) {
+      return [] as RssEntry[];
+    }
+
+    const payload = (await response.json()) as GdeltResponse;
+    const articles = Array.isArray(payload?.articles) ? payload.articles : [];
+
+    return articles
+      .map((article) => {
+        const title = sanitizeHeadline(String(article?.title ?? ''));
+        const link = String(article?.url ?? '').trim();
+        const sourceTitle = sanitizeReadableText(String(article?.domain ?? '')).slice(0, 120);
+        const rawSeenDate = String(article?.seendate ?? '').trim();
+        let publishedAt = '';
+
+        if (rawSeenDate.length === 16 && rawSeenDate.endsWith('Z')) {
+          const iso = `${rawSeenDate.slice(0, 4)}-${rawSeenDate.slice(4, 6)}-${rawSeenDate.slice(6, 8)}T${
+            rawSeenDate.slice(9, 11)
+          }:${rawSeenDate.slice(11, 13)}:${rawSeenDate.slice(13, 15)}Z`;
+          publishedAt = new Date(iso).toUTCString();
+        }
+
+        return {
+          description: title,
+          link,
+          publishedAt,
+          sourceTitle,
+          title,
+        } satisfies RssEntry;
+      })
+      .filter((entry) => entry.title.length > 0 && entry.link.length > 0);
+  } catch {
+    return [] as RssEntry[];
+  }
+}
+
 function isManifestationRelevant(entry: RssEntry) {
   const corpus = `${entry.title} ${entry.description}`.toLowerCase();
   return NEWS_RELEVANCE_KEYWORDS.some((keyword) => corpus.includes(keyword));
+}
+
+function guessCategory(text: string): NewsScriptCandidate['category'] {
+  const corpus = text.toLowerCase();
+  if (corpus.includes('war') || corpus.includes('conflict') || corpus.includes('ceasefire')) {
+    return 'Peace';
+  }
+  if (corpus.includes('flood') || corpus.includes('earthquake') || corpus.includes('wildfire') || corpus.includes('storm')) {
+    return 'Recovery';
+  }
+  if (corpus.includes('food') || corpus.includes('famine') || corpus.includes('shelter') || corpus.includes('refugee')) {
+    return 'Relief';
+  }
+  return 'Humanitarian';
+}
+
+function buildFallbackScript(title: string, summary: string, category: string) {
+  const cleanTitle = sanitizeHeadline(title) || 'Global Support Gathering';
+  const cleanSummary = sanitizeReadableText(summary).slice(0, 180);
+  const categoryLead = category === 'Peace'
+    ? 'peace and protection'
+    : category === 'Recovery'
+      ? 'steady recovery and rebuilding'
+      : category === 'Relief'
+        ? 'practical relief and shared care'
+        : 'humanitarian support and collective compassion';
+
+  return sanitizeScript(
+    `We gather in unity for ${cleanTitle}. We breathe slowly and hold ${categoryLead} in our shared attention.
+
+We set an intention for people and places affected by this situation. May fear soften, may wise action rise, and may every needed hand find a clear path to help.
+
+We ask for strength for families, responders, caregivers, and community leaders. May resources move quickly, may communication stay clear, and may care reach those who need it most.
+
+${cleanSummary ? `We hold this specific context with kindness and focus: ${cleanSummary}.` : 'We hold this moment with humility, practical love, and courage.'}
+
+May this intention move through cities and nations as calm, cooperation, and hope. We close with gratitude, and we carry this care into action.`,
+  );
+}
+
+function buildDeterministicFallbackCandidates(entries: RssEntry[], maxCount: number) {
+  const durations: Array<5 | 10 | 15> = [5, 10, 15];
+  const selected = entries.slice(0, maxCount);
+
+  return selected.map((entry, index) => {
+    const category = guessCategory(`${entry.title} ${entry.description}`);
+    const summary = sanitizeReadableText(entry.description).slice(0, 140) ||
+      `A guided ${category.toLowerCase()} intention event for global support and shared action.`;
+    const title = sanitizeHeadline(entry.title) || `Global ${category} Intention`;
+
+    return {
+      category,
+      durationMinutes: durations[index % durations.length],
+      include: true,
+      index,
+      script: buildFallbackScript(title, summary, category),
+      summary,
+      title,
+    } satisfies NewsScriptCandidate;
+  });
 }
 
 async function generateCandidatesWithOpenAI(openai: OpenAI, entries: RssEntry[], maxCount: number) {
@@ -317,6 +471,26 @@ function nextSlots(now: Date, count: number, existingByDay: Map<string, number>)
   return slots;
 }
 
+function countOpenSlotsWithinHorizon(now: Date, existingByDay: Map<string, number>) {
+  let remaining = 0;
+
+  for (let dayOffset = 0; dayOffset < MAX_RETURN_DAYS; dayOffset += 1) {
+    const day = new Date(Date.UTC(
+      now.getUTCFullYear(),
+      now.getUTCMonth(),
+      now.getUTCDate() + dayOffset,
+      0,
+      0,
+      0,
+    ));
+    const dayKey = toUtcDateString(day);
+    const used = existingByDay.get(dayKey) ?? 0;
+    remaining += Math.max(0, MAX_NEWS_EVENTS_PER_DAY - used);
+  }
+
+  return remaining;
+}
+
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -348,7 +522,6 @@ Deno.serve(async (request) => {
   });
 
   const now = new Date();
-  const todayKey = toUtcDateString(now);
   const endDate = new Date(now.getTime() + MAX_RETURN_DAYS * 24 * 60 * 60 * 1000);
 
   const { data: existingRows, error: existingError } = await supabase
@@ -378,52 +551,82 @@ Deno.serve(async (request) => {
     existingByDay.set(day, (existingByDay.get(day) ?? 0) + 1);
   }
 
-  const todayCount = existingByDay.get(todayKey) ?? 0;
-  const neededToday = Math.max(0, MAX_NEWS_EVENTS_PER_DAY - todayCount);
+  const openSlots = countOpenSlotsWithinHorizon(now, existingByDay);
+  const neededCount = Math.min(openSlots, MAX_GENERATION_PER_RUN);
 
-  if (neededToday <= 0) {
-    return new Response(JSON.stringify({ events: upcomingRows, generated: 0 }), {
+  if (neededCount <= 0) {
+    return new Response(JSON.stringify({ events: upcomingRows, generated: 0, pulled: 0, reason: 'no-open-slots' }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
     });
   }
 
   const rssEntries = await fetchRssEntries();
-  const relevantEntries = rssEntries.filter(isManifestationRelevant);
+  const gdeltEntries = rssEntries.length === 0 ? await fetchGdeltEntries() : [];
+  const aggregatedEntries = [...rssEntries, ...gdeltEntries];
+  const relevantEntries = aggregatedEntries.filter(isManifestationRelevant);
+  const candidateEntries = relevantEntries.length > 0 ? relevantEntries : aggregatedEntries;
 
-  if (relevantEntries.length === 0) {
-    return new Response(JSON.stringify({ events: upcomingRows, generated: 0 }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 200,
-    });
+  if (candidateEntries.length === 0) {
+    return new Response(
+      JSON.stringify({ events: upcomingRows, generated: 0, pulled: 0, reason: 'no-rss-entries' }),
+      {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200,
+      },
+    );
+  }
+
+  const normalizedEntries = candidateEntries.map((entry) => ({
+    ...entry,
+    description: sanitizeReadableText(entry.description),
+    title: sanitizeHeadline(entry.title),
+  })).filter((entry) => entry.title.length > 0 && entry.link.length > 0);
+
+  if (normalizedEntries.length === 0) {
+    return new Response(
+      JSON.stringify({ events: upcomingRows, generated: 0, pulled: 0, reason: 'empty-after-normalization' }),
+      {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200,
+      },
+    );
   }
 
   const openai = new OpenAI({ apiKey: openAiApiKey });
 
   let candidates: NewsScriptCandidate[] = [];
   try {
-    candidates = await generateCandidatesWithOpenAI(openai, relevantEntries, neededToday);
+    candidates = await generateCandidatesWithOpenAI(openai, normalizedEntries, neededCount);
   } catch (error) {
-    const detail = error instanceof Error ? error.message : String(error);
-    return new Response(JSON.stringify({ error: 'Failed to generate news scripts', detail }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 502,
-    });
+    candidates = [];
   }
 
-  const selected = candidates.filter((item) => item.include).slice(0, neededToday);
+  if (candidates.length === 0) {
+    candidates = buildDeterministicFallbackCandidates(normalizedEntries, neededCount);
+  }
+
+  const selectedIncluded = candidates.filter((item) => item.include);
+  const selectedBase = selectedIncluded.length > 0 ? selectedIncluded : candidates;
+  const selected = selectedBase.slice(0, neededCount);
   if (selected.length === 0) {
-    return new Response(JSON.stringify({ events: upcomingRows, generated: 0 }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 200,
-    });
+    const fallbackSelected = buildDeterministicFallbackCandidates(normalizedEntries, neededCount);
+    if (fallbackSelected.length === 0) {
+      return new Response(JSON.stringify({ events: upcomingRows, generated: 0, pulled: normalizedEntries.length, reason: 'no-candidates' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200,
+      });
+    }
+
+    candidates = fallbackSelected;
   }
 
-  const schedule = nextSlots(now, selected.length, existingByDay);
+  const activeCandidates = (selected.length > 0 ? selected : candidates).slice(0, neededCount);
+  const schedule = nextSlots(now, activeCandidates.length, existingByDay);
 
-  const toInsert = selected
+  const toInsert = activeCandidates
     .map((candidate, index) => {
-      const source = relevantEntries[candidate.index];
+      const source = normalizedEntries[candidate.index];
       const startsAt = schedule[index];
       if (!source || !startsAt) {
         return null;
@@ -481,7 +684,7 @@ Deno.serve(async (request) => {
     JSON.stringify({
       events: refreshedRows ?? [],
       generated: toInsert.length,
-      pulled: relevantEntries.length,
+      pulled: normalizedEntries.length,
     }),
     {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
