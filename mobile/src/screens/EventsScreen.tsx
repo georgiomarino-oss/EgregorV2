@@ -54,7 +54,7 @@ import { CARD_PADDING_LG } from '../theme/layout';
 import { colors, radii, spacing } from '../theme/tokens';
 
 type EventsNavigation = NativeStackNavigationProp<EventsStackParamList, 'EventsHome'>;
-type EventTimeFilter = 'live' | 'today' | 'tomorrow';
+type EventTimeFilter = 'live' | 'today' | 'tomorrow' | null;
 type CategoryFilter = 'All' | string | null;
 type EventStatusChip = 'live' | 'soon' | 'upcoming';
 
@@ -966,6 +966,10 @@ export function EventsScreen() {
   );
 
   const visibleLibrary = useMemo(() => {
+    if (timeFilter === null) {
+      return allScheduledEvents;
+    }
+
     if (timeFilter === 'live') {
       return allScheduledEvents.filter((item) => item.status === 'live');
     }
@@ -1671,19 +1675,19 @@ export function EventsScreen() {
           active={timeFilter === 'live'}
           fill
           label={`Live (${liveFilterCount})`}
-          onPress={() => setTimeFilter('live')}
+          onPress={() => setTimeFilter((current) => (current === 'live' ? null : 'live'))}
         />
         <FilterChip
           active={timeFilter === 'today'}
           fill
           label={`Today (${todayFilterCount})`}
-          onPress={() => setTimeFilter('today')}
+          onPress={() => setTimeFilter((current) => (current === 'today' ? null : 'today'))}
         />
         <FilterChip
           active={timeFilter === 'tomorrow'}
           fill
           label={`Tomorrow (${tomorrowFilterCount})`}
-          onPress={() => setTimeFilter('tomorrow')}
+          onPress={() => setTimeFilter((current) => (current === 'tomorrow' ? null : 'tomorrow'))}
         />
       </View>
 

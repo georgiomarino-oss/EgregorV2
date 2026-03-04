@@ -115,6 +115,12 @@ interface UserEventSubscriptionRow {
   subscription_key: string;
 }
 
+interface AppUserPresenceRow {
+  is_online: boolean;
+  last_seen_at: string;
+  user_id: string;
+}
+
 export interface AppEvent {
   countryCode: string | null;
   description: string | null;
@@ -353,6 +359,21 @@ function formatEventSubtitle(event: AppEvent) {
   return `Starts in ${days}d`;
 }
 
+function isEventLiveNow(event: Pick<AppEvent, 'durationMinutes' | 'startsAt' | 'status'>) {
+  if (event.status === 'live') {
+    return true;
+  }
+
+  const startsAtMs = new Date(event.startsAt).getTime();
+  if (!Number.isFinite(startsAtMs)) {
+    return false;
+  }
+
+  const endsAtMs = startsAtMs + Math.max(1, event.durationMinutes) * 60 * 1000;
+  const nowMs = Date.now();
+  return nowMs >= startsAtMs && nowMs < endsAtMs;
+}
+
 function toSupabaseErrorMessage(error: unknown, fallback: string) {
   if (error && typeof error === 'object' && 'message' in error) {
     const message = (error as { message?: unknown }).message;
@@ -511,11 +532,95 @@ export async function fetchEventById(eventId: string): Promise<AppEvent | null> 
 }
 
 export async function fetchCommunitySnapshot(): Promise<CommunitySnapshot> {
-  const events = await fetchEvents(12);
-  const liveEvents = events.filter((event) => event.status === 'live');
+  const nowMs = Date.now();
+  const liveWindowStartIso = new Date(nowMs - 24 * 60 * 60 * 1000).toISOString();
+  const liveWindowEndIso = new Date(nowMs + 24 * 60 * 60 * 1000).toISOString();
+
+  const [events, liveStatusResponse, liveWindowResponse] = await Promise.all([
+    fetchEvents(20),
+    supabase
+      .from('events')
+      .select(
+        'id,title,subtitle,description,host_note,region,country_code,starts_at,status,duration_minutes,visibility,created_at',
+      )
+      .eq('status', 'live')
+      .order('starts_at', { ascending: true })
+      .limit(300),
+    supabase
+      .from('events')
+      .select(
+        'id,title,subtitle,description,host_note,region,country_code,starts_at,status,duration_minutes,visibility,created_at',
+      )
+      .in('status', ['live', 'scheduled'])
+      .gte('starts_at', liveWindowStartIso)
+      .lte('starts_at', liveWindowEndIso)
+      .order('starts_at', { ascending: true })
+      .limit(600),
+  ]);
+
+  if (liveStatusResponse.error) {
+    throw new Error(
+      toSupabaseErrorMessage(liveStatusResponse.error, 'Failed to load live events.'),
+    );
+  }
+  if (liveWindowResponse.error) {
+    throw new Error(
+      toSupabaseErrorMessage(liveWindowResponse.error, 'Failed to load recent events.'),
+    );
+  }
+
+  const liveStatusRows = (liveStatusResponse.data ?? []) as EventRow[];
+  const liveWindowRows = (liveWindowResponse.data ?? []) as EventRow[];
+  const liveStatusCounts = await fetchParticipantCountsByEvent(
+    liveStatusRows.map((eventRow) => eventRow.id),
+  );
+  const liveWindowCounts = await fetchParticipantCountsByEvent(
+    liveWindowRows.map((eventRow) => eventRow.id),
+  );
+
+  const liveEventsByStatus = liveStatusRows.map((row) =>
+    mapEventRow(row, liveStatusCounts.get(row.id) ?? 0),
+  );
+  const liveEventsByTime = liveWindowRows
+    .map((row) => mapEventRow(row, liveWindowCounts.get(row.id) ?? 0))
+    .filter((event) => isEventLiveNow(event));
+  const liveEventMap = new Map<string, AppEvent>();
+
+  for (const liveEvent of liveEventsByStatus) {
+    liveEventMap.set(liveEvent.id, liveEvent);
+  }
+  for (const liveEvent of liveEventsByTime) {
+    if (!liveEventMap.has(liveEvent.id)) {
+      liveEventMap.set(liveEvent.id, liveEvent);
+    }
+  }
+
+  const liveEvents = Array.from(liveEventMap.values());
   const liveEventIds = liveEvents.map((event) => event.id);
 
   let uniqueActiveParticipants = 0;
+  const onlineCutoff = new Date(Date.now() - 2 * 60 * 1000);
+
+  const { data: onlinePresenceData, error: onlinePresenceError } = await supabase
+    .from('app_user_presence')
+    .select('user_id,is_online,last_seen_at')
+    .eq('is_online', true)
+    .gte('last_seen_at', toIso(onlineCutoff))
+    .limit(5000);
+
+  if (onlinePresenceError) {
+    const message = toSupabaseErrorMessage(
+      onlinePresenceError,
+      'Failed to load online participant presence.',
+    );
+    if (!isMissingTableMessage(message, 'app_user_presence')) {
+      throw new Error(message);
+    }
+  } else {
+    uniqueActiveParticipants = new Set(
+      ((onlinePresenceData ?? []) as AppUserPresenceRow[]).map((entry) => entry.user_id),
+    ).size;
+  }
 
   if (liveEventIds.length > 0) {
     const cutoff = new Date(Date.now() - 90 * 60 * 1000);
@@ -530,22 +635,34 @@ export async function fetchCommunitySnapshot(): Promise<CommunitySnapshot> {
       throw new Error(toSupabaseErrorMessage(error, 'Failed to load community participants.'));
     }
 
-    uniqueActiveParticipants = new Set(
-      ((data ?? []) as EventParticipantRow[]).map((entry) => entry.user_id),
-    ).size;
+    if (uniqueActiveParticipants === 0) {
+      uniqueActiveParticipants = new Set(
+        ((data ?? []) as EventParticipantRow[]).map((entry) => entry.user_id),
+      ).size;
+    }
   }
 
   const countries = new Set(
     liveEvents
-      .map((event) => event.countryCode ?? event.region)
-      .filter((value): value is string => Boolean(value && value.trim())),
+      .map(
+        (event) =>
+          event.countryCode?.trim().toUpperCase() || event.region?.trim().toUpperCase() || null,
+      )
+      .filter((value): value is string => Boolean(value)),
   ).size;
 
   const strongestLiveEvent = liveEvents
     .slice()
     .sort((a, b) => b.participants - a.participants || a.title.localeCompare(b.title))[0];
 
-  const alerts = events.slice(0, 2).map((event) => ({
+  const prioritizedAlerts = [
+    ...liveEvents
+      .slice()
+      .sort((a, b) => b.participants - a.participants || a.title.localeCompare(b.title)),
+    ...events.filter((event) => !liveEventMap.has(event.id)),
+  ];
+
+  const alerts = prioritizedAlerts.slice(0, 2).map((event) => ({
     eventId: event.id,
     subtitle: formatEventSubtitle(event),
     title: event.title,
@@ -560,6 +677,26 @@ export async function fetchCommunitySnapshot(): Promise<CommunitySnapshot> {
     strongestLiveEventTitle: strongestLiveEvent?.title ?? null,
     uniqueActiveParticipants,
   };
+}
+
+export async function updateAppUserPresence(userId: string, isOnline: boolean) {
+  const payload = {
+    is_online: isOnline,
+    last_seen_at: new Date().toISOString(),
+    user_id: userId,
+  };
+
+  const { error } = await supabase.from('app_user_presence').upsert(payload, {
+    onConflict: 'user_id',
+  });
+
+  if (error) {
+    const message = toSupabaseErrorMessage(error, 'Failed to update app presence.');
+    if (isMissingTableMessage(message, 'app_user_presence')) {
+      return;
+    }
+    throw new Error(message);
+  }
 }
 
 export async function fetchPrayerLibraryItems(): Promise<PrayerLibraryItem[]> {

@@ -26,32 +26,23 @@ export function CommunityScreen() {
   const navigation = useNavigation<CommunityNavigation>();
   const [snapshot, setSnapshot] = useState<CommunitySnapshot | null>(null);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const loadSnapshot = useCallback(
-    async (refresh = false) => {
-      if (refresh) {
-        setRefreshing(true);
-      } else {
-        setLoading(true);
-      }
+  const loadSnapshot = useCallback(async () => {
+    setLoading(true);
 
-      try {
-        const nextSnapshot = await fetchCommunitySnapshot();
-        setSnapshot(nextSnapshot);
-        setError(null);
-      } catch (nextError) {
-        setError(
-          nextError instanceof Error ? nextError.message : 'Failed to load community activity.',
-        );
-      } finally {
-        setLoading(false);
-        setRefreshing(false);
-      }
-    },
-    [setSnapshot],
-  );
+    try {
+      const nextSnapshot = await fetchCommunitySnapshot();
+      setSnapshot(nextSnapshot);
+      setError(null);
+    } catch (nextError) {
+      setError(
+        nextError instanceof Error ? nextError.message : 'Failed to load community activity.',
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [setSnapshot]);
 
   useEffect(() => {
     void loadSnapshot();
@@ -82,7 +73,7 @@ export function CommunityScreen() {
       return;
     }
 
-    void loadSnapshot(true);
+    void loadSnapshot();
   };
 
   const prayerCircleCount = snapshot?.liveEvents ?? 0;
@@ -108,7 +99,7 @@ export function CommunityScreen() {
               {snapshot?.uniqueActiveParticipants ?? 0}
             </Typography>
             <Typography allowFontScaling={false} color={colors.textLabel} variant="Label">
-              Active participants in the last 90 minutes
+              Participants Online
             </Typography>
 
             <View style={styles.row}>
@@ -137,12 +128,6 @@ export function CommunityScreen() {
               }
               variant="primary"
             />
-            <Button
-              loading={refreshing}
-              onPress={() => void loadSnapshot(true)}
-              title="Refresh pulse"
-              variant="secondary"
-            />
           </>
         )}
       </SurfaceCard>
@@ -160,15 +145,6 @@ export function CommunityScreen() {
 
       {!loading && (snapshot?.alerts.length ?? 0) === 0 ? (
         <>
-          <SurfaceCard radius="sm" style={styles.feedCard} variant="homeAlert">
-            <Typography allowFontScaling={false} variant="H2" weight="bold">
-              No live alerts right now
-            </Typography>
-            <Typography allowFontScaling={false} color={colors.textCaption} variant="Caption">
-              New event updates appear here as soon as rooms go live.
-            </Typography>
-          </SurfaceCard>
-
           <View style={styles.row}>
             <Pressable
               onPress={() => navigation.navigate('PrayerCircle')}
@@ -202,6 +178,15 @@ export function CommunityScreen() {
               </SurfaceCard>
             </Pressable>
           </View>
+
+          <SurfaceCard radius="sm" style={styles.feedCard} variant="homeAlert">
+            <Typography allowFontScaling={false} variant="H2" weight="bold">
+              No live alerts right now
+            </Typography>
+            <Typography allowFontScaling={false} color={colors.textCaption} variant="Caption">
+              New event updates appear here as soon as rooms go live.
+            </Typography>
+          </SurfaceCard>
         </>
       ) : (
         snapshot?.alerts.map((alert) => (

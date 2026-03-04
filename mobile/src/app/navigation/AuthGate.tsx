@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, AppState, StyleSheet, View } from 'react-native';
 
 import type { Session } from '@supabase/supabase-js';
 
 import { Typography } from '../../components/Typography';
+import { updateAppUserPresence } from '../../lib/api/data';
 import { supabase } from '../../lib/supabase';
 import { colors } from '../../theme/tokens';
 import { RootNavigator } from './RootNavigator';
@@ -17,15 +18,10 @@ export function AuthGate({ captureTarget }: AuthGateProps) {
   const [session, setSession] = useState<Session | null>(null);
   const [initializing, setInitializing] = useState(true);
   const forcedAuthState =
-    captureTarget?.root === 'auth'
-      ? false
-      : captureTarget?.root === 'main'
-        ? true
-        : null;
+    captureTarget?.root === 'auth' ? false : captureTarget?.root === 'main' ? true : null;
 
   useEffect(() => {
     if (forcedAuthState !== null) {
-      setInitializing(false);
       return;
     }
 
@@ -59,6 +55,49 @@ export function AuthGate({ captureTarget }: AuthGateProps) {
       subscription.unsubscribe();
     };
   }, [forcedAuthState]);
+
+  useEffect(() => {
+    if (!session?.user?.id || forcedAuthState !== null) {
+      return;
+    }
+
+    const userId = session.user.id;
+    let active = true;
+    const heartbeatIntervalMs = 30_000;
+
+    const heartbeat = async (isOnline: boolean) => {
+      try {
+        await updateAppUserPresence(userId, isOnline);
+      } catch (error) {
+        if (!active) {
+          return;
+        }
+        const message =
+          error instanceof Error ? error.message : 'Failed to update app user presence.';
+        console.warn('[Egregor] Presence heartbeat failed:', message);
+      }
+    };
+
+    void heartbeat(true);
+    const interval = setInterval(() => {
+      void heartbeat(true);
+    }, heartbeatIntervalMs);
+
+    const appStateSubscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        void heartbeat(true);
+        return;
+      }
+      void heartbeat(false);
+    });
+
+    return () => {
+      active = false;
+      clearInterval(interval);
+      appStateSubscription.remove();
+      void updateAppUserPresence(userId, false);
+    };
+  }, [forcedAuthState, session?.user?.id]);
 
   if (forcedAuthState !== null) {
     return (

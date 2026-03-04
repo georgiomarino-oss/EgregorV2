@@ -22,7 +22,7 @@ function TabLogo({ color, routeName }: { color: string; routeName: string }) {
       <Svg height={TAB_ICON_SIZE} viewBox="0 0 24 24" width={TAB_ICON_SIZE}>
         <Path
           {...sharedFillProps}
-          d="M5,15L4.4,14.5C2.4,12.6 1,11.4 1,9.9C1,8.7 2,7.7 3.2,7.7C3.9,7.7 4.6,8 5,8.5C5.4,8 6.1,7.7 6.8,7.7C8,7.7 9,8.6 9,9.9C9,11.4 7.6,12.6 5.6,14.5L5,15M15,4A4,4 0 0,0 11,8A4,4 0 0,0 15,12A4,4 0 0,0 19,8A4,4 0 0,0 15,4M15,10.1A2.1,2.1 0 0,1 12.9,8A2.1,2.1 0 0,1 15,5.9C16.16,5.9 17.1,6.84 17.1,8C17.1,9.16 16.16,10.1 15,10.1M15,13C12.33,13 7,14.33 7,17V20H23V17C23,14.33 17.67,13 15,13M21.1,18.1H8.9V17C8.9,16.36 12,14.9 15,14.9C17.97,14.9 21.1,16.36 21.1,17V18.1Z"
+          d="M12,5A3,3 0 0,1 15,8A3,3 0 0,1 12,11A3,3 0 0,1 9,8A3,3 0 0,1 12,5M5,7A2,2 0 0,1 7,9A2,2 0 0,1 5,11A2,2 0 0,1 3,9A2,2 0 0,1 5,7M19,7A2,2 0 0,1 21,9A2,2 0 0,1 19,11A2,2 0 0,1 17,9A2,2 0 0,1 19,7M12,13C15.31,13 18,15.24 18,18V20H6V18C6,15.24 8.69,13 12,13M5,13C6.1,13 7.15,13.28 8.06,13.78C7.4,14.67 7,15.79 7,17V18H1V17C1,14.79 2.79,13 5,13M19,13C21.21,13 23,14.79 23,17V18H17V17C17,15.79 16.6,14.67 15.94,13.78C16.85,13.28 17.9,13 19,13Z"
         />
       </Svg>
     );
@@ -122,12 +122,17 @@ export function BottomTabs({ descriptors, navigation, state }: BottomTabBarProps
                   type: 'tabLongPress',
                 });
               }}
-              style={[styles.tabButton, isFocused && styles.tabButtonActive]}
+              style={styles.tabButton}
             >
-              <TabLogo
-                color={isFocused ? figmaV2Reference.text.activeTab : colors.textMuted}
-                routeName={route.name}
-              />
+              <View style={styles.iconBubbleWrap}>
+                {isFocused ? <View style={styles.iconBubbleHalo} /> : null}
+                <View style={[styles.iconBubble, isFocused && styles.iconBubbleActive]}>
+                  <TabLogo
+                    color={isFocused ? figmaV2Reference.text.activeTab : colors.textMuted}
+                    routeName={route.name}
+                  />
+                </View>
+              </View>
             </Pressable>
           );
         })}
@@ -138,26 +143,54 @@ export function BottomTabs({ descriptors, navigation, state }: BottomTabBarProps
 
 const styles = StyleSheet.create({
   container: {
-    borderColor: figmaV2Reference.tabs.containerBorder,
     borderRadius: radii.lg,
-    borderWidth: figmaV2Reference.tabs.containerBorderWidth,
+    borderWidth: 0,
     flexDirection: 'row',
     gap: spacing.xs,
     padding: spacing.xs,
   },
+  iconBubble: {
+    alignItems: 'center',
+    backgroundColor: 'transparent',
+    borderRadius: radii.pill,
+    borderWidth: 0,
+    height: 44,
+    justifyContent: 'center',
+    overflow: 'hidden',
+    width: 44,
+  },
+  iconBubbleActive: {
+    backgroundColor: figmaV2Reference.tabs.activeBackground,
+    borderColor: 'transparent',
+    borderWidth: 0,
+  },
+  iconBubbleHalo: {
+    backgroundColor: 'transparent',
+    borderColor: figmaV2Reference.tabs.activeBorder,
+    borderWidth: figmaV2Reference.tabs.activeBorderWidth,
+    borderRadius: radii.pill,
+    height: 52,
+    opacity: 0.85,
+    position: 'absolute',
+    width: 52,
+  },
+  iconBubbleWrap: {
+    alignItems: 'center',
+    borderRadius: radii.pill,
+    height: 52,
+    justifyContent: 'center',
+    overflow: 'visible',
+    width: 52,
+  },
   tabButton: {
     alignItems: 'center',
-    borderColor: figmaV2Reference.tabs.inactiveBorder,
-    borderRadius: radii.xs,
-    borderWidth: figmaV2Reference.tabs.activeBorderWidth,
+    backgroundColor: 'transparent',
+    borderWidth: 0,
     flex: 1,
     justifyContent: 'center',
     minHeight: 40,
     paddingHorizontal: spacing.xs,
-  },
-  tabButtonActive: {
-    backgroundColor: figmaV2Reference.tabs.activeBackground,
-    borderColor: figmaV2Reference.tabs.activeBorder,
+    shadowOpacity: 0,
   },
   wrapper: {
     paddingHorizontal: tabBarInsetX,
