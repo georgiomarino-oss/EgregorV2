@@ -77,6 +77,13 @@ interface PrayerCircleUserRpcRow {
   user_id: string;
 }
 
+interface UserJournalEntryRow {
+  content: string;
+  created_at: string;
+  id: string;
+  updated_at: string;
+}
+
 export interface AppEvent {
   countryCode: string | null;
   description: string | null;
@@ -159,6 +166,13 @@ export interface PrayerCircleMember {
 export interface PrayerCircleUserSuggestion {
   displayName: string;
   userId: string;
+}
+
+export interface UserJournalEntry {
+  content: string;
+  createdAt: string;
+  id: string;
+  updatedAt: string;
 }
 
 function startOfDay(date: Date) {
@@ -511,6 +525,79 @@ export async function removeEventsCircleMember(targetUserId: string) {
   if (error) {
     throw new Error(toSupabaseErrorMessage(error, 'Failed to remove user from events circle.'));
   }
+}
+
+export async function fetchUserJournalEntries(userId: string): Promise<UserJournalEntry[]> {
+  const { data, error } = await supabase
+    .from('user_journal_entries')
+    .select('id,content,created_at,updated_at')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: true });
+
+  if (error) {
+    throw new Error(toSupabaseErrorMessage(error, 'Failed to load journal entries.'));
+  }
+
+  return ((data ?? []) as UserJournalEntryRow[]).map((row) => ({
+    content: row.content ?? '',
+    createdAt: row.created_at,
+    id: row.id,
+    updatedAt: row.updated_at,
+  }));
+}
+
+export async function createUserJournalEntry(input: {
+  content: string;
+  userId: string;
+}): Promise<UserJournalEntry> {
+  const { data, error } = await supabase
+    .from('user_journal_entries')
+    .insert({
+      content: input.content,
+      user_id: input.userId,
+    })
+    .select('id,content,created_at,updated_at')
+    .single();
+
+  if (error) {
+    throw new Error(toSupabaseErrorMessage(error, 'Failed to create journal entry.'));
+  }
+
+  const row = data as UserJournalEntryRow;
+  return {
+    content: row.content ?? '',
+    createdAt: row.created_at,
+    id: row.id,
+    updatedAt: row.updated_at,
+  };
+}
+
+export async function updateUserJournalEntry(input: {
+  content: string;
+  entryId: string;
+  userId: string;
+}): Promise<UserJournalEntry> {
+  const { data, error } = await supabase
+    .from('user_journal_entries')
+    .update({
+      content: input.content,
+    })
+    .eq('id', input.entryId)
+    .eq('user_id', input.userId)
+    .select('id,content,created_at,updated_at')
+    .single();
+
+  if (error) {
+    throw new Error(toSupabaseErrorMessage(error, 'Failed to update journal entry.'));
+  }
+
+  const row = data as UserJournalEntryRow;
+  return {
+    content: row.content ?? '',
+    createdAt: row.created_at,
+    id: row.id,
+    updatedAt: row.updated_at,
+  };
 }
 
 export async function incrementPrayerLibraryStart(itemId: string) {
