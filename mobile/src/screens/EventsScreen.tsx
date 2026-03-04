@@ -37,6 +37,7 @@ import {
   type NewsDrivenEventItem,
 } from '../lib/api/data';
 import { generateNewsDrivenEvents } from '../lib/api/functions';
+import { formatEventDateTimeInDeviceZone, getDeviceTimeZoneLabel } from '../lib/dateTime';
 import { clientEnv } from '../lib/env';
 import { supabase } from '../lib/supabase';
 import { loadMapboxModule } from './events/loadMapboxModule';
@@ -53,7 +54,7 @@ import { CARD_PADDING_LG } from '../theme/layout';
 import { colors, radii, spacing } from '../theme/tokens';
 
 type EventsNavigation = NativeStackNavigationProp<EventsStackParamList, 'EventsHome'>;
-type LibraryMode = 'favorites' | 'recent' | null;
+type EventTimeFilter = 'live' | 'today' | 'tomorrow';
 type CategoryFilter = 'All' | string | null;
 type EventStatusChip = 'live' | 'soon' | 'upcoming';
 
@@ -76,7 +77,7 @@ type ScheduledEventOccurrence = {
 const HORIZON_DAYS = 7;
 const SOON_WINDOW_MS = 2 * 60 * 60 * 1000;
 const NEXT_24_HOURS_MS = 24 * 60 * 60 * 1000;
-const SCHEDULE_HOURS_LOCAL = [0, 3, 6, 9, 12, 15, 18, 21];
+const SCHEDULE_HOURS_UTC = [0, 3, 6, 9, 12, 15, 18, 21];
 const GLOBE_CAMERA_CENTER: Coordinate = [0, 0];
 const GLOBE_CAMERA_ZOOM_LEVEL = 0;
 const RIPPLE_FRAME_COUNT = 24;
@@ -414,17 +415,22 @@ function toOccurrenceStatus(
 }
 
 function formatOccurrenceStartLabel(startIso: string) {
-  const date = new Date(startIso);
-  if (Number.isNaN(date.getTime())) {
-    return 'Upcoming';
-  }
+  return (
+    formatEventDateTimeInDeviceZone(startIso, {
+      includeDate: true,
+      includeTimeZone: true,
+    }) ?? 'Upcoming'
+  );
+}
 
-  return date.toLocaleString([], {
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    month: 'short',
-  });
+function startOfLocalDay(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0);
+}
+
+function addLocalDays(date: Date, days: number) {
+  const nextDate = new Date(date);
+  nextDate.setDate(nextDate.getDate() + days);
+  return nextDate;
 }
 
 function buildTemplateScheduleSlots(nowDate: Date) {
@@ -432,14 +438,15 @@ function buildTemplateScheduleSlots(nowDate: Date) {
   const horizonMillis = nowMillis + HORIZON_DAYS * 24 * 60 * 60 * 1000;
   const slots: Date[] = [];
 
-  const startOfToday = new Date(nowDate);
-  startOfToday.setHours(0, 0, 0, 0);
+  const startOfTodayUtc = new Date(
+    Date.UTC(nowDate.getUTCFullYear(), nowDate.getUTCMonth(), nowDate.getUTCDate(), 0, 0, 0, 0),
+  );
 
   for (let dayOffset = 0; dayOffset < HORIZON_DAYS; dayOffset += 1) {
-    for (const hour of SCHEDULE_HOURS_LOCAL) {
-      const startAt = new Date(startOfToday);
-      startAt.setDate(startOfToday.getDate() + dayOffset);
-      startAt.setHours(hour, 0, 0, 0);
+    for (const hour of SCHEDULE_HOURS_UTC) {
+      const startAt = new Date(startOfTodayUtc);
+      startAt.setUTCDate(startOfTodayUtc.getUTCDate() + dayOffset);
+      startAt.setUTCHours(hour, 0, 0, 0);
 
       const endAt = new Date(startAt.getTime() + 15 * 60 * 1000);
       if (endAt.getTime() <= nowMillis) {
@@ -580,6 +587,7 @@ function FilterChip({
 export function EventsScreen() {
   const navigation = useNavigation<EventsNavigation>();
   const { width: windowWidth } = useWindowDimensions();
+  const deviceTimeZoneLabel = useMemo(() => getDeviceTimeZoneLabel(), []);
   const mapboxModule = useMemo(() => loadMapboxModule() as MapboxGlobeModule | null, []);
   const MapboxMapView = mapboxModule?.MapView as MapboxComponent | undefined;
   const MapboxCamera = mapboxModule?.Camera as MapboxComponent | undefined;
@@ -598,9 +606,8 @@ export function EventsScreen() {
   const [libraryItems, setLibraryItems] = useState<EventLibraryItem[]>([]);
   const [libraryLoading, setLibraryLoading] = useState(true);
   const [libraryError, setLibraryError] = useState<string | null>(null);
-  const [libraryMode, setLibraryMode] = useState<LibraryMode>('recent');
+  const [timeFilter, setTimeFilter] = useState<EventTimeFilter>('today');
   const [selectedCategory, setSelectedCategory] = useState<CategoryFilter>('All');
-  const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
   const [activeSlideByCategory, setActiveSlideByCategory] = useState<
     Partial<Record<string, number>>
   >({});
@@ -905,18 +912,94 @@ export function EventsScreen() {
     [scheduledNewsEvents, scheduledTemplateEvents],
   );
 
-  const favoriteCount = favoriteIds.filter((id) =>
-    allScheduledEvents.some((item) => item.favoriteKey === id),
-  ).length;
-  const recentCount = allScheduledEvents.length;
+  const timeFilterBoundaries = useMemo(() => {
+    const nowDate = new Date(nowTick);
+    const todayStart = startOfLocalDay(nowDate);
+    const tomorrowStart = addLocalDays(todayStart, 1);
+    const dayAfterTomorrowStart = addLocalDays(todayStart, 2);
+    return {
+      dayAfterTomorrowStart,
+      todayStart,
+      tomorrowStart,
+    };
+  }, [nowTick]);
+
+  const liveFilterCount = useMemo(
+    () => allScheduledEvents.filter((item) => item.status === 'live').length,
+    [allScheduledEvents],
+  );
+
+  const todayFilterCount = useMemo(
+    () =>
+      allScheduledEvents.filter((item) => {
+        const startsAt = new Date(item.startsAt);
+        if (Number.isNaN(startsAt.getTime())) {
+          return false;
+        }
+
+        return (
+          startsAt >= timeFilterBoundaries.todayStart &&
+          startsAt < timeFilterBoundaries.tomorrowStart
+        );
+      }).length,
+    [allScheduledEvents, timeFilterBoundaries.todayStart, timeFilterBoundaries.tomorrowStart],
+  );
+
+  const tomorrowFilterCount = useMemo(
+    () =>
+      allScheduledEvents.filter((item) => {
+        const startsAt = new Date(item.startsAt);
+        if (Number.isNaN(startsAt.getTime())) {
+          return false;
+        }
+
+        return (
+          startsAt >= timeFilterBoundaries.tomorrowStart &&
+          startsAt < timeFilterBoundaries.dayAfterTomorrowStart
+        );
+      }).length,
+    [
+      allScheduledEvents,
+      timeFilterBoundaries.dayAfterTomorrowStart,
+      timeFilterBoundaries.tomorrowStart,
+    ],
+  );
 
   const visibleLibrary = useMemo(() => {
-    if (libraryMode === 'favorites') {
-      return allScheduledEvents.filter((item) => favoriteIds.includes(item.favoriteKey));
+    if (timeFilter === 'live') {
+      return allScheduledEvents.filter((item) => item.status === 'live');
     }
 
-    return allScheduledEvents;
-  }, [allScheduledEvents, favoriteIds, libraryMode]);
+    if (timeFilter === 'today') {
+      return allScheduledEvents.filter((item) => {
+        const startsAt = new Date(item.startsAt);
+        if (Number.isNaN(startsAt.getTime())) {
+          return false;
+        }
+        return (
+          startsAt >= timeFilterBoundaries.todayStart &&
+          startsAt < timeFilterBoundaries.tomorrowStart
+        );
+      });
+    }
+
+    return allScheduledEvents.filter((item) => {
+      const startsAt = new Date(item.startsAt);
+      if (Number.isNaN(startsAt.getTime())) {
+        return false;
+      }
+      return (
+        startsAt >= timeFilterBoundaries.tomorrowStart &&
+        startsAt < timeFilterBoundaries.dayAfterTomorrowStart
+      );
+    });
+  }, [
+    allScheduledEvents,
+    timeFilter,
+    timeFilterBoundaries.dayAfterTomorrowStart,
+    timeFilterBoundaries.todayStart,
+    timeFilterBoundaries.tomorrowStart,
+  ]);
 
   const availableCategories = useMemo(() => {
     return Array.from(new Set(visibleLibrary.map((item) => normalizeCategory(item.category)))).sort(
@@ -1184,16 +1267,6 @@ export function EventsScreen() {
     return byPointId;
   }, [allScheduledEvents, nowTick]);
 
-  const toggleFavorite = (favoriteKey: string) => {
-    setFavoriteIds((current) => {
-      if (current.includes(favoriteKey)) {
-        return current.filter((id) => id !== favoriteKey);
-      }
-
-      return [...current, favoriteKey];
-    });
-  };
-
   const onOpenOccurrence = useCallback(
     (occurrence: ScheduledEventOccurrence) => {
       const params: EventsStackParamList['EventRoom'] = {
@@ -1437,25 +1510,6 @@ export function EventsScreen() {
     ],
   );
 
-  const toggleSubscribeAll = async () => {
-    if (!userId) {
-      setError('Sign in to subscribe for event notifications.');
-      return;
-    }
-
-    setUpdatingSubscriptionKey('all');
-    try {
-      const nextValue = !subscribedAll;
-      await setAllEventNotifications(userId, nextValue);
-      setSubscribedAll(nextValue);
-      setError(null);
-    } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : 'Failed to update subscriptions.');
-    } finally {
-      setUpdatingSubscriptionKey(null);
-    }
-  };
-
   const toggleOccurrenceSubscription = async (occurrenceKey: string) => {
     if (!userId) {
       setError('Sign in to subscribe for event notifications.');
@@ -1529,6 +1583,9 @@ export function EventsScreen() {
         </Typography>
         <Typography allowFontScaling={false} color={colors.textSecondary}>
           Join active circles and upcoming events from around the world.
+        </Typography>
+        <Typography allowFontScaling={false} color={colors.textCaption} variant="Caption">
+          Times shown in {deviceTimeZoneLabel}
         </Typography>
       </View>
 
@@ -1611,26 +1668,22 @@ export function EventsScreen() {
 
       <View style={styles.topFilterRow}>
         <FilterChip
-          active={libraryMode === 'favorites'}
+          active={timeFilter === 'live'}
           fill
-          label={`Favorites (${favoriteCount})`}
-          onPress={() =>
-            setLibraryMode((current) => (current === 'favorites' ? null : 'favorites'))
-          }
+          label={`Live (${liveFilterCount})`}
+          onPress={() => setTimeFilter('live')}
         />
         <FilterChip
-          active={libraryMode === 'recent'}
+          active={timeFilter === 'today'}
           fill
-          label={`Recent (${recentCount})`}
-          onPress={() => setLibraryMode((current) => (current === 'recent' ? null : 'recent'))}
+          label={`Today (${todayFilterCount})`}
+          onPress={() => setTimeFilter('today')}
         />
         <FilterChip
-          active={subscribedAll}
-          icon={subscribedAll ? 'bell-ring' : 'bell-outline'}
-          label="All alerts"
-          onPress={() => {
-            void toggleSubscribeAll();
-          }}
+          active={timeFilter === 'tomorrow'}
+          fill
+          label={`Tomorrow (${tomorrowFilterCount})`}
+          onPress={() => setTimeFilter('tomorrow')}
         />
       </View>
 
@@ -1724,7 +1777,6 @@ export function EventsScreen() {
                 showsHorizontalScrollIndicator={false}
               >
                 {section.items.map((item) => {
-                  const isFavorite = favoriteIds.includes(item.favoriteKey);
                   const isSubscribed = subscribedAll || subscribedKeys.includes(item.occurrenceKey);
                   const isUpdatingBell = updatingSubscriptionKey === item.occurrenceKey;
                   const status = statusLabel(item.status);
@@ -1768,26 +1820,6 @@ export function EventsScreen() {
                           <View style={styles.cardActionRow}>
                             <Pressable
                               accessibilityLabel={
-                                isFavorite ? 'Remove from favorites' : 'Add to favorites'
-                              }
-                              onPress={(event) => {
-                                event.stopPropagation();
-                                toggleFavorite(item.favoriteKey);
-                              }}
-                              style={({ pressed }) => [
-                                styles.actionButton,
-                                isFavorite && styles.favoriteButtonActive,
-                                pressed && styles.favoritePressed,
-                              ]}
-                            >
-                              <MaterialCommunityIcons
-                                color={isFavorite ? colors.textOnSky : colors.textSecondary}
-                                name={isFavorite ? 'heart' : 'heart-outline'}
-                                size={18}
-                              />
-                            </Pressable>
-                            <Pressable
-                              accessibilityLabel={
                                 isSubscribed ? 'Disable event alerts' : 'Enable event alerts'
                               }
                               onPress={(event) => {
@@ -1797,7 +1829,7 @@ export function EventsScreen() {
                               style={({ pressed }) => [
                                 styles.actionButton,
                                 isSubscribed && styles.subscriptionButtonActive,
-                                pressed && styles.favoritePressed,
+                                pressed && styles.actionButtonPressed,
                               ]}
                             >
                               <MaterialCommunityIcons
@@ -1998,11 +2030,7 @@ const styles = StyleSheet.create({
   fullscreenTriggerPressed: {
     transform: [{ scale: 0.96 }],
   },
-  favoriteButtonActive: {
-    backgroundColor: figmaV2Reference.buttons.sky.from,
-    borderColor: figmaV2Reference.buttons.sky.border,
-  },
-  favoritePressed: {
+  actionButtonPressed: {
     transform: [{ scale: 0.97 }],
   },
   feedCard: {
