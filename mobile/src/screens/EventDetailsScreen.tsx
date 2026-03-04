@@ -11,7 +11,13 @@ import { Button } from '../components/Button';
 import { Screen } from '../components/Screen';
 import { SurfaceCard } from '../components/SurfaceCard';
 import { Typography } from '../components/Typography';
-import { fetchEventById, fetchEvents, type AppEvent } from '../lib/api/data';
+import {
+  fetchEventById,
+  fetchEventLibraryItemById,
+  fetchEvents,
+  type AppEvent,
+  type EventLibraryItem,
+} from '../lib/api/data';
 import { homeCardGap, profileRowGap, sectionGap } from '../theme/layout';
 import { colors } from '../theme/tokens';
 
@@ -48,6 +54,7 @@ export function EventDetailsScreen() {
   const navigation = useNavigation<EventsNavigation>();
   const route = useRoute<EventDetailsRoute>();
   const [event, setEvent] = useState<AppEvent | null>(null);
+  const [eventTemplate, setEventTemplate] = useState<EventLibraryItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -56,24 +63,41 @@ export function EventDetailsScreen() {
     setLoading(true);
 
     try {
+      const eventTemplateId = route.params?.eventTemplateId;
+      if (eventTemplateId) {
+        const selectedTemplate = await fetchEventLibraryItemById(eventTemplateId);
+        setEventTemplate(selectedTemplate);
+        setEvent(null);
+
+        if (!selectedTemplate) {
+          setError('Event template not found.');
+        } else {
+          setError(null);
+        }
+
+        return;
+      }
+
       const eventId = route.params?.eventId;
       const selectedEvent = eventId ? await fetchEventById(eventId) : null;
 
       if (selectedEvent) {
         setEvent(selectedEvent);
+        setEventTemplate(null);
         setError(null);
         return;
       }
 
       const fallbackEvents = await fetchEvents(1);
       setEvent(fallbackEvents[0] ?? null);
+      setEventTemplate(null);
       setError(null);
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : 'Failed to load event details.');
     } finally {
       setLoading(false);
     }
-  }, [route.params?.eventId]);
+  }, [route.params?.eventId, route.params?.eventTemplateId]);
 
   const refreshEvent = useCallback(async () => {
     setRefreshing(true);
@@ -89,12 +113,33 @@ export function EventDetailsScreen() {
   }, [loadEvent]);
 
   return (
-    <Screen
-      ambientSource={ambientAnimation}
-      contentContainerStyle={styles.content}
-      variant="events"
-    >
+    <Screen ambientSource={ambientAnimation} contentContainerStyle={styles.content} variant="events">
       {loading ? <ActivityIndicator color={colors.accentMintStart} /> : null}
+
+      {eventTemplate ? (
+        <>
+          <Typography variant="H1" weight="bold">
+            {eventTemplate.title}
+          </Typography>
+          <Typography color={colors.textSecondary}>{eventTemplate.body}</Typography>
+
+          <SurfaceCard radius="xl" style={styles.section} variant="eventsPanel">
+            <View style={styles.row}>
+              <StatCard label="Category" value={eventTemplate.category ?? 'Manifestation'} />
+              <StatCard label="Duration" value={`${eventTemplate.durationMinutes} min`} />
+            </View>
+            <StatCard label="Energy" value={`${eventTemplate.startsCount} starts`} />
+            <Button loading={refreshing} onPress={() => void refreshEvent()} title="Refresh" variant="secondary" />
+          </SurfaceCard>
+
+          <SurfaceCard radius="sm" style={styles.section} variant="homeAlert">
+            <Typography variant="H2" weight="bold">
+              Manifestation script
+            </Typography>
+            <Typography color={colors.textSecondary}>{eventTemplate.script}</Typography>
+          </SurfaceCard>
+        </>
+      ) : null}
 
       {event ? (
         <>
@@ -102,8 +147,7 @@ export function EventDetailsScreen() {
             {event.title}
           </Typography>
           <Typography color={colors.textSecondary}>
-            {event.description?.trim() ||
-              'Join this collective event and contribute your intention.'}
+            {event.description?.trim() || 'Join this collective event and contribute your intention.'}
           </Typography>
 
           <SurfaceCard radius="xl" style={styles.section} variant="eventsPanel">
@@ -113,10 +157,7 @@ export function EventDetailsScreen() {
             </View>
             <View style={styles.row}>
               <StatCard label="Duration" value={`${event.durationMinutes} min`} />
-              <StatCard
-                label="Region"
-                value={event.region?.trim() || event.countryCode?.trim() || 'Global'}
-              />
+              <StatCard label="Region" value={event.region?.trim() || event.countryCode?.trim() || 'Global'} />
             </View>
 
             <Button
@@ -129,12 +170,7 @@ export function EventDetailsScreen() {
               title={event.status === 'live' ? 'Join live room' : 'Open room'}
               variant="gold"
             />
-            <Button
-              loading={refreshing}
-              onPress={() => void refreshEvent()}
-              title="Refresh"
-              variant="secondary"
-            />
+            <Button loading={refreshing} onPress={() => void refreshEvent()} title="Refresh" variant="secondary" />
           </SurfaceCard>
 
           <SurfaceCard radius="sm" style={styles.section} variant="homeAlert">
@@ -159,7 +195,7 @@ export function EventDetailsScreen() {
         </>
       ) : null}
 
-      {!loading && !event ? (
+      {!loading && !event && !eventTemplate ? (
         <SurfaceCard radius="sm" style={styles.section} variant="homeAlert">
           <Typography variant="H2" weight="bold">
             No event selected
@@ -167,12 +203,7 @@ export function EventDetailsScreen() {
           <Typography color={colors.textSecondary}>
             Create or schedule an event in Supabase, then return to this screen.
           </Typography>
-          <Button
-            loading={refreshing}
-            onPress={() => void refreshEvent()}
-            title="Try again"
-            variant="secondary"
-          />
+          <Button loading={refreshing} onPress={() => void refreshEvent()} title="Try again" variant="secondary" />
         </SurfaceCard>
       ) : null}
 

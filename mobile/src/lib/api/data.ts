@@ -1,3 +1,4 @@
+import { EVENT_LIBRARY_CATALOG, type EventLibrarySeedItem } from '../catalog/eventLibraryCatalog';
 import { supabase } from '../supabase';
 
 export type EventStatus = 'live' | 'scheduled' | 'completed' | 'cancelled';
@@ -40,6 +41,16 @@ interface PrayerLibraryScriptRow {
   id: string;
   language: string;
   script_text: string;
+}
+
+interface EventLibraryRow {
+  body: string;
+  category: string | null;
+  duration_minutes: number | null;
+  id: string;
+  script_text: string;
+  starts_count: number | null;
+  title: string;
 }
 
 interface ProfileRow {
@@ -125,6 +136,17 @@ export interface PrayerLibraryItem {
   title: string;
 }
 
+export interface EventLibraryItem {
+  body: string;
+  category: string | null;
+  durationMinutes: number;
+  id: string;
+  script: string;
+  startsCount: number;
+  subtitle: string;
+  title: string;
+}
+
 export interface UserPreferences {
   highContrastMode: boolean;
   preferredAmbient: string;
@@ -198,6 +220,45 @@ function formatDurationMinutes(minutes: number) {
     return '1 min';
   }
   return `${minutes} min`;
+}
+
+function toSlug(value: string) {
+  return value
+    .normalize('NFKD')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+function mapSeedEventLibraryItem(item: EventLibrarySeedItem): EventLibraryItem {
+  const duration = item.durationMinutes;
+  return {
+    body: item.body,
+    category: item.category,
+    durationMinutes: duration,
+    id: item.id?.trim() || `seed-${toSlug(item.title)}`,
+    script: item.script,
+    startsCount: 0,
+    subtitle: `${item.category} - ${formatDurationMinutes(duration)} - Manifestation room`,
+    title: item.title,
+  };
+}
+
+function mapEventLibraryRow(row: EventLibraryRow): EventLibraryItem {
+  const duration = row.duration_minutes ?? 10;
+  const starts = row.starts_count ?? 0;
+  const category = row.category?.trim() || null;
+
+  return {
+    body: row.body,
+    category,
+    durationMinutes: duration,
+    id: row.id,
+    script: row.script_text,
+    startsCount: starts,
+    subtitle: `${category ?? 'Manifestation'} - ${formatDurationMinutes(duration)} - ${starts} starts`,
+    title: row.title,
+  };
 }
 
 function minutesFromSeconds(totalSeconds: number) {
@@ -435,6 +496,89 @@ export async function fetchPrayerLibraryItems(): Promise<PrayerLibraryItem[]> {
       title: row.title,
     };
   });
+}
+
+function getSeedEventLibraryItems(): EventLibraryItem[] {
+  return EVENT_LIBRARY_CATALOG.map(mapSeedEventLibraryItem);
+}
+
+export async function fetchEventLibraryItems(limit = 80): Promise<EventLibraryItem[]> {
+  const { data, error } = await supabase
+    .from('event_library_items')
+    .select('id,title,body,script_text,category,duration_minutes,starts_count')
+    .eq('is_public', true)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    const message = toSupabaseErrorMessage(error, 'Failed to load event library.');
+    if (message.toLowerCase().includes('event_library_items')) {
+      return getSeedEventLibraryItems();
+    }
+    throw new Error(message);
+  }
+
+  const rows = (data ?? []) as EventLibraryRow[];
+  if (rows.length === 0) {
+    return getSeedEventLibraryItems();
+  }
+
+  return rows.map(mapEventLibraryRow);
+}
+
+export async function fetchEventLibraryItemById(eventTemplateId: string): Promise<EventLibraryItem | null> {
+  const normalizedId = eventTemplateId.trim();
+  if (!normalizedId) {
+    return null;
+  }
+
+  const seedItem = getSeedEventLibraryItems().find((item) => item.id === normalizedId);
+
+  const { data, error } = await supabase
+    .from('event_library_items')
+    .select('id,title,body,script_text,category,duration_minutes,starts_count')
+    .eq('id', normalizedId)
+    .maybeSingle();
+
+  if (error) {
+    const message = toSupabaseErrorMessage(error, 'Failed to load event template.');
+    if (message.toLowerCase().includes('event_library_items')) {
+      return seedItem ?? null;
+    }
+    throw new Error(message);
+  }
+
+  if (!data) {
+    return seedItem ?? null;
+  }
+
+  return mapEventLibraryRow(data as EventLibraryRow);
+}
+
+export async function incrementEventLibraryStart(itemId: string) {
+  if (itemId.startsWith('seed-') || EVENT_LIBRARY_CATALOG.some((item) => item.id === itemId)) {
+    return;
+  }
+
+  const { data, error } = await supabase
+    .from('event_library_items')
+    .select('starts_count')
+    .eq('id', itemId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(toSupabaseErrorMessage(error, 'Failed to update event usage.'));
+  }
+
+  const nextStarts = ((data as { starts_count?: number } | null)?.starts_count ?? 0) + 1;
+  const { error: updateError } = await supabase
+    .from('event_library_items')
+    .update({ starts_count: nextStarts })
+    .eq('id', itemId);
+
+  if (updateError) {
+    throw new Error(toSupabaseErrorMessage(updateError, 'Failed to update event usage.'));
+  }
 }
 
 export async function fetchPrayerCircleMembers(): Promise<PrayerCircleMember[]> {
