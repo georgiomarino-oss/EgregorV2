@@ -1,4 +1,11 @@
-﻿interface MapboxModuleLike {
+import { NativeModules } from 'react-native';
+
+interface MapboxModuleLike {
+  Camera?: unknown;
+  CircleLayer?: unknown;
+  MapView?: unknown;
+  ShapeSource?: unknown;
+  StyleURL?: Record<string, string>;
   setAccessToken?: (token: string) => void;
 }
 
@@ -11,6 +18,13 @@ export function loadMapboxModule() {
 
   if (cachedMapboxModule) {
     return cachedMapboxModule;
+  }
+
+  // Avoid requiring @rnmapbox/maps unless the native bridge is actually present.
+  // Expo Go and non-rebuilt dev clients won't have RNMBXModule and the package throws on import.
+  if (!NativeModules?.RNMBXModule) {
+    cachedMapboxModule = false;
+    return null;
   }
 
   try {

@@ -213,6 +213,12 @@ export interface EventRoomSnapshot {
   joinedCount: number;
 }
 
+export interface ActiveEventUserPresence {
+  eventId: string;
+  lastSeenAt: string;
+  userId: string;
+}
+
 export interface PrayerCircleMember {
   displayName: string;
   isOwner: boolean;
@@ -426,6 +432,29 @@ async function fetchParticipantCountsByEvent(
   return counts;
 }
 
+export async function fetchActiveEventUsers(
+  activeWindowMinutes = 15,
+): Promise<ActiveEventUserPresence[]> {
+  const cutoff = new Date(Date.now() - activeWindowMinutes * 60 * 1000);
+  const { data, error } = await supabase
+    .from('event_participants')
+    .select('event_id,user_id,last_seen_at,is_active')
+    .eq('is_active', true)
+    .gte('last_seen_at', toIso(cutoff))
+    .order('last_seen_at', { ascending: false })
+    .limit(500);
+
+  if (error) {
+    throw new Error(toSupabaseErrorMessage(error, 'Failed to load active user presence.'));
+  }
+
+  return ((data ?? []) as EventParticipantRow[]).map((row) => ({
+    eventId: row.event_id,
+    lastSeenAt: row.last_seen_at,
+    userId: row.user_id,
+  }));
+}
+
 export async function fetchEvents(limit = 8): Promise<AppEvent[]> {
   const { data, error } = await supabase
     .from('events')
@@ -586,7 +615,9 @@ export async function fetchEventLibraryItems(limit = 80): Promise<EventLibraryIt
   return rows.map(mapEventLibraryRow);
 }
 
-export async function fetchEventLibraryItemById(eventTemplateId: string): Promise<EventLibraryItem | null> {
+export async function fetchEventLibraryItemById(
+  eventTemplateId: string,
+): Promise<EventLibraryItem | null> {
   const normalizedId = eventTemplateId.trim();
   if (!normalizedId) {
     return null;
