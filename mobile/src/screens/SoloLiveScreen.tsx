@@ -36,7 +36,7 @@ type SoloNavigation = NativeStackNavigationProp<SoloStackParamList, 'SoloLive'>;
 const VOICE_OPTIONS = ['Oliver', 'Amaya', 'Rainbird', 'Dominic'] as const;
 const MINUTE_OPTIONS = [3, 5, 10] as const;
 const DEFAULT_MINUTE_OPTION: (typeof MINUTE_OPTIONS)[number] = 10;
-const DEFAULT_ELEVENLABS_VOICE_ID = 'jfIS2w2yJi0grJZPyEsk';
+const DEFAULT_ELEVENLABS_VOICE_ID = 'V904i8ujLitGpMyoTznT';
 const MAX_SCRIPT_PARAGRAPH_CHARS = 96;
 const MAX_TIMED_WORDS_PER_PARAGRAPH = 14;
 const MAX_SCRIPT_LINES = 4;
@@ -294,7 +294,7 @@ export function SoloLiveScreen() {
   const initialSelectedMinutes = resolveMinuteOption(routeDurationMinutes);
   const hasRouteDurationMinutes = routeDurationMinutes === initialSelectedMinutes;
 
-  const [selectedVoice, setSelectedVoice] = useState<(typeof VOICE_OPTIONS)[number]>('Oliver');
+  const [selectedVoice, setSelectedVoice] = useState<(typeof VOICE_OPTIONS)[number]>('Dominic');
   const [selectedMinutes, setSelectedMinutes] =
     useState<(typeof MINUTE_OPTIONS)[number]>(initialSelectedMinutes);
   const [isVoiceMenuOpen, setIsVoiceMenuOpen] = useState(false);

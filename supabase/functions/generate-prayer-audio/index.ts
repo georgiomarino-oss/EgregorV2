@@ -64,7 +64,7 @@ interface PrayerAudioArtifactRow {
   word_timings: unknown;
 }
 
-const DEFAULT_VOICE_ID = "jfIS2w2yJi0grJZPyEsk";
+const DEFAULT_VOICE_ID = "V904i8ujLitGpMyoTznT";
 const DEFAULT_MODEL_ID = "eleven_multilingual_v2";
 const DEFAULT_AUDIO_BUCKET = "prayer-audio";
 const DEFAULT_SIGNED_URL_TTL_SECONDS = 3600;

@@ -6,10 +6,10 @@ import path from "node:path";
 import process from "node:process";
 
 const DEFAULT_VOICE_MAP = [
+  { id: "V904i8ujLitGpMyoTznT", label: "Dominic" },
   { id: "jfIS2w2yJi0grJZPyEsk", label: "Oliver" },
   { id: "BFvr34n3gOoz0BAf9Rwn", label: "Amaya" },
   { id: "bgU7lBMo69PNEOWHFqxM", label: "Rainbird" },
-  { id: "V904i8ujLitGpMyoTznT", label: "Dominic" },
 ];
 const PAGE_SIZE = 500;
 

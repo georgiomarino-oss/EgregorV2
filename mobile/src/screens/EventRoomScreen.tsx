@@ -34,7 +34,7 @@ type EventRoomRoute = RouteProp<EventsStackParamList, 'EventRoom'>;
 type EventNavigation = NativeStackNavigationProp<EventsStackParamList, 'EventRoom'>;
 
 const VOICE_OPTIONS = ['Oliver', 'Amaya', 'Rainbird', 'Dominic'] as const;
-const DEFAULT_ELEVENLABS_VOICE_ID = 'jfIS2w2yJi0grJZPyEsk';
+const DEFAULT_ELEVENLABS_VOICE_ID = 'V904i8ujLitGpMyoTznT';
 const MAX_SCRIPT_PARAGRAPH_CHARS = 96;
 const MAX_TIMED_WORDS_PER_PARAGRAPH = 14;
 const MAX_SCRIPT_LINES = 4;
@@ -318,7 +318,7 @@ export function EventRoomScreen() {
   const hasInitialEventData = Boolean(initialEventScript || cachedTemplate || cachedEvent);
   const allowAudioGeneration = route.params?.eventSource === 'news';
 
-  const [selectedVoice, setSelectedVoice] = useState<(typeof VOICE_OPTIONS)[number]>('Oliver');
+  const [selectedVoice, setSelectedVoice] = useState<(typeof VOICE_OPTIONS)[number]>('Dominic');
   const [isVoiceMenuOpen, setIsVoiceMenuOpen] = useState(false);
   const [isInviteOpen, setIsInviteOpen] = useState(false);
   const [isMuted, setIsMuted] = useState(false);

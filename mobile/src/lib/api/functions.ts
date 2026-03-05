@@ -59,7 +59,7 @@ export interface GenerateNewsDrivenEventsOutput {
   pulled?: number;
 }
 
-const DEFAULT_ELEVENLABS_VOICE_ID = 'jfIS2w2yJi0grJZPyEsk';
+const DEFAULT_ELEVENLABS_VOICE_ID = 'V904i8ujLitGpMyoTznT';
 const PRAYER_AUDIO_CACHE_TTL_MS = 10 * 60 * 1000;
 const PRAYER_AUDIO_CACHE_MAX_ENTRIES = 24;
 
