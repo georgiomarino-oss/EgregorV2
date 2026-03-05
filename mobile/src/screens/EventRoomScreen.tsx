@@ -316,7 +316,7 @@ export function EventRoomScreen() {
   const initialEventStartAt =
     route.params?.scheduledStartAt?.trim() || cachedEvent?.startsAt || new Date().toISOString();
   const hasInitialEventData = Boolean(initialEventScript || cachedTemplate || cachedEvent);
-  const allowAudioGeneration = route.params?.eventSource === 'news';
+  const allowAudioGeneration = route.params?.allowAudioGeneration === true;
 
   const [selectedVoice, setSelectedVoice] = useState<(typeof VOICE_OPTIONS)[number]>('Dominic');
   const [isVoiceMenuOpen, setIsVoiceMenuOpen] = useState(false);

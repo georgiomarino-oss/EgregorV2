@@ -22,14 +22,26 @@ import {
   type EventLibraryItem,
 } from '../lib/api/data';
 import { formatEventDateTimeInDeviceZone } from '../lib/dateTime';
+import { supabase } from '../lib/supabase';
 import { homeCardGap, profileRowGap, sectionGap } from '../theme/layout';
 import { colors } from '../theme/tokens';
 
 type EventsNavigation = NativeStackNavigationProp<EventsStackParamList, 'EventDetails'>;
 type EventDetailsRoute = RouteProp<EventsStackParamList, 'EventDetails'>;
 
+function isEventLiveNow(event: Pick<AppEvent, 'durationMinutes' | 'startsAt'>) {
+  const startsAtMillis = new Date(event.startsAt).getTime();
+  if (!Number.isFinite(startsAtMillis)) {
+    return false;
+  }
+
+  const endsAtMillis = startsAtMillis + Math.max(1, event.durationMinutes) * 60 * 1000;
+  const nowMillis = Date.now();
+  return nowMillis >= startsAtMillis && nowMillis < endsAtMillis;
+}
+
 function formatEventStartLabel(event: AppEvent) {
-  if (event.status === 'live') {
+  if (isEventLiveNow(event)) {
     return 'Live now';
   }
 
@@ -128,6 +140,32 @@ export function EventDetailsScreen() {
     void loadEvent();
   }, [loadEvent]);
 
+  useEffect(() => {
+    const interval = setInterval(() => {
+      void loadEvent();
+    }, 15000);
+
+    return () => {
+      clearInterval(interval);
+    };
+  }, [loadEvent]);
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('event-details-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'events' }, () => {
+        void loadEvent();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'event_participants' }, () => {
+        void loadEvent();
+      })
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [loadEvent]);
+
   return (
     <Screen
       ambientSource={ambientAnimation}
@@ -196,7 +234,7 @@ export function EventDetailsScreen() {
                   eventTitle: event.title,
                 })
               }
-              title={event.status === 'live' ? 'Join live room' : 'Open room'}
+              title={isEventLiveNow(event) ? 'Join live room' : 'Open room'}
               variant="gold"
             />
             <Button

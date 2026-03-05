@@ -27,8 +27,8 @@ import {
   fetchEventLibraryItems,
   fetchEventNotificationState,
   fetchEvents,
-  fetchNewsDrivenEvents,
   fetchActiveEventUsers,
+  fetchNewsDrivenEvents,
   getCachedActiveEventUsers,
   getCachedEventLibraryItems,
   getCachedEventNotificationState,
@@ -41,7 +41,7 @@ import {
   type EventLibraryItem,
   type NewsDrivenEventItem,
 } from '../lib/api/data';
-import { generateNewsDrivenEvents, prefetchPrayerAudio } from '../lib/api/functions';
+import { prefetchPrayerAudio } from '../lib/api/functions';
 import { formatEventDateTimeInDeviceZone, getDeviceTimeZoneLabel } from '../lib/dateTime';
 import { clientEnv } from '../lib/env';
 import { supabase } from '../lib/supabase';
@@ -378,16 +378,22 @@ function easeOutCubic(value: number) {
 }
 
 function formatEventSubtitle(event: AppEvent) {
-  if (event.status === 'live') {
-    return `${event.participants} active now`;
-  }
-
-  const startsAt = new Date(event.startsAt);
-  if (Number.isNaN(startsAt.getTime())) {
+  const startsAtMillis = new Date(event.startsAt).getTime();
+  if (!Number.isFinite(startsAtMillis)) {
     return event.subtitle?.trim() || 'Scheduled event';
   }
 
-  const hoursUntil = Math.max(0, Math.floor((startsAt.getTime() - Date.now()) / 3600000));
+  const nowMillis = Date.now();
+  const endsAtMillis = startsAtMillis + Math.max(1, event.durationMinutes) * 60 * 1000;
+  if (nowMillis >= startsAtMillis && nowMillis < endsAtMillis) {
+    return `${event.participants} active now`;
+  }
+
+  if (nowMillis >= endsAtMillis) {
+    return 'Ended';
+  }
+
+  const hoursUntil = Math.max(0, Math.floor((startsAtMillis - nowMillis) / 3600000));
   if (hoursUntil < 1) {
     return 'Starting soon';
   }
@@ -404,9 +410,16 @@ function toOccurrenceStatus(
   startIso: string,
   durationMinutes: number,
   nowMillis: number,
-): EventStatusChip {
+): EventStatusChip | null {
   const startMillis = new Date(startIso).getTime();
-  const endMillis = startMillis + durationMinutes * 60 * 1000;
+  if (!Number.isFinite(startMillis)) {
+    return null;
+  }
+
+  const endMillis = startMillis + Math.max(1, durationMinutes) * 60 * 1000;
+  if (nowMillis >= endMillis) {
+    return null;
+  }
 
   if (nowMillis >= startMillis && nowMillis < endMillis) {
     return 'live';
@@ -441,6 +454,7 @@ function addLocalDays(date: Date, days: number) {
 function buildTemplateScheduleSlots(nowDate: Date) {
   const nowMillis = nowDate.getTime();
   const horizonMillis = nowMillis + HORIZON_DAYS * 24 * 60 * 60 * 1000;
+  const lookbackMillis = 2 * 60 * 60 * 1000;
   const slots: Date[] = [];
 
   const startOfTodayUtc = new Date(
@@ -453,8 +467,7 @@ function buildTemplateScheduleSlots(nowDate: Date) {
       startAt.setUTCDate(startOfTodayUtc.getUTCDate() + dayOffset);
       startAt.setUTCHours(hour, 0, 0, 0);
 
-      const endAt = new Date(startAt.getTime() + 15 * 60 * 1000);
-      if (endAt.getTime() <= nowMillis) {
+      if (startAt.getTime() < nowMillis - lookbackMillis) {
         continue;
       }
 
@@ -481,14 +494,18 @@ function buildScheduledTemplateEvents(
   const sortedItems = items.slice().sort((left, right) => left.title.localeCompare(right.title));
   const maxCount = Math.min(sortedItems.length, slots.length);
   const nowMillis = nowDate.getTime();
+  const occurrences: ScheduledEventOccurrence[] = [];
 
-  return Array.from({ length: maxCount }).map((_, index) => {
+  for (let index = 0; index < maxCount; index += 1) {
     const item = sortedItems[index];
     const slot = slots[index];
     const startsAt = (slot ?? new Date(nowDate.getTime() + index * 60 * 60 * 1000)).toISOString();
     const status = toOccurrenceStatus(startsAt, item?.durationMinutes ?? 10, nowMillis);
+    if (!status) {
+      continue;
+    }
 
-    return {
+    occurrences.push({
       body: item?.body ?? '',
       category: normalizeCategory(item?.category),
       durationMinutes: item?.durationMinutes ?? 10,
@@ -500,8 +517,10 @@ function buildScheduledTemplateEvents(
       startsCount: item?.startsCount ?? 0,
       status,
       title: item?.title ?? 'Manifestation Event',
-    } satisfies ScheduledEventOccurrence;
-  });
+    });
+  }
+
+  return occurrences;
 }
 
 function buildScheduledNewsEvents(
@@ -510,35 +529,48 @@ function buildScheduledNewsEvents(
 ): ScheduledEventOccurrence[] {
   const nowMillis = nowDate.getTime();
   const horizonMillis = nowMillis + HORIZON_DAYS * 24 * 60 * 60 * 1000;
+  const occurrences: ScheduledEventOccurrence[] = [];
 
-  return items
-    .filter((item) => Boolean(item.countryCode || item.locationHint))
-    .filter((item) => {
-      const startMillis = new Date(item.startsAt).getTime();
-      if (!Number.isFinite(startMillis)) {
-        return false;
-      }
-      const endMillis = startMillis + item.durationMinutes * 60 * 1000;
-      return endMillis > nowMillis && startMillis <= horizonMillis;
-    })
-    .map((item) => {
-      return {
-        body: item.summary,
-        category: `News - ${normalizeCategory(item.category)}`,
-        countryCode: item.countryCode,
-        durationMinutes: item.durationMinutes,
-        favoriteKey: item.id,
-        locationHint: item.locationHint,
-        occurrenceKey: `news:${item.id}:${item.startsAt}`,
-        script: item.script,
-        source: 'news',
-        startsAt: item.startsAt,
-        startsCount: 0,
-        status: toOccurrenceStatus(item.startsAt, item.durationMinutes, nowMillis),
-        title: item.title,
-      } satisfies ScheduledEventOccurrence;
-    })
-    .sort((left, right) => new Date(left.startsAt).getTime() - new Date(right.startsAt).getTime());
+  for (const item of items) {
+    if (!item.countryCode && !item.locationHint) {
+      continue;
+    }
+
+    const startMillis = new Date(item.startsAt).getTime();
+    if (!Number.isFinite(startMillis)) {
+      continue;
+    }
+
+    const endMillis = startMillis + item.durationMinutes * 60 * 1000;
+    if (endMillis <= nowMillis || startMillis > horizonMillis) {
+      continue;
+    }
+
+    const status = toOccurrenceStatus(item.startsAt, item.durationMinutes, nowMillis);
+    if (!status) {
+      continue;
+    }
+
+    occurrences.push({
+      body: item.summary,
+      category: `News - ${normalizeCategory(item.category)}`,
+      countryCode: item.countryCode,
+      durationMinutes: item.durationMinutes,
+      favoriteKey: item.id,
+      locationHint: item.locationHint,
+      occurrenceKey: `news:${item.id}:${item.startsAt}`,
+      script: item.script,
+      source: 'news',
+      startsAt: item.startsAt,
+      startsCount: 0,
+      status,
+      title: item.title,
+    });
+  }
+
+  return occurrences.sort(
+    (left, right) => new Date(left.startsAt).getTime() - new Date(right.startsAt).getTime(),
+  );
 }
 
 function FilterChip({
@@ -689,30 +721,14 @@ export function EventsScreen() {
     }
   }, []);
 
-  const syncNewsEvents = useCallback(async () => {
+  const loadNewsEvents = useCallback(async () => {
     try {
-      await generateNewsDrivenEvents();
       const nextNewsItems = await fetchNewsDrivenEvents(80);
       setNewsItems(nextNewsItems);
       setNewsSyncError(null);
     } catch {
-      try {
-        const fallbackNewsItems = await fetchNewsDrivenEvents(80);
-        setNewsItems(fallbackNewsItems);
-        if (fallbackNewsItems.length === 0) {
-          setNewsSyncError(
-            'News-driven events are unavailable right now. Check Supabase function secrets and deployment.',
-          );
-        } else {
-          setNewsSyncError(null);
-        }
-      } catch {
-        setNewsItems([]);
-        setNewsSyncError(
-          'Could not load news-driven events. Check function deployment and table access.',
-        );
-        // Ignore secondary failure.
-      }
+      setNewsItems([]);
+      setNewsSyncError('Could not load news-driven events.');
     }
   }, []);
 
@@ -745,9 +761,9 @@ export function EventsScreen() {
   useEffect(() => {
     void loadEvents();
     void loadLibrary();
-    void syncNewsEvents();
+    void loadNewsEvents();
     void loadActivePresence();
-  }, [loadActivePresence, loadEvents, loadLibrary, syncNewsEvents]);
+  }, [loadActivePresence, loadEvents, loadLibrary, loadNewsEvents]);
 
   useEffect(() => {
     let active = true;
@@ -775,7 +791,7 @@ export function EventsScreen() {
   useEffect(() => {
     const interval = setInterval(() => {
       setNowTick(Date.now());
-    }, 30000);
+    }, 5000);
 
     return () => {
       clearInterval(interval);
@@ -783,8 +799,36 @@ export function EventsScreen() {
   }, []);
 
   useEffect(() => {
-    void loadActivePresence();
-  }, [loadActivePresence, nowTick]);
+    const interval = setInterval(() => {
+      void loadEvents();
+      void loadNewsEvents();
+      void loadActivePresence();
+    }, 15000);
+
+    return () => {
+      clearInterval(interval);
+    };
+  }, [loadActivePresence, loadEvents, loadNewsEvents]);
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('events-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'events' }, () => {
+        void loadEvents();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'news_driven_events' }, () => {
+        void loadNewsEvents();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'event_participants' }, () => {
+        void loadActivePresence();
+        void loadEvents();
+      })
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [loadActivePresence, loadEvents, loadNewsEvents]);
 
   useEffect(() => {
     if (!mapboxReady || !mapboxModule?.setAccessToken || !clientEnv.mapboxToken) {
@@ -919,7 +963,21 @@ export function EventsScreen() {
     };
   }, [isGlobeInteracting, isGlobeMapLoaded, mapboxReady]);
 
-  const visibleEvents = useMemo(() => events.slice(0, 2), [events]);
+  const visibleEvents = useMemo(
+    () =>
+      events
+        .filter((event) => {
+          const startsAtMillis = new Date(event.startsAt).getTime();
+          if (!Number.isFinite(startsAtMillis)) {
+            return false;
+          }
+
+          const endsAtMillis = startsAtMillis + Math.max(1, event.durationMinutes) * 60 * 1000;
+          return endsAtMillis > nowTick;
+        })
+        .slice(0, 2),
+    [events, nowTick],
+  );
 
   const scheduledTemplateEvents = useMemo(
     () => buildScheduledTemplateEvents(libraryItems, new Date(nowTick)),
@@ -949,7 +1007,7 @@ export function EventsScreen() {
 
       uniqueScripts.add(script);
       prefetchPrayerAudio({
-        allowGeneration: scheduledEvent.source === 'news',
+        allowGeneration: false,
         durationMinutes: scheduledEvent.durationMinutes,
         language: 'en',
         script,
@@ -1324,6 +1382,7 @@ export function EventsScreen() {
   const onOpenOccurrence = useCallback(
     (occurrence: ScheduledEventOccurrence) => {
       const params: EventsStackParamList['EventRoom'] = {
+        allowAudioGeneration: false,
         durationMinutes: occurrence.durationMinutes,
         eventSource: occurrence.source,
         eventTitle: occurrence.title,

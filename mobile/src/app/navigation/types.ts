@@ -43,6 +43,7 @@ export type EventsStackParamList = {
   EventDetails: { eventId?: string; eventTemplateId?: string } | undefined;
   EventRoom:
     | {
+        allowAudioGeneration?: boolean;
         durationMinutes?: number;
         eventId?: string;
         eventSource?: 'news' | 'template';

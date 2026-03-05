@@ -38,27 +38,6 @@ export interface GeneratePrayerAudioOutput {
   wordTimings?: TimedWord[];
 }
 
-export interface GeneratedNewsDrivenEvent {
-  category: string;
-  country_code?: string | null;
-  duration_minutes: number;
-  event_day: string;
-  headline: string;
-  id: string;
-  location_hint?: string | null;
-  script_text: string;
-  source_title: string | null;
-  source_url: string;
-  starts_at: string;
-  summary: string;
-}
-
-export interface GenerateNewsDrivenEventsOutput {
-  events: GeneratedNewsDrivenEvent[];
-  generated: number;
-  pulled?: number;
-}
-
 const DEFAULT_ELEVENLABS_VOICE_ID = 'V904i8ujLitGpMyoTznT';
 const PRAYER_AUDIO_CACHE_TTL_MS = 10 * 60 * 1000;
 const PRAYER_AUDIO_CACHE_MAX_ENTRIES = 24;
@@ -288,8 +267,4 @@ export function prefetchPrayerAudio(input: GeneratePrayerAudioInput) {
   }).catch(() => {
     // Prefetch is best-effort and intentionally non-blocking.
   });
-}
-
-export async function generateNewsDrivenEvents() {
-  return invokeEdgeFunction<GenerateNewsDrivenEventsOutput>('generate-news-driven-events', {});
 }

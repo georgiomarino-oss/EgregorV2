@@ -15,6 +15,7 @@ import {
   getCachedCommunitySnapshot,
   type CommunitySnapshot,
 } from '../lib/api/data';
+import { supabase } from '../lib/supabase';
 import {
   HOME_CARD_GAP,
   PROFILE_ROW_GAP,
@@ -55,6 +56,35 @@ export function CommunityScreen() {
 
   useEffect(() => {
     void loadSnapshot();
+  }, [loadSnapshot]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      void loadSnapshot();
+    }, 15000);
+
+    return () => {
+      clearInterval(interval);
+    };
+  }, [loadSnapshot]);
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('community-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'events' }, () => {
+        void loadSnapshot();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'event_participants' }, () => {
+        void loadSnapshot();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'app_user_presence' }, () => {
+        void loadSnapshot();
+      })
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
   }, [loadSnapshot]);
 
   const openEventDetails = (eventId: string) => {

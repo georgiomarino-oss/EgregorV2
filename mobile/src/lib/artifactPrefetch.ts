@@ -121,7 +121,7 @@ export function prefetchEventAndPrayerAudioArtifacts(userId: string) {
     if (newsEventsResult.status === 'fulfilled') {
       for (const item of newsEventsResult.value.slice(0, 3)) {
         addScriptPrefetchTarget(prefetchTargets, {
-          allowGeneration: true,
+          allowGeneration: false,
           durationMinutes: item.durationMinutes,
           script: item.script,
           title: item.title,

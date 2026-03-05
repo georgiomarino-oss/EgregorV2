@@ -634,9 +634,37 @@ function hoursFromNow(isoDate: string) {
   return Math.floor((target - now) / (1000 * 60 * 60));
 }
 
+type EventTimingState = 'ended' | 'live' | 'upcoming';
+
+function getEventTimingState(
+  event: Pick<AppEvent, 'durationMinutes' | 'startsAt'>,
+  nowMs = Date.now(),
+): EventTimingState {
+  const startsAtMs = new Date(event.startsAt).getTime();
+  if (!Number.isFinite(startsAtMs)) {
+    return 'ended';
+  }
+
+  const endsAtMs = startsAtMs + Math.max(1, event.durationMinutes) * 60 * 1000;
+  if (nowMs >= endsAtMs) {
+    return 'ended';
+  }
+
+  if (nowMs >= startsAtMs) {
+    return 'live';
+  }
+
+  return 'upcoming';
+}
+
 function formatEventSubtitle(event: AppEvent) {
-  if (event.status === 'live') {
+  const timingState = getEventTimingState(event);
+  if (timingState === 'live') {
     return `${event.participants} active now`;
+  }
+
+  if (timingState === 'ended') {
+    return 'Ended';
   }
 
   const hours = hoursFromNow(event.startsAt);
@@ -652,19 +680,8 @@ function formatEventSubtitle(event: AppEvent) {
   return `Starts in ${days}d`;
 }
 
-function isEventLiveNow(event: Pick<AppEvent, 'durationMinutes' | 'startsAt' | 'status'>) {
-  if (event.status === 'live') {
-    return true;
-  }
-
-  const startsAtMs = new Date(event.startsAt).getTime();
-  if (!Number.isFinite(startsAtMs)) {
-    return false;
-  }
-
-  const endsAtMs = startsAtMs + Math.max(1, event.durationMinutes) * 60 * 1000;
-  const nowMs = Date.now();
-  return nowMs >= startsAtMs && nowMs < endsAtMs;
+function isEventLiveNow(event: Pick<AppEvent, 'durationMinutes' | 'startsAt'>) {
+  return getEventTimingState(event) === 'live';
 }
 
 function toSupabaseErrorMessage(error: unknown, fallback: string) {
@@ -706,20 +723,16 @@ function mapEventRow(row: EventRow, participants: number): AppEvent {
   };
 }
 
-function rankEventStatus(status: EventStatus) {
+function rankEventTimingState(status: EventTimingState) {
   if (status === 'live') {
     return 0;
   }
 
-  if (status === 'scheduled') {
+  if (status === 'upcoming') {
     return 1;
   }
 
-  if (status === 'completed') {
-    return 2;
-  }
-
-  return 3;
+  return 2;
 }
 
 async function fetchParticipantCountsByEvent(
@@ -812,8 +825,11 @@ export async function fetchEvents(limit = 8): Promise<AppEvent[]> {
 
       const mappedEvents = eventRows
         .map((row) => mapEventRow(row, participantCounts.get(row.id) ?? 0))
+        .filter((event) => getEventTimingState(event) !== 'ended')
         .sort((a, b) => {
-          const rankDiff = rankEventStatus(a.status) - rankEventStatus(b.status);
+          const rankDiff =
+            rankEventTimingState(getEventTimingState(a)) -
+            rankEventTimingState(getEventTimingState(b));
           if (rankDiff !== 0) {
             return rankDiff;
           }
