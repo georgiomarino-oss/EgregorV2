@@ -13,8 +13,18 @@ import type { EventsStackParamList } from '../app/navigation/types';
 import { Screen } from '../components/Screen';
 import { SurfaceCard } from '../components/SurfaceCard';
 import { Typography } from '../components/Typography';
-import { fetchEventById, fetchEventLibraryItemById } from '../lib/api/data';
-import { generatePrayerAudio, type TimedWord } from '../lib/api/functions';
+import {
+  fetchEventById,
+  fetchEventLibraryItemById,
+  getCachedEventById,
+  getCachedEventLibraryItemById,
+} from '../lib/api/data';
+import {
+  generatePrayerAudio,
+  hasPrayerAudioCached,
+  prefetchPrayerAudio,
+  type TimedWord,
+} from '../lib/api/functions';
 import { configureAudioForPlayback, createPlayer, type ManagedAudioPlayer } from '../lib/audio';
 import { figmaV2Reference } from '../theme/figma-v2-reference';
 import { sectionGap } from '../theme/layout';
@@ -223,7 +233,11 @@ function buildPreviewParagraphsFromScript(script: string) {
   }));
 
   return groupTimedWordsIntoParagraphs(pseudoTimedWords, MAX_TIMED_WORDS_PER_PARAGRAPH).map(
-    (paragraph) => paragraph.words.map((word) => word.word).join(' ').trim(),
+    (paragraph) =>
+      paragraph.words
+        .map((word) => word.word)
+        .join(' ')
+        .trim(),
   );
 }
 
@@ -263,9 +277,46 @@ function findActiveTimedWordIndex(words: TimedWord[], elapsedMillis: number) {
   return last?.index ?? words.length - 1;
 }
 
+function buildFallbackEventScript(description?: string | null, hostNote?: string | null) {
+  return [description?.trim(), hostNote?.trim()]
+    .filter((value): value is string => Boolean(value && value.length > 0))
+    .join('\n\n')
+    .trim();
+}
+
 export function EventRoomScreen() {
   const navigation = useNavigation<EventNavigation>();
   const route = useRoute<EventRoomRoute>();
+  const routeScript = route.params?.scriptText?.trim() || '';
+  const cachedTemplate =
+    !routeScript && route.params?.eventTemplateId
+      ? (getCachedEventLibraryItemById(route.params.eventTemplateId) ?? null)
+      : null;
+  const cachedEvent =
+    !routeScript && !cachedTemplate && route.params?.eventId
+      ? (getCachedEventById(route.params.eventId) ?? null)
+      : null;
+  const cachedEventScript = cachedEvent
+    ? buildFallbackEventScript(cachedEvent.description, cachedEvent.hostNote)
+    : '';
+  const initialEventTitle =
+    route.params?.eventTitle?.trim() || cachedTemplate?.title || cachedEvent?.title || 'Event Room';
+  const initialEventBody =
+    routeScript || cachedTemplate?.body || cachedEvent?.description?.trim() || '';
+  const initialEventScript =
+    routeScript ||
+    cachedTemplate?.script?.trim() ||
+    cachedTemplate?.body?.trim() ||
+    cachedEventScript;
+  const initialEventDurationMinutes =
+    route.params?.durationMinutes ??
+    cachedTemplate?.durationMinutes ??
+    cachedEvent?.durationMinutes ??
+    10;
+  const initialEventStartAt =
+    route.params?.scheduledStartAt?.trim() || cachedEvent?.startsAt || new Date().toISOString();
+  const hasInitialEventData = Boolean(initialEventScript || cachedTemplate || cachedEvent);
+  const allowAudioGeneration = route.params?.eventSource === 'news';
 
   const [selectedVoice, setSelectedVoice] = useState<(typeof VOICE_OPTIONS)[number]>('Oliver');
   const [isVoiceMenuOpen, setIsVoiceMenuOpen] = useState(false);
@@ -273,22 +324,21 @@ export function EventRoomScreen() {
   const [isMuted, setIsMuted] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
   const [loadingAudio, setLoadingAudio] = useState(false);
-  const [loadingEvent, setLoadingEvent] = useState(true);
+  const [loadingEvent, setLoadingEvent] = useState(!hasInitialEventData);
   const [error, setError] = useState<string | null>(null);
 
-  const [eventTitle, setEventTitle] = useState(route.params?.eventTitle?.trim() || 'Event Room');
-  const [eventBody, setEventBody] = useState('');
-  const [eventScript, setEventScript] = useState(route.params?.scriptText?.trim() || '');
-  const [eventDurationMinutes, setEventDurationMinutes] = useState(route.params?.durationMinutes ?? 10);
-  const [eventStartAt, setEventStartAt] = useState(
-    route.params?.scheduledStartAt?.trim() || new Date().toISOString(),
-  );
+  const [eventTitle, setEventTitle] = useState(initialEventTitle);
+  const [, setEventBody] = useState(initialEventBody);
+  const [eventScript, setEventScript] = useState(initialEventScript);
+  const [eventDurationMinutes, setEventDurationMinutes] = useState(initialEventDurationMinutes);
+  const [eventStartAt, setEventStartAt] = useState(initialEventStartAt);
 
   const [timedWords, setTimedWords] = useState<TimedWord[]>([]);
   const [playerPositionMillis, setPlayerPositionMillis] = useState(0);
   const [nowTick, setNowTick] = useState(() => Date.now());
 
   const playPulseRef = useRef<LottieView>(null);
+  const hasInitialEventDataRef = useRef(hasInitialEventData);
   const autoStartTriggeredRef = useRef(false);
   const activePlayerRef = useRef<ManagedAudioPlayer | null>(null);
   const activePlayerKeyRef = useRef<string | null>(null);
@@ -372,12 +422,23 @@ export function EventRoomScreen() {
       return activePlayerRef.current;
     }
 
-    setLoadingAudio(true);
+    const shouldShowAudioLoader = !hasPrayerAudioCached({
+      script: nextScript,
+      voiceId: activeVoiceId,
+    });
+    if (shouldShowAudioLoader) {
+      setLoadingAudio(true);
+    }
+
     try {
       await configureAudioForPlayback();
 
       const audioResponse = await generatePrayerAudio({
+        allowGeneration: allowAudioGeneration,
+        durationMinutes: eventDurationMinutes,
+        language: 'en',
         script: nextScript,
+        title: eventTitle,
         voiceId: activeVoiceId,
       });
 
@@ -423,9 +484,19 @@ export function EventRoomScreen() {
 
       return player;
     } finally {
-      setLoadingAudio(false);
+      if (shouldShowAudioLoader) {
+        setLoadingAudio(false);
+      }
     }
-  }, [activeAudioKey, activeVoiceId, disposeActivePlayer, eventScript]);
+  }, [
+    activeAudioKey,
+    activeVoiceId,
+    allowAudioGeneration,
+    disposeActivePlayer,
+    eventDurationMinutes,
+    eventScript,
+    eventTitle,
+  ]);
 
   const startPlaybackAtScheduleOffset = useCallback(async () => {
     if (!hasStarted || hasEnded) {
@@ -462,7 +533,8 @@ export function EventRoomScreen() {
     try {
       await startPlaybackAtScheduleOffset();
     } catch (nextError) {
-      const message = nextError instanceof Error ? nextError.message : 'Failed to start event audio.';
+      const message =
+        nextError instanceof Error ? nextError.message : 'Failed to start event audio.';
       setError(message);
       setIsRunning(false);
     }
@@ -483,19 +555,22 @@ export function EventRoomScreen() {
 
     const hydrateEvent = async () => {
       try {
-        setLoadingEvent(true);
+        if (!hasInitialEventDataRef.current) {
+          setLoadingEvent(true);
+        }
 
-        const routeScript = route.params?.scriptText?.trim();
-        if (routeScript && routeScript.length > 0) {
+        const nextRouteScript = route.params?.scriptText?.trim();
+        if (nextRouteScript && nextRouteScript.length > 0) {
           if (!active) {
             return;
           }
 
-          setEventScript(routeScript);
-          setEventBody(routeScript);
+          setEventScript(nextRouteScript);
+          setEventBody(nextRouteScript);
           setEventTitle(route.params?.eventTitle?.trim() || 'Event Room');
           setEventDurationMinutes(route.params?.durationMinutes ?? 10);
           setEventStartAt(route.params?.scheduledStartAt?.trim() || new Date().toISOString());
+          hasInitialEventDataRef.current = true;
           setError(null);
           return;
         }
@@ -511,8 +586,11 @@ export function EventRoomScreen() {
             setEventTitle(route.params?.eventTitle?.trim() || template.title);
             setEventBody(template.body);
             setEventScript(template.script || template.body);
-            setEventDurationMinutes(route.params?.durationMinutes ?? template.durationMinutes ?? 10);
+            setEventDurationMinutes(
+              route.params?.durationMinutes ?? template.durationMinutes ?? 10,
+            );
             setEventStartAt(route.params?.scheduledStartAt?.trim() || new Date().toISOString());
+            hasInitialEventDataRef.current = true;
             setError(null);
             return;
           }
@@ -526,15 +604,18 @@ export function EventRoomScreen() {
           }
 
           if (event) {
-            const fallbackScript = [event.description?.trim(), event.hostNote?.trim()]
-              .filter((value): value is string => Boolean(value && value.length > 0))
-              .join('\n\n');
+            const fallbackScript = buildFallbackEventScript(event.description, event.hostNote);
 
             setEventTitle(route.params?.eventTitle?.trim() || event.title);
             setEventBody(event.description?.trim() || 'Hold intention for this live room.');
-            setEventScript(fallbackScript || 'We gather in shared intention and focus for this event.');
+            setEventScript(
+              fallbackScript || 'We gather in shared intention and focus for this event.',
+            );
             setEventDurationMinutes(route.params?.durationMinutes ?? event.durationMinutes ?? 10);
-            setEventStartAt(route.params?.scheduledStartAt?.trim() || event.startsAt || new Date().toISOString());
+            setEventStartAt(
+              route.params?.scheduledStartAt?.trim() || event.startsAt || new Date().toISOString(),
+            );
+            hasInitialEventDataRef.current = true;
             setError(null);
             return;
           }
@@ -562,7 +643,14 @@ export function EventRoomScreen() {
     return () => {
       active = false;
     };
-  }, [route.params?.durationMinutes, route.params?.eventId, route.params?.eventTemplateId, route.params?.eventTitle, route.params?.scheduledStartAt, route.params?.scriptText]);
+  }, [
+    route.params?.durationMinutes,
+    route.params?.eventId,
+    route.params?.eventTemplateId,
+    route.params?.eventTitle,
+    route.params?.scheduledStartAt,
+    route.params?.scriptText,
+  ]);
 
   useEffect(() => {
     setIsRunning(false);
@@ -600,7 +688,8 @@ export function EventRoomScreen() {
     autoStartTriggeredRef.current = true;
 
     void startPlaybackAtScheduleOffset().catch((nextError) => {
-      const message = nextError instanceof Error ? nextError.message : 'Failed to start event audio.';
+      const message =
+        nextError instanceof Error ? nextError.message : 'Failed to start event audio.';
       setError(message);
       setIsRunning(false);
     });
@@ -617,11 +706,30 @@ export function EventRoomScreen() {
     }
   }, [hasEnded]);
 
+  useEffect(() => {
+    const nextScript = eventScript.trim();
+    if (!nextScript) {
+      return;
+    }
+
+    prefetchPrayerAudio({
+      allowGeneration: allowAudioGeneration,
+      durationMinutes: eventDurationMinutes,
+      language: 'en',
+      script: nextScript,
+      title: eventTitle,
+      voiceId: activeVoiceId,
+    });
+  }, [activeVoiceId, allowAudioGeneration, eventDurationMinutes, eventScript, eventTitle]);
+
   const activeTimedWordIndex = useMemo(
     () => findActiveTimedWordIndex(timedWords, activeElapsedMillis),
     [activeElapsedMillis, timedWords],
   );
-  const timedWordParagraphs = useMemo(() => groupTimedWordsIntoParagraphs(timedWords), [timedWords]);
+  const timedWordParagraphs = useMemo(
+    () => groupTimedWordsIntoParagraphs(timedWords),
+    [timedWords],
+  );
   const activeTimedParagraph = useMemo(() => {
     if (timedWordParagraphs.length === 0) {
       return null;
@@ -634,7 +742,8 @@ export function EventRoomScreen() {
     return (
       timedWordParagraphs.find(
         (paragraph) =>
-          activeTimedWordIndex >= paragraph.startIndex && activeTimedWordIndex <= paragraph.endIndex,
+          activeTimedWordIndex >= paragraph.startIndex &&
+          activeTimedWordIndex <= paragraph.endIndex,
       ) ??
       timedWordParagraphs[timedWordParagraphs.length - 1] ??
       null
@@ -655,8 +764,14 @@ export function EventRoomScreen() {
       return 0;
     }
 
-    const normalizedProgress = Math.min(0.999999, Math.max(0, activeElapsedMillis / durationMillis));
-    return Math.min(scriptParagraphs.length - 1, Math.floor(normalizedProgress * scriptParagraphs.length));
+    const normalizedProgress = Math.min(
+      0.999999,
+      Math.max(0, activeElapsedMillis / durationMillis),
+    );
+    return Math.min(
+      scriptParagraphs.length - 1,
+      Math.floor(normalizedProgress * scriptParagraphs.length),
+    );
   }, [activeElapsedMillis, durationMillis, scriptParagraphs.length]);
 
   const fallbackParagraph = scriptParagraphs[fallbackParagraphIndex] ?? '';
@@ -683,7 +798,12 @@ export function EventRoomScreen() {
         </View>
 
         <View style={styles.headerBlock}>
-          <Typography allowFontScaling={false} style={styles.prayerTitle} variant="H1" weight="bold">
+          <Typography
+            allowFontScaling={false}
+            style={styles.prayerTitle}
+            variant="H1"
+            weight="bold"
+          >
             {eventTitle}
           </Typography>
         </View>
@@ -772,7 +892,9 @@ export function EventRoomScreen() {
 
         <View style={styles.centerBlock}>
           <Pressable
-            disabled={loadingEvent || loadingAudio || !eventScript.trim() || !hasStarted || hasEnded}
+            disabled={
+              loadingEvent || loadingAudio || !eventScript.trim() || !hasStarted || hasEnded
+            }
             onPress={() => {
               void onTogglePlayback();
             }}
@@ -879,7 +1001,10 @@ export function EventRoomScreen() {
                     event.stopPropagation();
                     setIsInviteOpen(false);
                   }}
-                  style={({ pressed }) => [styles.inviteOption, pressed && styles.dropdownOptionPressed]}
+                  style={({ pressed }) => [
+                    styles.inviteOption,
+                    pressed && styles.dropdownOptionPressed,
+                  ]}
                 >
                   <Typography allowFontScaling={false} variant="Body" weight="bold">
                     {option}
@@ -899,7 +1024,12 @@ export function EventRoomScreen() {
                 name={isMuted ? 'volume-off' : 'volume-high'}
                 size={30}
               />
-              <Typography allowFontScaling={false} color={colors.textSecondary} variant="Body" weight="bold">
+              <Typography
+                allowFontScaling={false}
+                color={colors.textSecondary}
+                variant="Body"
+                weight="bold"
+              >
                 {isMuted ? 'Unmute' : 'Mute'}
               </Typography>
             </Pressable>
@@ -914,7 +1044,12 @@ export function EventRoomScreen() {
               style={({ pressed }) => [styles.bottomIconAction, pressed && styles.selectorPressed]}
             >
               <MaterialCommunityIcons color={colors.textPrimary} name="restore" size={30} />
-              <Typography allowFontScaling={false} color={colors.textSecondary} variant="Body" weight="bold">
+              <Typography
+                allowFontScaling={false}
+                color={colors.textSecondary}
+                variant="Body"
+                weight="bold"
+              >
                 Reset
               </Typography>
             </Pressable>
@@ -929,7 +1064,12 @@ export function EventRoomScreen() {
               <View style={styles.inviteIconCircle}>
                 <MaterialCommunityIcons color={colors.textPrimary} name="account-group" size={16} />
               </View>
-              <Typography allowFontScaling={false} style={styles.inviteText} variant="H2" weight="bold">
+              <Typography
+                allowFontScaling={false}
+                style={styles.inviteText}
+                variant="H2"
+                weight="bold"
+              >
                 Invite
               </Typography>
               <MaterialCommunityIcons

@@ -1,5 +1,5 @@
 import ambientAnimation from '../../assets/lottie/cosmic-ambient.json';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet } from 'react-native';
 
 import { useNavigation } from '@react-navigation/native';
@@ -12,9 +12,12 @@ import { SurfaceCard } from '../components/SurfaceCard';
 import { Typography } from '../components/Typography';
 import {
   fetchPrayerLibraryItems,
+  getCachedPrayerLibraryItems,
   incrementPrayerLibraryStart,
+  prefetchPrayerScriptVariantByTitle,
   type PrayerLibraryItem,
 } from '../lib/api/data';
+import { prefetchPrayerAudio } from '../lib/api/functions';
 import { figmaV2Reference } from '../theme/figma-v2-reference';
 import { profileRowGap, sectionGap } from '../theme/layout';
 import { colors, radii } from '../theme/tokens';
@@ -23,9 +26,12 @@ type SoloNavigation = NativeStackNavigationProp<SoloStackParamList, 'PrayerLibra
 
 export function PrayerLibraryScreen() {
   const navigation = useNavigation<SoloNavigation>();
-  const [items, setItems] = useState<PrayerLibraryItem[]>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const initialItemsRef = useRef<PrayerLibraryItem[]>(getCachedPrayerLibraryItems() ?? []);
+  const [items, setItems] = useState<PrayerLibraryItem[]>(initialItemsRef.current);
+  const [selectedId, setSelectedId] = useState<string | null>(
+    initialItemsRef.current[0]?.id ?? null,
+  );
+  const [loading, setLoading] = useState(initialItemsRef.current.length === 0);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -33,7 +39,9 @@ export function PrayerLibraryScreen() {
     let active = true;
 
     const loadLibrary = async () => {
-      setLoading(true);
+      if (initialItemsRef.current.length === 0) {
+        setLoading(true);
+      }
       try {
         const nextItems = await fetchPrayerLibraryItems();
         if (!active) {
@@ -80,8 +88,25 @@ export function PrayerLibraryScreen() {
       setStarting(false);
     }
 
+    prefetchPrayerScriptVariantByTitle({
+      durationMinutes: selectedItem.durationMinutes,
+      prayerLibraryItemId: selectedItem.id,
+      title: selectedItem.title,
+    });
+    prefetchPrayerAudio({
+      allowGeneration: false,
+      durationMinutes: selectedItem.durationMinutes,
+      language: 'en',
+      prayerLibraryItemId: selectedItem.id,
+      script: selectedItem.body,
+      title: selectedItem.title,
+    });
+
     navigation.navigate('SoloLive', {
+      allowAudioGeneration: false,
+      durationMinutes: selectedItem.durationMinutes,
       intention: selectedItem.title,
+      prayerLibraryItemId: selectedItem.id,
       scriptPreset: selectedItem.body,
     });
   };

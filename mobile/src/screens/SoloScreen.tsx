@@ -1,6 +1,13 @@
 import ambientAnimation from '../../assets/lottie/cosmic-ambient.json';
-import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+  useWindowDimensions,
+} from 'react-native';
 
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
@@ -12,9 +19,12 @@ import { SurfaceCard } from '../components/SurfaceCard';
 import { Typography } from '../components/Typography';
 import {
   fetchPrayerLibraryItems,
+  getCachedPrayerLibraryItems,
   incrementPrayerLibraryStart,
+  prefetchPrayerScriptVariantByTitle,
   type PrayerLibraryItem,
 } from '../lib/api/data';
+import { prefetchPrayerAudio } from '../lib/api/functions';
 import { HOME_CARD_GAP, PROFILE_SECTION_GAP, SCREEN_PAD_X } from '../theme/figmaV2Layout';
 import { figmaV2Reference } from '../theme/figma-v2-reference';
 import { CARD_PADDING_LG } from '../theme/layout';
@@ -69,23 +79,27 @@ function FilterChip({
 export function SoloScreen() {
   const navigation = useNavigation<SoloNavigation>();
   const { width: windowWidth } = useWindowDimensions();
+  const initialLibraryItemsRef = useRef<PrayerLibraryItem[]>(getCachedPrayerLibraryItems() ?? []);
+  const initialLibraryItems = initialLibraryItemsRef.current;
 
   const [libraryMode, setLibraryMode] = useState<LibraryMode>('recent');
   const [selectedCategory, setSelectedCategory] = useState<CategoryFilter>('All');
   const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
-  const [activeSlideByCategory, setActiveSlideByCategory] = useState<Partial<Record<string, number>>>(
-    {},
-  );
+  const [activeSlideByCategory, setActiveSlideByCategory] = useState<
+    Partial<Record<string, number>>
+  >({});
   const [prayerRailWidth, setPrayerRailWidth] = useState<number | null>(null);
-  const [libraryItems, setLibraryItems] = useState<PrayerLibraryItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [libraryItems, setLibraryItems] = useState<PrayerLibraryItem[]>(initialLibraryItems);
+  const [loading, setLoading] = useState(initialLibraryItems.length === 0);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
 
     const loadLibrary = async () => {
-      setLoading(true);
+      if (initialLibraryItemsRef.current.length === 0) {
+        setLoading(true);
+      }
       try {
         const items = await fetchPrayerLibraryItems();
         if (!active) {
@@ -114,7 +128,9 @@ export function SoloScreen() {
     };
   }, []);
 
-  const favoriteCount = favoriteIds.filter((id) => libraryItems.some((item) => item.id === id)).length;
+  const favoriteCount = favoriteIds.filter((id) =>
+    libraryItems.some((item) => item.id === id),
+  ).length;
   const recentCount = libraryItems.length;
 
   const visibleLibrary = useMemo(() => {
@@ -131,13 +147,14 @@ export function SoloScreen() {
     );
   }, [visibleLibrary]);
 
-  const categoryFilters = useMemo(
-    () => ['All', ...availableCategories],
-    [availableCategories],
-  );
+  const categoryFilters = useMemo(() => ['All', ...availableCategories], [availableCategories]);
 
   useEffect(() => {
-    if (selectedCategory && selectedCategory !== 'All' && !availableCategories.includes(selectedCategory)) {
+    if (
+      selectedCategory &&
+      selectedCategory !== 'All' &&
+      !availableCategories.includes(selectedCategory)
+    ) {
       setSelectedCategory('All');
     }
   }, [availableCategories, selectedCategory]);
@@ -181,8 +198,25 @@ export function SoloScreen() {
       // Non-blocking engagement metric update.
     });
 
+    prefetchPrayerScriptVariantByTitle({
+      durationMinutes: item.durationMinutes,
+      prayerLibraryItemId: item.id,
+      title: item.title,
+    });
+    prefetchPrayerAudio({
+      allowGeneration: false,
+      durationMinutes: item.durationMinutes,
+      language: 'en',
+      prayerLibraryItemId: item.id,
+      script: item.body,
+      title: item.title,
+    });
+
     navigation.navigate('SoloLive', {
+      allowAudioGeneration: false,
+      durationMinutes: item.durationMinutes,
       intention: item.title,
+      prayerLibraryItemId: item.id,
       scriptPreset: item.body,
     });
   };
@@ -329,7 +363,9 @@ export function SoloScreen() {
                             {item.title}
                           </Typography>
                           <Pressable
-                            accessibilityLabel={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+                            accessibilityLabel={
+                              isFavorite ? 'Remove from favorites' : 'Add to favorites'
+                            }
                             onPress={(event) => {
                               event.stopPropagation();
                               toggleFavorite(item.id);
@@ -348,7 +384,11 @@ export function SoloScreen() {
                           </Pressable>
                         </View>
 
-                        <Typography allowFontScaling={false} color={colors.textSecondary} style={styles.prayerBody}>
+                        <Typography
+                          allowFontScaling={false}
+                          color={colors.textSecondary}
+                          style={styles.prayerBody}
+                        >
                           {item.body}
                         </Typography>
                         <Typography
@@ -359,7 +399,11 @@ export function SoloScreen() {
                         >
                           {`${item.durationMinutes} min - ${category}`}
                         </Typography>
-                        <Typography allowFontScaling={false} color={colors.textCaption} variant="Caption">
+                        <Typography
+                          allowFontScaling={false}
+                          color={colors.textCaption}
+                          variant="Caption"
+                        >
                           {`${item.startsCount} starts`}
                         </Typography>
                       </SurfaceCard>

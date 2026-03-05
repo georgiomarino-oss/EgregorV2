@@ -21,6 +21,7 @@ import { Typography } from '../components/Typography';
 import {
   addPrayerCircleMember,
   fetchPrayerCircleMembers,
+  getCachedPrayerCircleMembers,
   removePrayerCircleMember,
   searchUsersForPrayerCircle,
   type PrayerCircleMember,
@@ -42,11 +43,11 @@ function SwipeToRemoveRow({
   member: PrayerCircleMember;
   onRemovePress: (member: PrayerCircleMember) => void;
 }) {
-  const translateX = useRef(new Animated.Value(0)).current;
-  const openRef = useRef(false);
+  const translateX = useMemo(() => new Animated.Value(0), []);
+  const [isOpen, setIsOpen] = useState(false);
 
   const closeRow = useCallback(() => {
-    openRef.current = false;
+    setIsOpen(false);
     Animated.spring(translateX, {
       bounciness: 0,
       speed: 16,
@@ -56,7 +57,7 @@ function SwipeToRemoveRow({
   }, [translateX]);
 
   const openRow = useCallback(() => {
-    openRef.current = true;
+    setIsOpen(true);
     Animated.spring(translateX, {
       bounciness: 0,
       speed: 16,
@@ -72,18 +73,20 @@ function SwipeToRemoveRow({
           if (member.isOwner) {
             return false;
           }
-          return Math.abs(gestureState.dx) > Math.abs(gestureState.dy) && Math.abs(gestureState.dx) > 6;
+          return (
+            Math.abs(gestureState.dx) > Math.abs(gestureState.dy) && Math.abs(gestureState.dx) > 6
+          );
         },
         onPanResponderMove: (_event, gestureState) => {
-          const base = openRef.current ? -REMOVE_ACTION_WIDTH : 0;
+          const base = isOpen ? -REMOVE_ACTION_WIDTH : 0;
           const next = Math.max(-REMOVE_ACTION_WIDTH, Math.min(0, base + gestureState.dx));
           translateX.setValue(next);
         },
         onPanResponderRelease: (_event, gestureState) => {
           const shouldOpen =
             gestureState.vx < -0.35 ||
-            (!openRef.current && gestureState.dx < -36) ||
-            (openRef.current && gestureState.dx < 14);
+            (!isOpen && gestureState.dx < -36) ||
+            (isOpen && gestureState.dx < 14);
 
           if (shouldOpen) {
             openRow();
@@ -93,14 +96,14 @@ function SwipeToRemoveRow({
           closeRow();
         },
         onPanResponderTerminate: () => {
-          if (openRef.current) {
+          if (isOpen) {
             openRow();
             return;
           }
           closeRow();
         },
       }),
-    [closeRow, member.isOwner, openRow, translateX],
+    [closeRow, isOpen, member.isOwner, openRow, translateX],
   );
 
   return (
@@ -130,10 +133,20 @@ function SwipeToRemoveRow({
       >
         <SurfaceCard radius="md" style={styles.memberCard} variant="profileRow">
           <View style={styles.memberRow}>
-            <Typography allowFontScaling={false} numberOfLines={1} style={styles.memberName} weight="medium">
+            <Typography
+              allowFontScaling={false}
+              numberOfLines={1}
+              style={styles.memberName}
+              weight="medium"
+            >
               {member.displayName}
             </Typography>
-            <Typography allowFontScaling={false} color={colors.textSecondary} variant="Caption" weight="bold">
+            <Typography
+              allowFontScaling={false}
+              color={colors.textSecondary}
+              variant="Caption"
+              weight="bold"
+            >
               {member.isOwner ? 'Owner' : 'Member'}
             </Typography>
           </View>
@@ -144,10 +157,12 @@ function SwipeToRemoveRow({
 }
 
 export function PrayerCircleScreen() {
-  const [members, setMembers] = useState<PrayerCircleMember[]>([]);
+  const initialMembersRef = useRef<PrayerCircleMember[]>(getCachedPrayerCircleMembers() ?? []);
+  const hasHydratedMembersRef = useRef(initialMembersRef.current.length > 0);
+  const [members, setMembers] = useState<PrayerCircleMember[]>(initialMembersRef.current);
   const [query, setQuery] = useState('');
   const [suggestions, setSuggestions] = useState<PrayerCircleUserSuggestion[]>([]);
-  const [loadingMembers, setLoadingMembers] = useState(true);
+  const [loadingMembers, setLoadingMembers] = useState(initialMembersRef.current.length === 0);
   const [refreshingMembers, setRefreshingMembers] = useState(false);
   const [searchingUsers, setSearchingUsers] = useState(false);
   const [updatingMemberId, setUpdatingMemberId] = useState<string | null>(null);
@@ -156,16 +171,19 @@ export function PrayerCircleScreen() {
   const loadMembers = useCallback(async (refresh = false) => {
     if (refresh) {
       setRefreshingMembers(true);
-    } else {
+    } else if (!hasHydratedMembersRef.current) {
       setLoadingMembers(true);
     }
 
     try {
       const nextMembers = await fetchPrayerCircleMembers();
       setMembers(nextMembers);
+      hasHydratedMembersRef.current = nextMembers.length > 0;
       setError(null);
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : 'Failed to load your prayer circle.');
+      setError(
+        nextError instanceof Error ? nextError.message : 'Failed to load your prayer circle.',
+      );
     } finally {
       setLoadingMembers(false);
       setRefreshingMembers(false);
@@ -290,8 +308,18 @@ export function PrayerCircleScreen() {
         {searchingUsers ? <ActivityIndicator color={colors.accentMintStart} /> : null}
 
         {visibleSuggestions.slice(0, 6).map((user) => (
-          <SurfaceCard key={user.userId} radius="md" style={styles.suggestionRow} variant="profileRow">
-            <Typography allowFontScaling={false} numberOfLines={1} style={styles.suggestionName} weight="medium">
+          <SurfaceCard
+            key={user.userId}
+            radius="md"
+            style={styles.suggestionRow}
+            variant="profileRow"
+          >
+            <Typography
+              allowFontScaling={false}
+              numberOfLines={1}
+              style={styles.suggestionName}
+              weight="medium"
+            >
               {user.displayName}
             </Typography>
             <Button
@@ -315,8 +343,16 @@ export function PrayerCircleScreen() {
           Invite external users
         </Typography>
         <View style={styles.inviteRow}>
-          <Button onPress={() => void onInviteWhatsApp()} title="Invite via WhatsApp" variant="primary" />
-          <Button onPress={() => void onInviteEmail()} title="Invite via Email" variant="secondary" />
+          <Button
+            onPress={() => void onInviteWhatsApp()}
+            title="Invite via WhatsApp"
+            variant="primary"
+          />
+          <Button
+            onPress={() => void onInviteEmail()}
+            title="Invite via Email"
+            variant="secondary"
+          />
         </View>
       </SurfaceCard>
 
@@ -325,7 +361,12 @@ export function PrayerCircleScreen() {
           <Typography allowFontScaling={false} variant="H2" weight="bold">
             Circle members
           </Typography>
-          <Typography allowFontScaling={false} color={colors.textSecondary} variant="Caption" weight="bold">
+          <Typography
+            allowFontScaling={false}
+            color={colors.textSecondary}
+            variant="Caption"
+            weight="bold"
+          >
             {members.length}
           </Typography>
         </View>
@@ -340,7 +381,11 @@ export function PrayerCircleScreen() {
 
         {!loadingMembers
           ? members.map((member) => (
-              <SwipeToRemoveRow key={member.userId} member={member} onRemovePress={onConfirmRemove} />
+              <SwipeToRemoveRow
+                key={member.userId}
+                member={member}
+                onRemovePress={onConfirmRemove}
+              />
             ))
           : null}
 

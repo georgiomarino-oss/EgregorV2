@@ -29,6 +29,11 @@ import {
   fetchEvents,
   fetchNewsDrivenEvents,
   fetchActiveEventUsers,
+  getCachedActiveEventUsers,
+  getCachedEventLibraryItems,
+  getCachedEventNotificationState,
+  getCachedEvents,
+  getCachedNewsDrivenEvents,
   setAllEventNotifications,
   setEventNotificationSubscription,
   type ActiveEventUserPresence,
@@ -36,7 +41,7 @@ import {
   type EventLibraryItem,
   type NewsDrivenEventItem,
 } from '../lib/api/data';
-import { generateNewsDrivenEvents } from '../lib/api/functions';
+import { generateNewsDrivenEvents, prefetchPrayerAudio } from '../lib/api/functions';
 import { formatEventDateTimeInDeviceZone, getDeviceTimeZoneLabel } from '../lib/dateTime';
 import { clientEnv } from '../lib/env';
 import { supabase } from '../lib/supabase';
@@ -598,13 +603,21 @@ export function EventsScreen() {
   const interactionIdleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const programmaticCameraUntilRef = useRef(0);
   const lastShapeSourcePressAtRef = useRef(0);
+  const initialEventsRef = useRef<AppEvent[]>(getCachedEvents(120) ?? []);
+  const initialLibraryItemsRef = useRef<EventLibraryItem[]>(getCachedEventLibraryItems(80) ?? []);
+  const initialNewsItemsRef = useRef<NewsDrivenEventItem[]>(getCachedNewsDrivenEvents(80) ?? []);
+  const initialPresenceRef = useRef<ActiveEventUserPresence[]>(getCachedActiveEventUsers(15) ?? []);
+  const hasHydratedEventsRef = useRef(initialEventsRef.current.length > 0);
+  const hasHydratedLibraryRef = useRef(initialLibraryItemsRef.current.length > 0);
 
-  const [events, setEvents] = useState<AppEvent[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [events, setEvents] = useState<AppEvent[]>(initialEventsRef.current);
+  const [loading, setLoading] = useState(initialEventsRef.current.length === 0);
   const [error, setError] = useState<string | null>(null);
 
-  const [libraryItems, setLibraryItems] = useState<EventLibraryItem[]>([]);
-  const [libraryLoading, setLibraryLoading] = useState(true);
+  const [libraryItems, setLibraryItems] = useState<EventLibraryItem[]>(
+    initialLibraryItemsRef.current,
+  );
+  const [libraryLoading, setLibraryLoading] = useState(initialLibraryItemsRef.current.length === 0);
   const [libraryError, setLibraryError] = useState<string | null>(null);
   const [timeFilter, setTimeFilter] = useState<EventTimeFilter>('today');
   const [selectedCategory, setSelectedCategory] = useState<CategoryFilter>('All');
@@ -613,9 +626,11 @@ export function EventsScreen() {
   >({});
   const [libraryRailWidth, setLibraryRailWidth] = useState<number | null>(null);
 
-  const [newsItems, setNewsItems] = useState<NewsDrivenEventItem[]>([]);
+  const [newsItems, setNewsItems] = useState<NewsDrivenEventItem[]>(initialNewsItemsRef.current);
   const [newsSyncError, setNewsSyncError] = useState<string | null>(null);
-  const [activePresence, setActivePresence] = useState<ActiveEventUserPresence[]>([]);
+  const [activePresence, setActivePresence] = useState<ActiveEventUserPresence[]>(
+    initialPresenceRef.current,
+  );
   const [deviceCoordinate, setDeviceCoordinate] = useState<Coordinate | null>(null);
   const [pulseTick, setPulseTick] = useState(0);
   const [isGlobeMapLoaded, setIsGlobeMapLoaded] = useState(false);
@@ -640,10 +655,13 @@ export function EventsScreen() {
   const MapboxCircleLayerComponent = MapboxCircleLayer as MapboxComponent;
 
   const loadEvents = useCallback(async () => {
-    setLoading(true);
+    if (!hasHydratedEventsRef.current) {
+      setLoading(true);
+    }
     try {
       const nextEvents = await fetchEvents(120);
       setEvents(nextEvents);
+      hasHydratedEventsRef.current = nextEvents.length > 0;
       setError(null);
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : 'Failed to load events.');
@@ -653,11 +671,14 @@ export function EventsScreen() {
   }, []);
 
   const loadLibrary = useCallback(async () => {
-    setLibraryLoading(true);
+    if (!hasHydratedLibraryRef.current) {
+      setLibraryLoading(true);
+    }
 
     try {
       const nextLibraryItems = await fetchEventLibraryItems(80);
       setLibraryItems(nextLibraryItems);
+      hasHydratedLibraryRef.current = nextLibraryItems.length > 0;
       setLibraryError(null);
     } catch (nextError) {
       setLibraryError(
@@ -705,6 +726,12 @@ export function EventsScreen() {
   }, []);
 
   const loadNotificationState = useCallback(async (nextUserId: string) => {
+    const cachedState = getCachedEventNotificationState(nextUserId);
+    if (cachedState) {
+      setSubscribedAll(cachedState.subscribedAll);
+      setSubscribedKeys(cachedState.subscriptionKeys);
+    }
+
     try {
       const state = await fetchEventNotificationState(nextUserId);
       setSubscribedAll(state.subscribedAll);
@@ -911,6 +938,29 @@ export function EventsScreen() {
       ),
     [scheduledNewsEvents, scheduledTemplateEvents],
   );
+
+  useEffect(() => {
+    const uniqueScripts = new Set<string>();
+    for (const scheduledEvent of allScheduledEvents) {
+      const script = scheduledEvent.script.trim();
+      if (!script || uniqueScripts.has(script)) {
+        continue;
+      }
+
+      uniqueScripts.add(script);
+      prefetchPrayerAudio({
+        allowGeneration: scheduledEvent.source === 'news',
+        durationMinutes: scheduledEvent.durationMinutes,
+        language: 'en',
+        script,
+        title: scheduledEvent.title,
+      });
+
+      if (uniqueScripts.size >= 8) {
+        break;
+      }
+    }
+  }, [allScheduledEvents]);
 
   const timeFilterBoundaries = useMemo(() => {
     const nowDate = new Date(nowTick);

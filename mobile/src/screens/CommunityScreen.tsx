@@ -1,5 +1,5 @@
 import ambientAnimation from '../../assets/lottie/cosmic-ambient.json';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 
 import { useNavigation } from '@react-navigation/native';
@@ -10,7 +10,11 @@ import { Button } from '../components/Button';
 import { Screen } from '../components/Screen';
 import { SurfaceCard } from '../components/SurfaceCard';
 import { Typography } from '../components/Typography';
-import { fetchCommunitySnapshot, type CommunitySnapshot } from '../lib/api/data';
+import {
+  fetchCommunitySnapshot,
+  getCachedCommunitySnapshot,
+  type CommunitySnapshot,
+} from '../lib/api/data';
 import {
   HOME_CARD_GAP,
   PROFILE_ROW_GAP,
@@ -24,16 +28,21 @@ type CommunityNavigation = NativeStackNavigationProp<CommunityStackParamList, 'C
 
 export function CommunityScreen() {
   const navigation = useNavigation<CommunityNavigation>();
-  const [snapshot, setSnapshot] = useState<CommunitySnapshot | null>(null);
-  const [loading, setLoading] = useState(true);
+  const initialSnapshot = getCachedCommunitySnapshot();
+  const hadInitialSnapshotRef = useRef(Boolean(initialSnapshot));
+  const [snapshot, setSnapshot] = useState<CommunitySnapshot | null>(initialSnapshot);
+  const [loading, setLoading] = useState(!initialSnapshot);
   const [error, setError] = useState<string | null>(null);
 
   const loadSnapshot = useCallback(async () => {
-    setLoading(true);
+    if (!hadInitialSnapshotRef.current) {
+      setLoading(true);
+    }
 
     try {
       const nextSnapshot = await fetchCommunitySnapshot();
       setSnapshot(nextSnapshot);
+      hadInitialSnapshotRef.current = true;
       setError(null);
     } catch (nextError) {
       setError(
@@ -42,7 +51,7 @@ export function CommunityScreen() {
     } finally {
       setLoading(false);
     }
-  }, [setSnapshot]);
+  }, []);
 
   useEffect(() => {
     void loadSnapshot();

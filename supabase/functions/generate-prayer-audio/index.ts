@@ -1,8 +1,9 @@
-import { createClient } from 'npm:@supabase/supabase-js@2.58.0';
+import { createClient } from "npm:@supabase/supabase-js@2.58.0";
 
-import { corsHeaders } from '../_shared/cors.ts';
+import { corsHeaders } from "../_shared/cors.ts";
 
 interface PrayerAudioRequest {
+  allowGeneration?: boolean;
   durationMinutes?: number;
   language?: string;
   prayerLibraryItemId?: string;
@@ -40,7 +41,7 @@ interface TimedWord {
   word: string;
 }
 
-type ArtifactStatus = 'failed' | 'pending' | 'ready';
+type ArtifactStatus = "failed" | "pending" | "ready";
 
 interface PrayerAudioArtifactRow {
   cache_version: string;
@@ -63,24 +64,28 @@ interface PrayerAudioArtifactRow {
   word_timings: unknown;
 }
 
-const DEFAULT_VOICE_ID = 'jfIS2w2yJi0grJZPyEsk';
-const DEFAULT_MODEL_ID = 'eleven_multilingual_v2';
-const DEFAULT_AUDIO_BUCKET = 'prayer-audio';
+const DEFAULT_VOICE_ID = "jfIS2w2yJi0grJZPyEsk";
+const DEFAULT_MODEL_ID = "eleven_multilingual_v2";
+const DEFAULT_AUDIO_BUCKET = "prayer-audio";
 const DEFAULT_SIGNED_URL_TTL_SECONDS = 3600;
-const DEFAULT_CONTENT_TYPE = 'audio/mpeg';
+const DEFAULT_CONTENT_TYPE = "audio/mpeg";
 const AUDIO_BUCKET_MAX_BYTES = 25 * 1024 * 1024;
-const DEFAULT_AUDIO_CACHE_VERSION = 'v3-artifacts';
+const DEFAULT_AUDIO_CACHE_VERSION = "v3-artifacts";
+const PRAYER_AUDIO_ARTIFACT_SELECT =
+  "id,voice_id,voice_label,model_id,cache_version,script_hash,script_checksum,storage_object_path,timings_object_path,content_type,word_timings,status,prayer_library_script_id,prayer_library_item_id,duration_minutes,language,title,generated_at";
 
 type SupabaseAdminClient = ReturnType<typeof createClient>;
 
 let ensureBucketPromise: Promise<void> | null = null;
 
 function getSupabaseAdminClient() {
-  const supabaseUrl = Deno.env.get('SUPABASE_URL')?.trim();
-  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')?.trim();
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")?.trim();
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")?.trim();
 
   if (!supabaseUrl || !serviceRoleKey) {
-    throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be configured for audio storage.');
+    throw new Error(
+      "SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be configured for audio storage.",
+    );
   }
 
   return createClient(supabaseUrl, serviceRoleKey, {
@@ -92,11 +97,13 @@ function getSupabaseAdminClient() {
 }
 
 function getAudioBucketName() {
-  return Deno.env.get('ELEVENLABS_AUDIO_BUCKET')?.trim() || DEFAULT_AUDIO_BUCKET;
+  return (
+    Deno.env.get("ELEVENLABS_AUDIO_BUCKET")?.trim() || DEFAULT_AUDIO_BUCKET
+  );
 }
 
 function getSignedUrlTtlSeconds() {
-  const raw = Deno.env.get('ELEVENLABS_AUDIO_SIGNED_URL_TTL_SECONDS')?.trim();
+  const raw = Deno.env.get("ELEVENLABS_AUDIO_SIGNED_URL_TTL_SECONDS")?.trim();
   if (!raw) {
     return DEFAULT_SIGNED_URL_TTL_SECONDS;
   }
@@ -110,15 +117,22 @@ function getSignedUrlTtlSeconds() {
 }
 
 function getAudioCacheVersion() {
-  return Deno.env.get('ELEVENLABS_AUDIO_CACHE_VERSION')?.trim() || DEFAULT_AUDIO_CACHE_VERSION;
+  return (
+    Deno.env.get("ELEVENLABS_AUDIO_CACHE_VERSION")?.trim() ||
+    DEFAULT_AUDIO_CACHE_VERSION
+  );
+}
+
+function normalizeScriptForCache(script: string) {
+  return script.replace(/\s+/g, " ").trim();
 }
 
 async function sha256Hex(value: string) {
   const data = new TextEncoder().encode(value);
-  const digest = await crypto.subtle.digest('SHA-256', data);
+  const digest = await crypto.subtle.digest("SHA-256", data);
   return Array.from(new Uint8Array(digest))
-    .map((byte) => byte.toString(16).padStart(2, '0'))
-    .join('');
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
 }
 
 async function ensureAudioBucket(client: SupabaseAdminClient, bucket: string) {
@@ -127,7 +141,8 @@ async function ensureAudioBucket(client: SupabaseAdminClient, bucket: string) {
       const { data, error } = await client.storage.getBucket(bucket);
       if (!error && data) {
         const currentLimit =
-          typeof (data as { file_size_limit?: number | null }).file_size_limit === 'number'
+          typeof (data as { file_size_limit?: number | null })
+            .file_size_limit === "number"
             ? (data as { file_size_limit?: number | null }).file_size_limit
             : null;
 
@@ -148,7 +163,7 @@ async function ensureAudioBucket(client: SupabaseAdminClient, bucket: string) {
 
       if (
         createError &&
-        !/already exists|duplicate|conflict/i.test(createError.message || '')
+        !/already exists|duplicate|conflict/i.test(createError.message || "")
       ) {
         throw createError;
       }
@@ -176,13 +191,17 @@ async function createSignedAudioUrl(
 }
 
 function isMissingTableError(error: unknown) {
-  if (!error || typeof error !== 'object') {
+  if (!error || typeof error !== "object") {
     return false;
   }
 
   const row = error as { code?: string; message?: string };
-  const message = row.message?.toLowerCase() ?? '';
-  return row.code === '42P01' || message.includes('relation') || message.includes('does not exist');
+  const message = row.message?.toLowerCase() ?? "";
+  return (
+    row.code === "42P01" ||
+    message.includes("relation") ||
+    message.includes("does not exist")
+  );
 }
 
 async function uploadAudioToStorage(
@@ -191,10 +210,12 @@ async function uploadAudioToStorage(
   objectPath: string,
   audioBytes: Uint8Array,
 ) {
-  const { error } = await client.storage.from(bucket).upload(objectPath, audioBytes, {
-    contentType: DEFAULT_CONTENT_TYPE,
-    upsert: true,
-  });
+  const { error } = await client.storage
+    .from(bucket)
+    .upload(objectPath, audioBytes, {
+      contentType: DEFAULT_CONTENT_TYPE,
+      upsert: true,
+    });
 
   if (error) {
     throw new Error(`Failed to upload generated audio: ${error.message}`);
@@ -211,14 +232,12 @@ async function fetchArtifact(
   },
 ) {
   const { data, error } = await client
-    .from('prayer_audio_artifacts')
-    .select(
-      'id,voice_id,voice_label,model_id,cache_version,script_hash,script_checksum,storage_object_path,timings_object_path,content_type,word_timings,status,prayer_library_script_id,prayer_library_item_id,duration_minutes,language,title,generated_at',
-    )
-    .eq('voice_id', input.voiceId)
-    .eq('model_id', input.modelId)
-    .eq('cache_version', input.cacheVersion)
-    .eq('script_hash', input.scriptHash)
+    .from("prayer_audio_artifacts")
+    .select(PRAYER_AUDIO_ARTIFACT_SELECT)
+    .eq("voice_id", input.voiceId)
+    .eq("model_id", input.modelId)
+    .eq("cache_version", input.cacheVersion)
+    .eq("script_hash", input.scriptHash)
     .maybeSingle();
 
   if (error) {
@@ -227,6 +246,54 @@ async function fetchArtifact(
     }
 
     throw new Error(`Failed to load prayer audio artifact: ${error.message}`);
+  }
+
+  return (data as PrayerAudioArtifactRow | null) ?? null;
+}
+
+async function fetchArtifactByLibraryContext(
+  client: SupabaseAdminClient,
+  input: {
+    cacheVersion: string;
+    durationMinutes: number | null;
+    language: string;
+    modelId: string;
+    prayerLibraryItemId: string | null;
+    prayerLibraryScriptId: string | null;
+    voiceId: string;
+  },
+) {
+  let query = client
+    .from("prayer_audio_artifacts")
+    .select(PRAYER_AUDIO_ARTIFACT_SELECT)
+    .eq("voice_id", input.voiceId)
+    .eq("model_id", input.modelId)
+    .eq("cache_version", input.cacheVersion)
+    .eq("status", "ready")
+    .order("generated_at", { ascending: false })
+    .limit(1);
+
+  if (input.prayerLibraryScriptId) {
+    query = query.eq("prayer_library_script_id", input.prayerLibraryScriptId);
+  } else if (input.prayerLibraryItemId && input.durationMinutes) {
+    query = query
+      .eq("prayer_library_item_id", input.prayerLibraryItemId)
+      .eq("duration_minutes", input.durationMinutes)
+      .eq("language", input.language);
+  } else {
+    return null;
+  }
+
+  const { data, error } = await query.maybeSingle();
+
+  if (error) {
+    if (isMissingTableError(error)) {
+      return null;
+    }
+
+    throw new Error(
+      `Failed to load prayer audio artifact by context: ${error.message}`,
+    );
   }
 
   return (data as PrayerAudioArtifactRow | null) ?? null;
@@ -277,9 +344,11 @@ async function upsertArtifact(
     word_timings: input.wordTimings,
   };
 
-  const { error } = await client.from('prayer_audio_artifacts').upsert(payload, {
-    onConflict: 'voice_id,model_id,cache_version,script_hash',
-  });
+  const { error } = await client
+    .from("prayer_audio_artifacts")
+    .upsert(payload, {
+      onConflict: "voice_id,model_id,cache_version,script_hash",
+    });
 
   if (error && !isMissingTableError(error)) {
     throw new Error(`Failed to upsert prayer audio artifact: ${error.message}`);
@@ -306,10 +375,12 @@ async function uploadWordTimingsToStorage(
   wordTimings: TimedWord[],
 ) {
   const payload = new TextEncoder().encode(JSON.stringify(wordTimings));
-  const { error } = await client.storage.from(bucket).upload(objectPath, payload, {
-    contentType: 'application/json',
-    upsert: true,
-  });
+  const { error } = await client.storage
+    .from(bucket)
+    .upload(objectPath, payload, {
+      contentType: "application/json",
+      upsert: true,
+    });
 
   if (error) {
     throw new Error(`Failed to upload word timings: ${error.message}`);
@@ -323,16 +394,20 @@ function sanitizeWordTimings(value: unknown): TimedWord[] {
 
   const parsed = value
     .map((entry, index) => {
-      if (!entry || typeof entry !== 'object') {
+      if (!entry || typeof entry !== "object") {
         return null;
       }
 
       const row = entry as Record<string, unknown>;
-      const word = typeof row.word === 'string' ? row.word.trim() : '';
+      const word = typeof row.word === "string" ? row.word.trim() : "";
       const startSeconds = Number(row.startSeconds);
       const endSeconds = Number(row.endSeconds);
 
-      if (!word || !Number.isFinite(startSeconds) || !Number.isFinite(endSeconds)) {
+      if (
+        !word ||
+        !Number.isFinite(startSeconds) ||
+        !Number.isFinite(endSeconds)
+      ) {
         return null;
       }
 
@@ -353,7 +428,9 @@ async function fetchStoredWordTimings(
   bucket: string,
   objectPath: string,
 ) {
-  const { data, error } = await client.storage.from(bucket).download(objectPath);
+  const { data, error } = await client.storage
+    .from(bucket)
+    .download(objectPath);
   if (error || !data) {
     return [];
   }
@@ -375,12 +452,16 @@ function decodeBase64ToUint8Array(base64: string) {
   return bytes;
 }
 
-function toWordTimingsFromAlignment(alignment: ElevenLabsAlignment | null | undefined): TimedWord[] {
+function toWordTimingsFromAlignment(
+  alignment: ElevenLabsAlignment | null | undefined,
+): TimedWord[] {
   if (!alignment) {
     return [];
   }
 
-  const characters = Array.isArray(alignment.characters) ? alignment.characters : [];
+  const characters = Array.isArray(alignment.characters)
+    ? alignment.characters
+    : [];
   const starts = Array.isArray(alignment.character_start_times_seconds)
     ? alignment.character_start_times_seconds
     : [];
@@ -394,14 +475,14 @@ function toWordTimingsFromAlignment(alignment: ElevenLabsAlignment | null | unde
   }
 
   const words: TimedWord[] = [];
-  let buffer = '';
+  let buffer = "";
   let wordStart = -1;
   let wordEnd = -1;
 
   const flushWord = () => {
     const value = buffer.trim();
     if (!value || wordStart < 0 || wordEnd < 0) {
-      buffer = '';
+      buffer = "";
       wordStart = -1;
       wordEnd = -1;
       return;
@@ -414,13 +495,13 @@ function toWordTimingsFromAlignment(alignment: ElevenLabsAlignment | null | unde
       word: value,
     });
 
-    buffer = '';
+    buffer = "";
     wordStart = -1;
     wordEnd = -1;
   };
 
   for (let index = 0; index < count; index += 1) {
-    const character = characters[index] ?? '';
+    const character = characters[index] ?? "";
     const startSeconds = Number(starts[index]);
     const endSeconds = Number(ends[index]);
     const isWhitespace = /\s/.test(character);
@@ -447,26 +528,26 @@ function toWordTimingsFromAlignment(alignment: ElevenLabsAlignment | null | unde
 }
 
 function sanitizeVoiceSettings(value: unknown): ElevenLabsVoiceSettings | null {
-  if (!value || typeof value !== 'object') {
+  if (!value || typeof value !== "object") {
     return null;
   }
 
   const source = value as Record<string, unknown>;
   const result: ElevenLabsVoiceSettings = {};
 
-  if (typeof source.stability === 'number') {
+  if (typeof source.stability === "number") {
     result.stability = source.stability;
   }
-  if (typeof source.similarity_boost === 'number') {
+  if (typeof source.similarity_boost === "number") {
     result.similarity_boost = source.similarity_boost;
   }
-  if (typeof source.style === 'number') {
+  if (typeof source.style === "number") {
     result.style = source.style;
   }
-  if (typeof source.speed === 'number') {
+  if (typeof source.speed === "number") {
     result.speed = source.speed;
   }
-  if (typeof source.use_speaker_boost === 'boolean') {
+  if (typeof source.use_speaker_boost === "boolean") {
     result.use_speaker_boost = source.use_speaker_boost;
   }
 
@@ -477,13 +558,16 @@ async function fetchVoiceSettings(
   elevenLabsApiKey: string,
   voiceId: string,
 ): Promise<ElevenLabsVoiceSettings | null> {
-  const response = await fetch(`https://api.elevenlabs.io/v1/voices/${voiceId}/settings`, {
-    method: 'GET',
-    headers: {
-      Accept: 'application/json',
-      'xi-api-key': elevenLabsApiKey,
+  const response = await fetch(
+    `https://api.elevenlabs.io/v1/voices/${voiceId}/settings`,
+    {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+        "xi-api-key": elevenLabsApiKey,
+      },
     },
-  });
+  );
 
   if (!response.ok) {
     return null;
@@ -495,23 +579,26 @@ async function fetchVoiceSettings(
 
 Deno.serve(async (request) => {
   try {
-    if (request.method === 'OPTIONS') {
-      return new Response('ok', { headers: corsHeaders });
+    if (request.method === "OPTIONS") {
+      return new Response("ok", { headers: corsHeaders });
     }
 
-    if (request.method !== 'POST') {
-      return new Response(JSON.stringify({ error: 'Method not allowed' }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    if (request.method !== "POST") {
+      return new Response(JSON.stringify({ error: "Method not allowed" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 405,
       });
     }
 
-    const elevenLabsApiKey = Deno.env.get('ELEVENLABS_API_KEY');
+    const elevenLabsApiKey = Deno.env.get("ELEVENLABS_API_KEY");
     if (!elevenLabsApiKey) {
-      return new Response(JSON.stringify({ error: 'ELEVENLABS_API_KEY is not configured' }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 500,
-      });
+      return new Response(
+        JSON.stringify({ error: "ELEVENLABS_API_KEY is not configured" }),
+        {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 500,
+        },
+      );
     }
 
     let payload: PrayerAudioRequest;
@@ -519,31 +606,45 @@ Deno.serve(async (request) => {
     try {
       payload = (await request.json()) as PrayerAudioRequest;
     } catch (_error) {
-      return new Response(JSON.stringify({ error: 'Invalid JSON body' }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      return new Response(JSON.stringify({ error: "Invalid JSON body" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 400,
       });
     }
 
-    const script = payload.script?.trim();
+    const inputScript = payload.script?.trim() || "";
+    if (!inputScript) {
+      return new Response(JSON.stringify({ error: "script is required" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 400,
+      });
+    }
+    const script = normalizeScriptForCache(inputScript);
     if (!script) {
-      return new Response(JSON.stringify({ error: 'script is required' }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      return new Response(JSON.stringify({ error: "script is required" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 400,
       });
     }
 
-    const configuredDefaultVoiceId = Deno.env.get('ELEVENLABS_DEFAULT_VOICE_ID')?.trim();
-    const voiceId = payload.voiceId?.trim() || configuredDefaultVoiceId || DEFAULT_VOICE_ID;
+    const configuredDefaultVoiceId = Deno.env
+      .get("ELEVENLABS_DEFAULT_VOICE_ID")
+      ?.trim();
+    const voiceId =
+      payload.voiceId?.trim() || configuredDefaultVoiceId || DEFAULT_VOICE_ID;
     const voiceLabel = payload.voiceLabel?.trim() || null;
-    const modelId = Deno.env.get('ELEVENLABS_MODEL_ID')?.trim() || DEFAULT_MODEL_ID;
+    const modelId =
+      Deno.env.get("ELEVENLABS_MODEL_ID")?.trim() || DEFAULT_MODEL_ID;
     const cacheVersion = getAudioCacheVersion();
-    const scriptHash = await sha256Hex(`${cacheVersion}|${voiceId}|${modelId}|${script}`);
+    const scriptHash = await sha256Hex(
+      `${cacheVersion}|${voiceId}|${modelId}|${script}`,
+    );
     const scriptChecksum = await sha256Hex(script);
     const audioBucket = getAudioBucketName();
     const signedUrlTtlSeconds = getSignedUrlTtlSeconds();
     const durationMinutes = toPositiveInteger(payload.durationMinutes);
-    const language = payload.language?.trim() || 'en';
+    const language = payload.language?.trim() || "en";
+    const allowGeneration = payload.allowGeneration === true;
     const prayerLibraryScriptId = payload.prayerLibraryScriptId?.trim() || null;
     const prayerLibraryItemId = payload.prayerLibraryItemId?.trim() || null;
     const title = payload.title?.trim() || null;
@@ -553,12 +654,24 @@ Deno.serve(async (request) => {
 
     await ensureAudioBucket(supabaseAdmin, audioBucket);
 
-    const artifact = await fetchArtifact(supabaseAdmin, {
+    let artifact = await fetchArtifactByLibraryContext(supabaseAdmin, {
       cacheVersion,
+      durationMinutes,
+      language,
       modelId,
-      scriptHash,
+      prayerLibraryItemId,
+      prayerLibraryScriptId,
       voiceId,
     });
+
+    if (!artifact) {
+      artifact = await fetchArtifact(supabaseAdmin, {
+        cacheVersion,
+        modelId,
+        scriptHash,
+        voiceId,
+      });
+    }
 
     const objectPath = artifact?.storage_object_path || defaultObjectPath;
     const timingObjectPath = artifact?.timings_object_path || defaultTimingPath;
@@ -575,7 +688,11 @@ Deno.serve(async (request) => {
       const cachedWordTimings =
         rowWordTimings.length > 0
           ? rowWordTimings
-          : await fetchStoredWordTimings(supabaseAdmin, audioBucket, timingObjectPath);
+          : await fetchStoredWordTimings(
+              supabaseAdmin,
+              audioBucket,
+              timingObjectPath,
+            );
 
       await upsertArtifact(supabaseAdmin, {
         cacheVersion,
@@ -585,11 +702,13 @@ Deno.serve(async (request) => {
         generatedAtIso: artifact?.generated_at || timezoneNowIso(),
         language,
         modelId,
-        prayerLibraryItemId: prayerLibraryItemId ?? artifact?.prayer_library_item_id ?? null,
-        prayerLibraryScriptId: prayerLibraryScriptId ?? artifact?.prayer_library_script_id ?? null,
+        prayerLibraryItemId:
+          prayerLibraryItemId ?? artifact?.prayer_library_item_id ?? null,
+        prayerLibraryScriptId:
+          prayerLibraryScriptId ?? artifact?.prayer_library_script_id ?? null,
         scriptChecksum,
         scriptHash,
-        status: 'ready',
+        status: "ready",
         storageObjectPath: objectPath,
         timingsObjectPath: timingObjectPath,
         title: title ?? artifact?.title ?? null,
@@ -606,8 +725,22 @@ Deno.serve(async (request) => {
           wordTimings: cachedWordTimings,
         }),
         {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
           status: 200,
+        },
+      );
+    }
+
+    if (!allowGeneration) {
+      return new Response(
+        JSON.stringify({
+          error: "Audio artifact not found",
+          detail:
+            "No pre-generated audio artifact exists for this script and voice. ElevenLabs generation is disabled for this request.",
+        }),
+        {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 409,
         },
       );
     }
@@ -624,7 +757,7 @@ Deno.serve(async (request) => {
       prayerLibraryScriptId,
       scriptChecksum,
       scriptHash,
-      status: 'pending',
+      status: "pending",
       storageObjectPath: objectPath,
       timingsObjectPath: timingObjectPath,
       title,
@@ -646,11 +779,11 @@ Deno.serve(async (request) => {
     const response = await fetch(
       `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/with-timestamps`,
       {
-        method: 'POST',
+        method: "POST",
         headers: {
-          Accept: 'application/json',
-          'Content-Type': 'application/json',
-          'xi-api-key': elevenLabsApiKey,
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          "xi-api-key": elevenLabsApiKey,
         },
         body: JSON.stringify(requestBody),
       },
@@ -671,7 +804,7 @@ Deno.serve(async (request) => {
         prayerLibraryScriptId,
         scriptChecksum,
         scriptHash,
-        status: 'failed',
+        status: "failed",
         storageObjectPath: objectPath,
         timingsObjectPath: timingObjectPath,
         title,
@@ -680,13 +813,20 @@ Deno.serve(async (request) => {
         wordTimings: [],
       });
 
-      return new Response(JSON.stringify({ error: 'ElevenLabs request failed', detail: errorText }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 502,
-      });
+      return new Response(
+        JSON.stringify({
+          error: "ElevenLabs request failed",
+          detail: errorText,
+        }),
+        {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 502,
+        },
+      );
     }
 
-    const timestampPayload = (await response.json()) as ElevenLabsTimestampResponse;
+    const timestampPayload =
+      (await response.json()) as ElevenLabsTimestampResponse;
     const audioBase64 = timestampPayload.audio_base64?.trim();
 
     if (!audioBase64) {
@@ -694,7 +834,7 @@ Deno.serve(async (request) => {
         cacheVersion,
         contentType: DEFAULT_CONTENT_TYPE,
         durationMinutes,
-        errorMessage: 'ElevenLabs response missing audio data',
+        errorMessage: "ElevenLabs response missing audio data",
         generatedAtIso: timezoneNowIso(),
         language,
         modelId,
@@ -702,7 +842,7 @@ Deno.serve(async (request) => {
         prayerLibraryScriptId,
         scriptChecksum,
         scriptHash,
-        status: 'failed',
+        status: "failed",
         storageObjectPath: objectPath,
         timingsObjectPath: timingObjectPath,
         title,
@@ -711,18 +851,32 @@ Deno.serve(async (request) => {
         wordTimings: [],
       });
 
-      return new Response(JSON.stringify({ error: 'ElevenLabs response missing audio data' }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 502,
-      });
+      return new Response(
+        JSON.stringify({ error: "ElevenLabs response missing audio data" }),
+        {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 502,
+        },
+      );
     }
 
     const audioBytes = decodeBase64ToUint8Array(audioBase64);
-    const alignment = timestampPayload.normalized_alignment ?? timestampPayload.alignment;
+    const alignment =
+      timestampPayload.normalized_alignment ?? timestampPayload.alignment;
     const wordTimings = toWordTimingsFromAlignment(alignment);
 
-    await uploadAudioToStorage(supabaseAdmin, audioBucket, objectPath, audioBytes);
-    await uploadWordTimingsToStorage(supabaseAdmin, audioBucket, timingObjectPath, wordTimings);
+    await uploadAudioToStorage(
+      supabaseAdmin,
+      audioBucket,
+      objectPath,
+      audioBytes,
+    );
+    await uploadWordTimingsToStorage(
+      supabaseAdmin,
+      audioBucket,
+      timingObjectPath,
+      wordTimings,
+    );
 
     const audioUrl = await createSignedAudioUrl(
       supabaseAdmin,
@@ -736,7 +890,7 @@ Deno.serve(async (request) => {
         cacheVersion,
         contentType: DEFAULT_CONTENT_TYPE,
         durationMinutes,
-        errorMessage: 'Failed to create signed audio URL after upload',
+        errorMessage: "Failed to create signed audio URL after upload",
         generatedAtIso: timezoneNowIso(),
         language,
         modelId,
@@ -744,7 +898,7 @@ Deno.serve(async (request) => {
         prayerLibraryScriptId,
         scriptChecksum,
         scriptHash,
-        status: 'failed',
+        status: "failed",
         storageObjectPath: objectPath,
         timingsObjectPath: timingObjectPath,
         title,
@@ -753,10 +907,15 @@ Deno.serve(async (request) => {
         wordTimings,
       });
 
-      return new Response(JSON.stringify({ error: 'Failed to create signed audio URL after upload' }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 500,
-      });
+      return new Response(
+        JSON.stringify({
+          error: "Failed to create signed audio URL after upload",
+        }),
+        {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 500,
+        },
+      );
     }
 
     await upsertArtifact(supabaseAdmin, {
@@ -771,7 +930,7 @@ Deno.serve(async (request) => {
       prayerLibraryScriptId,
       scriptChecksum,
       scriptHash,
-      status: 'ready',
+      status: "ready",
       storageObjectPath: objectPath,
       timingsObjectPath: timingObjectPath,
       title,
@@ -788,15 +947,19 @@ Deno.serve(async (request) => {
         wordTimings,
       }),
       {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 200,
       },
     );
   } catch (error) {
-    const detail = error instanceof Error ? error.message : 'Unknown function error';
-    return new Response(JSON.stringify({ error: 'generate-prayer-audio failed', detail }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 500,
-    });
+    const detail =
+      error instanceof Error ? error.message : "Unknown function error";
+    return new Response(
+      JSON.stringify({ error: "generate-prayer-audio failed", detail }),
+      {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 500,
+      },
+    );
   }
 });

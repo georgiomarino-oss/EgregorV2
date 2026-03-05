@@ -11,7 +11,13 @@ import { Button } from '../components/Button';
 import { Screen } from '../components/Screen';
 import { SurfaceCard } from '../components/SurfaceCard';
 import { Typography } from '../components/Typography';
-import { fetchSoloStats, fetchUserPreferences, type UserPreferences } from '../lib/api/data';
+import {
+  fetchSoloStats,
+  fetchUserPreferences,
+  getCachedSoloStats,
+  getCachedUserPreferences,
+  type UserPreferences,
+} from '../lib/api/data';
 import { supabase } from '../lib/supabase';
 import { profileRowGap, sectionGap } from '../theme/layout';
 import { colors } from '../theme/tokens';
@@ -56,11 +62,24 @@ export function SoloSetupScreen() {
     let active = true;
 
     const loadData = async () => {
-      setLoading(true);
       try {
         const { data, error: userError } = await supabase.auth.getUser();
         if (userError || !data.user) {
           throw new Error(userError?.message || 'Could not load user context.');
+        }
+
+        const cachedPreferences = getCachedUserPreferences(data.user.id);
+        const cachedStats = getCachedSoloStats(data.user.id);
+        if (cachedPreferences) {
+          setPreferences(cachedPreferences);
+        }
+        if (cachedStats) {
+          setSessionsToday(cachedStats.sessionsToday);
+        }
+        if (cachedPreferences || cachedStats) {
+          setLoading(false);
+        } else {
+          setLoading(true);
         }
 
         const [nextPreferences, soloStats] = await Promise.all([
@@ -133,6 +152,15 @@ export function SoloSetupScreen() {
 
             if (route.params?.scriptPreset) {
               nextParams.scriptPreset = route.params.scriptPreset;
+            }
+            if (route.params?.prayerLibraryItemId) {
+              nextParams.prayerLibraryItemId = route.params.prayerLibraryItemId;
+            }
+            if (route.params?.durationMinutes) {
+              nextParams.durationMinutes = route.params.durationMinutes;
+            }
+            if (route.params?.allowAudioGeneration === true) {
+              nextParams.allowAudioGeneration = true;
             }
 
             navigation.navigate('SoloLive', nextParams);

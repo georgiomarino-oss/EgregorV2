@@ -21,6 +21,7 @@ import { Typography } from '../components/Typography';
 import {
   addEventsCircleMember,
   fetchEventsCircleMembers,
+  getCachedEventsCircleMembers,
   removeEventsCircleMember,
   searchUsersForPrayerCircle,
   type PrayerCircleMember,
@@ -42,11 +43,11 @@ function SwipeToRemoveRow({
   member: PrayerCircleMember;
   onRemovePress: (member: PrayerCircleMember) => void;
 }) {
-  const translateX = useRef(new Animated.Value(0)).current;
-  const openRef = useRef(false);
+  const translateX = useMemo(() => new Animated.Value(0), []);
+  const [isOpen, setIsOpen] = useState(false);
 
   const closeRow = useCallback(() => {
-    openRef.current = false;
+    setIsOpen(false);
     Animated.spring(translateX, {
       bounciness: 0,
       speed: 16,
@@ -56,7 +57,7 @@ function SwipeToRemoveRow({
   }, [translateX]);
 
   const openRow = useCallback(() => {
-    openRef.current = true;
+    setIsOpen(true);
     Animated.spring(translateX, {
       bounciness: 0,
       speed: 16,
@@ -77,15 +78,15 @@ function SwipeToRemoveRow({
           );
         },
         onPanResponderMove: (_event, gestureState) => {
-          const base = openRef.current ? -REMOVE_ACTION_WIDTH : 0;
+          const base = isOpen ? -REMOVE_ACTION_WIDTH : 0;
           const next = Math.max(-REMOVE_ACTION_WIDTH, Math.min(0, base + gestureState.dx));
           translateX.setValue(next);
         },
         onPanResponderRelease: (_event, gestureState) => {
           const shouldOpen =
             gestureState.vx < -0.35 ||
-            (!openRef.current && gestureState.dx < -36) ||
-            (openRef.current && gestureState.dx < 14);
+            (!isOpen && gestureState.dx < -36) ||
+            (isOpen && gestureState.dx < 14);
 
           if (shouldOpen) {
             openRow();
@@ -95,14 +96,14 @@ function SwipeToRemoveRow({
           closeRow();
         },
         onPanResponderTerminate: () => {
-          if (openRef.current) {
+          if (isOpen) {
             openRow();
             return;
           }
           closeRow();
         },
       }),
-    [closeRow, member.isOwner, openRow, translateX],
+    [closeRow, isOpen, member.isOwner, openRow, translateX],
   );
 
   return (
@@ -156,10 +157,12 @@ function SwipeToRemoveRow({
 }
 
 export function EventsCircleScreen() {
-  const [members, setMembers] = useState<PrayerCircleMember[]>([]);
+  const initialMembersRef = useRef<PrayerCircleMember[]>(getCachedEventsCircleMembers() ?? []);
+  const hasHydratedMembersRef = useRef(initialMembersRef.current.length > 0);
+  const [members, setMembers] = useState<PrayerCircleMember[]>(initialMembersRef.current);
   const [query, setQuery] = useState('');
   const [suggestions, setSuggestions] = useState<PrayerCircleUserSuggestion[]>([]);
-  const [loadingMembers, setLoadingMembers] = useState(true);
+  const [loadingMembers, setLoadingMembers] = useState(initialMembersRef.current.length === 0);
   const [refreshingMembers, setRefreshingMembers] = useState(false);
   const [searchingUsers, setSearchingUsers] = useState(false);
   const [updatingMemberId, setUpdatingMemberId] = useState<string | null>(null);
@@ -168,16 +171,19 @@ export function EventsCircleScreen() {
   const loadMembers = useCallback(async (refresh = false) => {
     if (refresh) {
       setRefreshingMembers(true);
-    } else {
+    } else if (!hasHydratedMembersRef.current) {
       setLoadingMembers(true);
     }
 
     try {
       const nextMembers = await fetchEventsCircleMembers();
       setMembers(nextMembers);
+      hasHydratedMembersRef.current = nextMembers.length > 0;
       setError(null);
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : 'Failed to load your events circle.');
+      setError(
+        nextError instanceof Error ? nextError.message : 'Failed to load your events circle.',
+      );
     } finally {
       setLoadingMembers(false);
       setRefreshingMembers(false);
@@ -223,7 +229,9 @@ export function EventsCircleScreen() {
       await loadMembers(true);
       setError(null);
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : 'Could not add user to events circle.');
+      setError(
+        nextError instanceof Error ? nextError.message : 'Could not add user to events circle.',
+      );
     } finally {
       setUpdatingMemberId(null);
     }
@@ -301,7 +309,12 @@ export function EventsCircleScreen() {
         {searchingUsers ? <ActivityIndicator color={colors.accentMintStart} /> : null}
 
         {visibleSuggestions.slice(0, 6).map((user) => (
-          <SurfaceCard key={user.userId} radius="md" style={styles.suggestionRow} variant="profileRow">
+          <SurfaceCard
+            key={user.userId}
+            radius="md"
+            style={styles.suggestionRow}
+            variant="profileRow"
+          >
             <Typography
               allowFontScaling={false}
               numberOfLines={1}
@@ -331,8 +344,16 @@ export function EventsCircleScreen() {
           Invite external users
         </Typography>
         <View style={styles.inviteRow}>
-          <Button onPress={() => void onInviteWhatsApp()} title="Invite via WhatsApp" variant="primary" />
-          <Button onPress={() => void onInviteEmail()} title="Invite via Email" variant="secondary" />
+          <Button
+            onPress={() => void onInviteWhatsApp()}
+            title="Invite via WhatsApp"
+            variant="primary"
+          />
+          <Button
+            onPress={() => void onInviteEmail()}
+            title="Invite via Email"
+            variant="secondary"
+          />
         </View>
       </SurfaceCard>
 
@@ -361,7 +382,11 @@ export function EventsCircleScreen() {
 
         {!loadingMembers
           ? members.map((member) => (
-              <SwipeToRemoveRow key={member.userId} member={member} onRemovePress={onConfirmRemove} />
+              <SwipeToRemoveRow
+                key={member.userId}
+                member={member}
+                onRemovePress={onConfirmRemove}
+              />
             ))
           : null}
 

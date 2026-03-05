@@ -1,5 +1,5 @@
 import ambientAnimation from '../../assets/lottie/cosmic-ambient.json';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -15,6 +15,9 @@ import {
   fetchEventById,
   fetchEventLibraryItemById,
   fetchEvents,
+  getCachedEventById,
+  getCachedEventLibraryItemById,
+  getCachedEvents,
   type AppEvent,
   type EventLibraryItem,
 } from '../lib/api/data';
@@ -54,14 +57,23 @@ function StatCard({ label, value }: { label: string; value: string }) {
 export function EventDetailsScreen() {
   const navigation = useNavigation<EventsNavigation>();
   const route = useRoute<EventDetailsRoute>();
-  const [event, setEvent] = useState<AppEvent | null>(null);
-  const [eventTemplate, setEventTemplate] = useState<EventLibraryItem | null>(null);
-  const [loading, setLoading] = useState(true);
+  const initialEventTemplate = route.params?.eventTemplateId
+    ? (getCachedEventLibraryItemById(route.params.eventTemplateId) ?? null)
+    : null;
+  const initialEvent = route.params?.eventId
+    ? (getCachedEventById(route.params.eventId) ?? null)
+    : ((getCachedEvents(1)?.[0] ?? null) as AppEvent | null);
+  const hasInitialDetailsRef = useRef(Boolean(initialEventTemplate || initialEvent));
+  const [event, setEvent] = useState<AppEvent | null>(initialEventTemplate ? null : initialEvent);
+  const [eventTemplate, setEventTemplate] = useState<EventLibraryItem | null>(initialEventTemplate);
+  const [loading, setLoading] = useState(!(initialEventTemplate || initialEvent));
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const loadEvent = useCallback(async () => {
-    setLoading(true);
+    if (!hasInitialDetailsRef.current) {
+      setLoading(true);
+    }
 
     try {
       const eventTemplateId = route.params?.eventTemplateId;
@@ -73,6 +85,7 @@ export function EventDetailsScreen() {
         if (!selectedTemplate) {
           setError('Event template not found.');
         } else {
+          hasInitialDetailsRef.current = true;
           setError(null);
         }
 
@@ -85,6 +98,7 @@ export function EventDetailsScreen() {
       if (selectedEvent) {
         setEvent(selectedEvent);
         setEventTemplate(null);
+        hasInitialDetailsRef.current = true;
         setError(null);
         return;
       }
@@ -92,6 +106,7 @@ export function EventDetailsScreen() {
       const fallbackEvents = await fetchEvents(1);
       setEvent(fallbackEvents[0] ?? null);
       setEventTemplate(null);
+      hasInitialDetailsRef.current = true;
       setError(null);
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : 'Failed to load event details.');

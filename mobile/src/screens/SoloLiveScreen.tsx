@@ -13,8 +13,17 @@ import type { SoloStackParamList } from '../app/navigation/types';
 import { Screen } from '../components/Screen';
 import { SurfaceCard } from '../components/SurfaceCard';
 import { Typography } from '../components/Typography';
-import { fetchPrayerScriptVariantByTitle, fetchUserPreferences } from '../lib/api/data';
-import { generatePrayerAudio, type TimedWord } from '../lib/api/functions';
+import {
+  fetchPrayerScriptVariantByTitle,
+  fetchUserPreferences,
+  prefetchPrayerScriptVariantByTitle,
+} from '../lib/api/data';
+import {
+  generatePrayerAudio,
+  hasPrayerAudioCached,
+  prefetchPrayerAudio,
+  type TimedWord,
+} from '../lib/api/functions';
 import { configureAudioForPlayback, createPlayer, type ManagedAudioPlayer } from '../lib/audio';
 import { supabase } from '../lib/supabase';
 import { figmaV2Reference } from '../theme/figma-v2-reference';
@@ -26,13 +35,12 @@ type SoloNavigation = NativeStackNavigationProp<SoloStackParamList, 'SoloLive'>;
 
 const VOICE_OPTIONS = ['Oliver', 'Amaya', 'Rainbird', 'Dominic'] as const;
 const MINUTE_OPTIONS = [3, 5, 10] as const;
+const DEFAULT_MINUTE_OPTION: (typeof MINUTE_OPTIONS)[number] = 10;
 const DEFAULT_ELEVENLABS_VOICE_ID = 'jfIS2w2yJi0grJZPyEsk';
 const MAX_SCRIPT_PARAGRAPH_CHARS = 96;
 const MAX_TIMED_WORDS_PER_PARAGRAPH = 14;
 const MAX_SCRIPT_LINES = 4;
-const ELEVENLABS_VOICE_ID_BY_LABEL: Partial<
-  Record<(typeof VOICE_OPTIONS)[number], string>
-> = {
+const ELEVENLABS_VOICE_ID_BY_LABEL: Partial<Record<(typeof VOICE_OPTIONS)[number], string>> = {
   Oliver: 'jfIS2w2yJi0grJZPyEsk',
   Amaya: 'BFvr34n3gOoz0BAf9Rwn',
   Rainbird: 'bgU7lBMo69PNEOWHFqxM',
@@ -227,7 +235,11 @@ function buildPreviewParagraphsFromScript(script: string) {
   }));
 
   return groupTimedWordsIntoParagraphs(pseudoTimedWords, MAX_TIMED_WORDS_PER_PARAGRAPH).map(
-    (paragraph) => paragraph.words.map((word) => word.word).join(' ').trim(),
+    (paragraph) =>
+      paragraph.words
+        .map((word) => word.word)
+        .join(' ')
+        .trim(),
   );
 }
 
@@ -267,12 +279,24 @@ function findActiveTimedWordIndex(words: TimedWord[], elapsedMillis: number) {
   return last?.index ?? words.length - 1;
 }
 
+function resolveMinuteOption(value: number | null | undefined) {
+  if (MINUTE_OPTIONS.includes(value as (typeof MINUTE_OPTIONS)[number])) {
+    return value as (typeof MINUTE_OPTIONS)[number];
+  }
+
+  return DEFAULT_MINUTE_OPTION;
+}
+
 export function SoloLiveScreen() {
   const navigation = useNavigation<SoloNavigation>();
   const route = useRoute<SoloLiveRoute>();
+  const routeDurationMinutes = route.params?.durationMinutes;
+  const initialSelectedMinutes = resolveMinuteOption(routeDurationMinutes);
+  const hasRouteDurationMinutes = routeDurationMinutes === initialSelectedMinutes;
 
   const [selectedVoice, setSelectedVoice] = useState<(typeof VOICE_OPTIONS)[number]>('Oliver');
-  const [selectedMinutes, setSelectedMinutes] = useState<(typeof MINUTE_OPTIONS)[number]>(10);
+  const [selectedMinutes, setSelectedMinutes] =
+    useState<(typeof MINUTE_OPTIONS)[number]>(initialSelectedMinutes);
   const [isVoiceMenuOpen, setIsVoiceMenuOpen] = useState(false);
   const [isMinuteMenuOpen, setIsMinuteMenuOpen] = useState(false);
   const [isInviteOpen, setIsInviteOpen] = useState(false);
@@ -286,12 +310,16 @@ export function SoloLiveScreen() {
   const [loadingAudio, setLoadingAudio] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const playPulseRef = useRef<LottieView>(null);
+  const scriptTextRef = useRef(scriptText);
   const activePlayerRef = useRef<ManagedAudioPlayer | null>(null);
   const activePlayerKeyRef = useRef<string | null>(null);
   const activePlayerUnsubscribeRef = useRef<(() => void) | null>(null);
 
-  const activePrayerTitle = route.params?.intention?.trim() || 'Prayer';
+  const scriptLookupTitle = route.params?.intention?.trim() || '';
+  const activePrayerTitle = scriptLookupTitle || 'Prayer';
   const fallbackScript = route.params?.scriptPreset || '';
+  const allowAudioGeneration = route.params?.allowAudioGeneration === true;
+  const prayerLibraryItemId = route.params?.prayerLibraryItemId?.trim() || '';
   const resolvedScriptText = scriptText || fallbackScript;
   const totalSeconds = selectedMinutes * 60;
   const totalMillis = totalSeconds * 1000;
@@ -310,7 +338,10 @@ export function SoloLiveScreen() {
     () => findActiveTimedWordIndex(timedWords, elapsedMillis),
     [elapsedMillis, timedWords],
   );
-  const timedWordParagraphs = useMemo(() => groupTimedWordsIntoParagraphs(timedWords), [timedWords]);
+  const timedWordParagraphs = useMemo(
+    () => groupTimedWordsIntoParagraphs(timedWords),
+    [timedWords],
+  );
   const activeTimedParagraph = useMemo(() => {
     if (timedWordParagraphs.length === 0) {
       return null;
@@ -323,7 +354,8 @@ export function SoloLiveScreen() {
     return (
       timedWordParagraphs.find(
         (paragraph) =>
-          activeTimedWordIndex >= paragraph.startIndex && activeTimedWordIndex <= paragraph.endIndex,
+          activeTimedWordIndex >= paragraph.startIndex &&
+          activeTimedWordIndex <= paragraph.endIndex,
       ) ??
       timedWordParagraphs[timedWordParagraphs.length - 1] ??
       null
@@ -349,8 +381,7 @@ export function SoloLiveScreen() {
     );
   }, [elapsedMillis, scriptParagraphs.length, totalMillis, totalSeconds]);
   const fallbackParagraph = scriptParagraphs[fallbackParagraphIndex] ?? '';
-  const activeVoiceId =
-    ELEVENLABS_VOICE_ID_BY_LABEL[selectedVoice] ?? DEFAULT_ELEVENLABS_VOICE_ID;
+  const activeVoiceId = ELEVENLABS_VOICE_ID_BY_LABEL[selectedVoice] ?? DEFAULT_ELEVENLABS_VOICE_ID;
   const activeAudioKey = useMemo(
     () => `${activeVoiceId}|${selectedMinutes}|${resolvedScriptText.trim()}`,
     [activeVoiceId, resolvedScriptText, selectedMinutes],
@@ -407,12 +438,24 @@ export function SoloLiveScreen() {
       return activePlayerRef.current;
     }
 
-    setLoadingAudio(true);
+    const shouldShowAudioLoader = !hasPrayerAudioCached({
+      script: nextScript,
+      voiceId: activeVoiceId,
+    });
+    if (shouldShowAudioLoader) {
+      setLoadingAudio(true);
+    }
+
     try {
       await configureAudioForPlayback();
 
       const audioResponse = await generatePrayerAudio({
+        allowGeneration: allowAudioGeneration,
+        durationMinutes: selectedMinutes,
+        language: 'en',
+        ...(prayerLibraryItemId ? { prayerLibraryItemId } : {}),
         script: nextScript,
+        title: activePrayerTitle,
         voiceId: activeVoiceId,
       });
 
@@ -458,26 +501,43 @@ export function SoloLiveScreen() {
 
       return player;
     } finally {
-      setLoadingAudio(false);
+      if (shouldShowAudioLoader) {
+        setLoadingAudio(false);
+      }
     }
-  }, [activeAudioKey, activeVoiceId, disposeActivePlayer, resolvedScriptText]);
+  }, [
+    activeAudioKey,
+    allowAudioGeneration,
+    activePrayerTitle,
+    activeVoiceId,
+    disposeActivePlayer,
+    prayerLibraryItemId,
+    resolvedScriptText,
+    selectedMinutes,
+  ]);
 
   const loadSelectedScript = useCallback(async () => {
-    if (!activePrayerTitle) {
+    if (!scriptLookupTitle && !prayerLibraryItemId) {
       return;
     }
 
-    setLoadingScript(true);
+    const shouldShowBlockingLoader =
+      !scriptTextRef.current.trim() && fallbackScript.trim().length === 0;
+    if (shouldShowBlockingLoader) {
+      setLoadingScript(true);
+    }
+
     try {
       const script = await fetchPrayerScriptVariantByTitle({
         durationMinutes: selectedMinutes,
-        title: activePrayerTitle,
+        prayerLibraryItemId,
+        title: scriptLookupTitle,
       });
 
       if (script) {
         setScriptText(script);
-      } else {
-        setScriptText(route.params?.scriptPreset ?? '');
+      } else if (!scriptTextRef.current.trim()) {
+        setScriptText(fallbackScript);
       }
       setError(null);
     } catch (nextError) {
@@ -485,7 +545,11 @@ export function SoloLiveScreen() {
     } finally {
       setLoadingScript(false);
     }
-  }, [activePrayerTitle, route.params?.scriptPreset, selectedMinutes]);
+  }, [fallbackScript, prayerLibraryItemId, scriptLookupTitle, selectedMinutes]);
+
+  useEffect(() => {
+    scriptTextRef.current = scriptText;
+  }, [scriptText]);
 
   useEffect(() => {
     let active = true;
@@ -503,7 +567,10 @@ export function SoloLiveScreen() {
         }
 
         const preferredMinutes = preferences.preferredSessionMinutes;
-        if (MINUTE_OPTIONS.includes(preferredMinutes as (typeof MINUTE_OPTIONS)[number])) {
+        if (
+          !hasRouteDurationMinutes &&
+          MINUTE_OPTIONS.includes(preferredMinutes as (typeof MINUTE_OPTIONS)[number])
+        ) {
           setSelectedMinutes(preferredMinutes as (typeof MINUTE_OPTIONS)[number]);
         }
 
@@ -528,11 +595,53 @@ export function SoloLiveScreen() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [hasRouteDurationMinutes]);
 
   useEffect(() => {
     void loadSelectedScript();
   }, [loadSelectedScript]);
+
+  useEffect(() => {
+    if (!scriptLookupTitle && !prayerLibraryItemId) {
+      return;
+    }
+
+    for (const durationMinutes of MINUTE_OPTIONS) {
+      if (durationMinutes === selectedMinutes) {
+        continue;
+      }
+
+      prefetchPrayerScriptVariantByTitle({
+        durationMinutes,
+        ...(prayerLibraryItemId ? { prayerLibraryItemId } : {}),
+        title: scriptLookupTitle,
+      });
+    }
+  }, [prayerLibraryItemId, scriptLookupTitle, selectedMinutes]);
+
+  useEffect(() => {
+    const nextScript = resolvedScriptText.trim();
+    if (!nextScript) {
+      return;
+    }
+
+    prefetchPrayerAudio({
+      allowGeneration: allowAudioGeneration,
+      durationMinutes: selectedMinutes,
+      language: 'en',
+      ...(prayerLibraryItemId ? { prayerLibraryItemId } : {}),
+      script: nextScript,
+      title: activePrayerTitle,
+      voiceId: activeVoiceId,
+    });
+  }, [
+    allowAudioGeneration,
+    activePrayerTitle,
+    activeVoiceId,
+    prayerLibraryItemId,
+    resolvedScriptText,
+    selectedMinutes,
+  ]);
 
   useEffect(() => {
     setElapsedMillis(0);
@@ -761,7 +870,7 @@ export function SoloLiveScreen() {
 
         <View style={styles.centerBlock}>
           <Pressable
-            disabled={loadingScript || loadingAudio || !resolvedScriptText.trim()}
+            disabled={loadingAudio || !resolvedScriptText.trim()}
             onPress={() => {
               void onTogglePlayback();
             }}
@@ -786,7 +895,7 @@ export function SoloLiveScreen() {
           </Pressable>
 
           <View style={styles.scriptWrap}>
-            {loadingScript ? (
+            {loadingScript && !resolvedScriptText.trim() ? (
               <Typography allowFontScaling={false} color={colors.textSecondary} variant="Body">
                 Loading prayer script...
               </Typography>

@@ -248,6 +248,299 @@ export interface UserJournalEntry {
   updatedAt: string;
 }
 
+const PRAYER_LIBRARY_CACHE_TTL_MS = 45_000;
+const EVENTS_CACHE_TTL_MS = 30_000;
+const EVENT_BY_ID_CACHE_TTL_MS = 30_000;
+const COMMUNITY_SNAPSHOT_CACHE_TTL_MS = 20_000;
+const EVENT_LIBRARY_CACHE_TTL_MS = 5 * 60_000;
+const EVENT_LIBRARY_ITEM_CACHE_TTL_MS = 5 * 60_000;
+const NEWS_DRIVEN_EVENTS_CACHE_TTL_MS = 60_000;
+const ACTIVE_EVENT_USERS_CACHE_TTL_MS = 15_000;
+const EVENT_NOTIFICATION_STATE_CACHE_TTL_MS = 30_000;
+const CIRCLE_MEMBERS_CACHE_TTL_MS = 30_000;
+const USER_JOURNAL_ENTRIES_CACHE_TTL_MS = 45_000;
+const USER_PREFERENCES_CACHE_TTL_MS = 2 * 60_000;
+const PROFILE_SUMMARY_CACHE_TTL_MS = 45_000;
+const SOLO_STATS_CACHE_TTL_MS = 45_000;
+
+let prayerLibraryCache: {
+  cachedAt: number;
+  items: PrayerLibraryItem[];
+} | null = null;
+let prayerLibraryRequestPromise: Promise<PrayerLibraryItem[]> | null = null;
+
+interface TimedCacheEntry<T> {
+  cachedAt: number;
+  value: T;
+}
+
+const eventsCache = new Map<string, TimedCacheEntry<AppEvent[]>>();
+const eventsRequestCache = new Map<string, Promise<AppEvent[]>>();
+const eventByIdCache = new Map<string, TimedCacheEntry<AppEvent | null>>();
+const eventByIdRequestCache = new Map<string, Promise<AppEvent | null>>();
+const communitySnapshotCache = new Map<string, TimedCacheEntry<CommunitySnapshot>>();
+const communitySnapshotRequestCache = new Map<string, Promise<CommunitySnapshot>>();
+const eventLibraryItemsCache = new Map<string, TimedCacheEntry<EventLibraryItem[]>>();
+const eventLibraryItemsRequestCache = new Map<string, Promise<EventLibraryItem[]>>();
+const eventLibraryItemByIdCache = new Map<string, TimedCacheEntry<EventLibraryItem | null>>();
+const eventLibraryItemByIdRequestCache = new Map<string, Promise<EventLibraryItem | null>>();
+const newsDrivenEventsCache = new Map<string, TimedCacheEntry<NewsDrivenEventItem[]>>();
+const newsDrivenEventsRequestCache = new Map<string, Promise<NewsDrivenEventItem[]>>();
+const activeEventUsersCache = new Map<string, TimedCacheEntry<ActiveEventUserPresence[]>>();
+const activeEventUsersRequestCache = new Map<string, Promise<ActiveEventUserPresence[]>>();
+const eventNotificationStateCache = new Map<string, TimedCacheEntry<EventNotificationState>>();
+const eventNotificationStateRequestCache = new Map<string, Promise<EventNotificationState>>();
+const prayerCircleMembersCache = new Map<string, TimedCacheEntry<PrayerCircleMember[]>>();
+const prayerCircleMembersRequestCache = new Map<string, Promise<PrayerCircleMember[]>>();
+const eventsCircleMembersCache = new Map<string, TimedCacheEntry<PrayerCircleMember[]>>();
+const eventsCircleMembersRequestCache = new Map<string, Promise<PrayerCircleMember[]>>();
+const userJournalEntriesCache = new Map<string, TimedCacheEntry<UserJournalEntry[]>>();
+const userJournalEntriesRequestCache = new Map<string, Promise<UserJournalEntry[]>>();
+const userPreferencesCache = new Map<string, TimedCacheEntry<UserPreferences>>();
+const userPreferencesRequestCache = new Map<string, Promise<UserPreferences>>();
+const profileSummaryCache = new Map<string, TimedCacheEntry<ProfileSummary>>();
+const profileSummaryRequestCache = new Map<string, Promise<ProfileSummary>>();
+const soloStatsCache = new Map<string, TimedCacheEntry<SoloStats>>();
+const soloStatsRequestCache = new Map<string, Promise<SoloStats>>();
+const coreAppDataPrefetchRequests = new Map<string, Promise<void>>();
+
+const prayerLibraryItemIdByTitleCache = new Map<string, string>();
+const prayerScriptVariantCache = new Map<string, string | null>();
+const prayerScriptVariantRequestCache = new Map<string, Promise<string | null>>();
+
+function normalizePrayerTitleKey(title: string) {
+  return title.trim().toLowerCase();
+}
+
+function buildPrayerScriptCacheKey(input: {
+  durationMinutes: number;
+  language: string;
+  prayerLibraryItemId?: string;
+  title?: string;
+}) {
+  const itemId = input.prayerLibraryItemId?.trim();
+  const title = input.title?.trim();
+
+  if (!itemId && !title) {
+    return null;
+  }
+
+  const keyIdentifier = itemId ? `id:${itemId}` : `title:${normalizePrayerTitleKey(title ?? '')}`;
+  return `${keyIdentifier}|duration:${input.durationMinutes}|lang:${input.language}`;
+}
+
+function readFreshTimedCache<T>(
+  cache: Map<string, TimedCacheEntry<T>>,
+  key: string,
+  ttlMs: number,
+): TimedCacheEntry<T> | null {
+  const entry = cache.get(key);
+  if (!entry) {
+    return null;
+  }
+
+  if (Date.now() - entry.cachedAt > ttlMs) {
+    cache.delete(key);
+    return null;
+  }
+
+  return entry;
+}
+
+function writeTimedCache<T>(cache: Map<string, TimedCacheEntry<T>>, key: string, value: T): T {
+  cache.set(key, {
+    cachedAt: Date.now(),
+    value,
+  });
+  return value;
+}
+
+async function loadWithTimedCache<T>(
+  cache: Map<string, TimedCacheEntry<T>>,
+  requestCache: Map<string, Promise<T>>,
+  key: string,
+  ttlMs: number,
+  load: () => Promise<T>,
+): Promise<T> {
+  const cached = readFreshTimedCache(cache, key, ttlMs);
+  if (cached) {
+    return cached.value;
+  }
+
+  const inFlight = requestCache.get(key);
+  if (inFlight) {
+    return inFlight;
+  }
+
+  const request = load()
+    .then((value) => writeTimedCache(cache, key, value))
+    .finally(() => {
+      requestCache.delete(key);
+    });
+
+  requestCache.set(key, request);
+  return request;
+}
+
+function invalidateEventRuntimeCaches(eventId?: string) {
+  activeEventUsersCache.clear();
+  communitySnapshotCache.clear();
+  eventsCache.clear();
+  if (eventId?.trim()) {
+    eventByIdCache.delete(eventId.trim());
+  }
+}
+
+export function getCachedPrayerLibraryItems() {
+  const cache = prayerLibraryCache;
+  if (!cache) {
+    return null;
+  }
+
+  if (Date.now() - cache.cachedAt > PRAYER_LIBRARY_CACHE_TTL_MS) {
+    prayerLibraryCache = null;
+    return null;
+  }
+
+  return cache.items;
+}
+
+export function getCachedEvents(limit = 8) {
+  return readFreshTimedCache(eventsCache, `${limit}`, EVENTS_CACHE_TTL_MS)?.value ?? null;
+}
+
+export function getCachedEventById(eventId: string) {
+  const normalizedEventId = eventId.trim();
+  if (!normalizedEventId) {
+    return undefined;
+  }
+
+  return readFreshTimedCache(eventByIdCache, normalizedEventId, EVENT_BY_ID_CACHE_TTL_MS)?.value;
+}
+
+export function getCachedCommunitySnapshot() {
+  return (
+    readFreshTimedCache(communitySnapshotCache, 'default', COMMUNITY_SNAPSHOT_CACHE_TTL_MS)
+      ?.value ?? null
+  );
+}
+
+export function getCachedEventLibraryItems(limit = 80) {
+  return (
+    readFreshTimedCache(eventLibraryItemsCache, `${limit}`, EVENT_LIBRARY_CACHE_TTL_MS)?.value ??
+    null
+  );
+}
+
+export function getCachedEventLibraryItemById(eventTemplateId: string) {
+  const normalizedId = eventTemplateId.trim();
+  if (!normalizedId) {
+    return undefined;
+  }
+
+  return readFreshTimedCache(
+    eventLibraryItemByIdCache,
+    normalizedId,
+    EVENT_LIBRARY_ITEM_CACHE_TTL_MS,
+  )?.value;
+}
+
+export function getCachedNewsDrivenEvents(limit = 80) {
+  return (
+    readFreshTimedCache(newsDrivenEventsCache, `${limit}`, NEWS_DRIVEN_EVENTS_CACHE_TTL_MS)
+      ?.value ?? null
+  );
+}
+
+export function getCachedActiveEventUsers(activeWindowMinutes = 15) {
+  return (
+    readFreshTimedCache(
+      activeEventUsersCache,
+      `${activeWindowMinutes}`,
+      ACTIVE_EVENT_USERS_CACHE_TTL_MS,
+    )?.value ?? null
+  );
+}
+
+export function getCachedEventNotificationState(userId: string) {
+  const normalizedUserId = userId.trim();
+  if (!normalizedUserId) {
+    return null;
+  }
+
+  return (
+    readFreshTimedCache(
+      eventNotificationStateCache,
+      normalizedUserId,
+      EVENT_NOTIFICATION_STATE_CACHE_TTL_MS,
+    )?.value ?? null
+  );
+}
+
+export function getCachedPrayerCircleMembers() {
+  return (
+    readFreshTimedCache(prayerCircleMembersCache, 'default', CIRCLE_MEMBERS_CACHE_TTL_MS)?.value ??
+    null
+  );
+}
+
+export function getCachedEventsCircleMembers() {
+  return (
+    readFreshTimedCache(eventsCircleMembersCache, 'default', CIRCLE_MEMBERS_CACHE_TTL_MS)?.value ??
+    null
+  );
+}
+
+export function getCachedUserJournalEntries(userId: string) {
+  const normalizedUserId = userId.trim();
+  if (!normalizedUserId) {
+    return null;
+  }
+
+  return (
+    readFreshTimedCache(
+      userJournalEntriesCache,
+      normalizedUserId,
+      USER_JOURNAL_ENTRIES_CACHE_TTL_MS,
+    )?.value ?? null
+  );
+}
+
+export function getCachedUserPreferences(userId: string) {
+  const normalizedUserId = userId.trim();
+  if (!normalizedUserId) {
+    return null;
+  }
+
+  return (
+    readFreshTimedCache(userPreferencesCache, normalizedUserId, USER_PREFERENCES_CACHE_TTL_MS)
+      ?.value ?? null
+  );
+}
+
+export function getCachedProfileSummary(userId: string) {
+  const normalizedUserId = userId.trim();
+  if (!normalizedUserId) {
+    return null;
+  }
+
+  return (
+    readFreshTimedCache(profileSummaryCache, normalizedUserId, PROFILE_SUMMARY_CACHE_TTL_MS)
+      ?.value ?? null
+  );
+}
+
+export function getCachedSoloStats(userId: string) {
+  const normalizedUserId = userId.trim();
+  if (!normalizedUserId) {
+    return null;
+  }
+
+  return (
+    readFreshTimedCache(soloStatsCache, normalizedUserId, SOLO_STATS_CACHE_TTL_MS)?.value ?? null
+  );
+}
+
 function startOfDay(date: Date) {
   const next = new Date(date);
   next.setHours(0, 0, 0, 0);
@@ -462,221 +755,272 @@ async function fetchParticipantCountsByEvent(
 export async function fetchActiveEventUsers(
   activeWindowMinutes = 15,
 ): Promise<ActiveEventUserPresence[]> {
-  const cutoff = new Date(Date.now() - activeWindowMinutes * 60 * 1000);
-  const { data, error } = await supabase
-    .from('event_participants')
-    .select('event_id,user_id,last_seen_at,is_active')
-    .eq('is_active', true)
-    .gte('last_seen_at', toIso(cutoff))
-    .order('last_seen_at', { ascending: false })
-    .limit(500);
+  const cacheKey = `${activeWindowMinutes}`;
+  return loadWithTimedCache(
+    activeEventUsersCache,
+    activeEventUsersRequestCache,
+    cacheKey,
+    ACTIVE_EVENT_USERS_CACHE_TTL_MS,
+    async () => {
+      const cutoff = new Date(Date.now() - activeWindowMinutes * 60 * 1000);
+      const { data, error } = await supabase
+        .from('event_participants')
+        .select('event_id,user_id,last_seen_at,is_active')
+        .eq('is_active', true)
+        .gte('last_seen_at', toIso(cutoff))
+        .order('last_seen_at', { ascending: false })
+        .limit(500);
 
-  if (error) {
-    throw new Error(toSupabaseErrorMessage(error, 'Failed to load active user presence.'));
-  }
+      if (error) {
+        throw new Error(toSupabaseErrorMessage(error, 'Failed to load active user presence.'));
+      }
 
-  return ((data ?? []) as EventParticipantRow[]).map((row) => ({
-    eventId: row.event_id,
-    lastSeenAt: row.last_seen_at,
-    userId: row.user_id,
-  }));
+      return ((data ?? []) as EventParticipantRow[]).map((row) => ({
+        eventId: row.event_id,
+        lastSeenAt: row.last_seen_at,
+        userId: row.user_id,
+      }));
+    },
+  );
 }
 
 export async function fetchEvents(limit = 8): Promise<AppEvent[]> {
-  const { data, error } = await supabase
-    .from('events')
-    .select(
-      'id,title,subtitle,description,host_note,region,country_code,starts_at,status,duration_minutes,visibility,created_at',
-    )
-    .in('status', ['live', 'scheduled'])
-    .order('starts_at', { ascending: true })
-    .limit(limit);
+  const cacheKey = `${limit}`;
+  return loadWithTimedCache(
+    eventsCache,
+    eventsRequestCache,
+    cacheKey,
+    EVENTS_CACHE_TTL_MS,
+    async () => {
+      const { data, error } = await supabase
+        .from('events')
+        .select(
+          'id,title,subtitle,description,host_note,region,country_code,starts_at,status,duration_minutes,visibility,created_at',
+        )
+        .in('status', ['live', 'scheduled'])
+        .order('starts_at', { ascending: true })
+        .limit(limit);
 
-  if (error) {
-    throw new Error(toSupabaseErrorMessage(error, 'Failed to load events.'));
-  }
-
-  const eventRows = (data ?? []) as EventRow[];
-  const participantCounts = await fetchParticipantCountsByEvent(eventRows.map((event) => event.id));
-
-  return eventRows
-    .map((row) => mapEventRow(row, participantCounts.get(row.id) ?? 0))
-    .sort((a, b) => {
-      const rankDiff = rankEventStatus(a.status) - rankEventStatus(b.status);
-      if (rankDiff !== 0) {
-        return rankDiff;
+      if (error) {
+        throw new Error(toSupabaseErrorMessage(error, 'Failed to load events.'));
       }
-      return new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime();
-    });
+
+      const eventRows = (data ?? []) as EventRow[];
+      const participantCounts = await fetchParticipantCountsByEvent(
+        eventRows.map((event) => event.id),
+      );
+
+      const mappedEvents = eventRows
+        .map((row) => mapEventRow(row, participantCounts.get(row.id) ?? 0))
+        .sort((a, b) => {
+          const rankDiff = rankEventStatus(a.status) - rankEventStatus(b.status);
+          if (rankDiff !== 0) {
+            return rankDiff;
+          }
+          return new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime();
+        });
+
+      const cachedAt = Date.now();
+      for (const event of mappedEvents) {
+        eventByIdCache.set(event.id, {
+          cachedAt,
+          value: event,
+        });
+      }
+
+      return mappedEvents;
+    },
+  );
 }
 
 export async function fetchEventById(eventId: string): Promise<AppEvent | null> {
-  const { data, error } = await supabase
-    .from('events')
-    .select(
-      'id,title,subtitle,description,host_note,region,country_code,starts_at,status,duration_minutes,visibility,created_at',
-    )
-    .eq('id', eventId)
-    .maybeSingle();
-
-  if (error) {
-    throw new Error(toSupabaseErrorMessage(error, 'Failed to load event details.'));
-  }
-
-  if (!data) {
+  const normalizedEventId = eventId.trim();
+  if (!normalizedEventId) {
     return null;
   }
 
-  const counts = await fetchParticipantCountsByEvent([eventId]);
-  return mapEventRow(data as EventRow, counts.get(eventId) ?? 0);
+  return loadWithTimedCache(
+    eventByIdCache,
+    eventByIdRequestCache,
+    normalizedEventId,
+    EVENT_BY_ID_CACHE_TTL_MS,
+    async () => {
+      const { data, error } = await supabase
+        .from('events')
+        .select(
+          'id,title,subtitle,description,host_note,region,country_code,starts_at,status,duration_minutes,visibility,created_at',
+        )
+        .eq('id', normalizedEventId)
+        .maybeSingle();
+
+      if (error) {
+        throw new Error(toSupabaseErrorMessage(error, 'Failed to load event details.'));
+      }
+
+      if (!data) {
+        return null;
+      }
+
+      const counts = await fetchParticipantCountsByEvent([normalizedEventId]);
+      return mapEventRow(data as EventRow, counts.get(normalizedEventId) ?? 0);
+    },
+  );
 }
 
 export async function fetchCommunitySnapshot(): Promise<CommunitySnapshot> {
-  const nowMs = Date.now();
-  const liveWindowStartIso = new Date(nowMs - 24 * 60 * 60 * 1000).toISOString();
-  const liveWindowEndIso = new Date(nowMs + 24 * 60 * 60 * 1000).toISOString();
+  return loadWithTimedCache(
+    communitySnapshotCache,
+    communitySnapshotRequestCache,
+    'default',
+    COMMUNITY_SNAPSHOT_CACHE_TTL_MS,
+    async () => {
+      const nowMs = Date.now();
+      const liveWindowStartIso = new Date(nowMs - 24 * 60 * 60 * 1000).toISOString();
+      const liveWindowEndIso = new Date(nowMs + 24 * 60 * 60 * 1000).toISOString();
 
-  const [events, liveStatusResponse, liveWindowResponse] = await Promise.all([
-    fetchEvents(20),
-    supabase
-      .from('events')
-      .select(
-        'id,title,subtitle,description,host_note,region,country_code,starts_at,status,duration_minutes,visibility,created_at',
-      )
-      .eq('status', 'live')
-      .order('starts_at', { ascending: true })
-      .limit(300),
-    supabase
-      .from('events')
-      .select(
-        'id,title,subtitle,description,host_note,region,country_code,starts_at,status,duration_minutes,visibility,created_at',
-      )
-      .in('status', ['live', 'scheduled'])
-      .gte('starts_at', liveWindowStartIso)
-      .lte('starts_at', liveWindowEndIso)
-      .order('starts_at', { ascending: true })
-      .limit(600),
-  ]);
+      const [events, liveStatusResponse, liveWindowResponse] = await Promise.all([
+        fetchEvents(20),
+        supabase
+          .from('events')
+          .select(
+            'id,title,subtitle,description,host_note,region,country_code,starts_at,status,duration_minutes,visibility,created_at',
+          )
+          .eq('status', 'live')
+          .order('starts_at', { ascending: true })
+          .limit(300),
+        supabase
+          .from('events')
+          .select(
+            'id,title,subtitle,description,host_note,region,country_code,starts_at,status,duration_minutes,visibility,created_at',
+          )
+          .in('status', ['live', 'scheduled'])
+          .gte('starts_at', liveWindowStartIso)
+          .lte('starts_at', liveWindowEndIso)
+          .order('starts_at', { ascending: true })
+          .limit(600),
+      ]);
 
-  if (liveStatusResponse.error) {
-    throw new Error(
-      toSupabaseErrorMessage(liveStatusResponse.error, 'Failed to load live events.'),
-    );
-  }
-  if (liveWindowResponse.error) {
-    throw new Error(
-      toSupabaseErrorMessage(liveWindowResponse.error, 'Failed to load recent events.'),
-    );
-  }
+      if (liveStatusResponse.error) {
+        throw new Error(
+          toSupabaseErrorMessage(liveStatusResponse.error, 'Failed to load live events.'),
+        );
+      }
+      if (liveWindowResponse.error) {
+        throw new Error(
+          toSupabaseErrorMessage(liveWindowResponse.error, 'Failed to load recent events.'),
+        );
+      }
 
-  const liveStatusRows = (liveStatusResponse.data ?? []) as EventRow[];
-  const liveWindowRows = (liveWindowResponse.data ?? []) as EventRow[];
-  const liveStatusCounts = await fetchParticipantCountsByEvent(
-    liveStatusRows.map((eventRow) => eventRow.id),
-  );
-  const liveWindowCounts = await fetchParticipantCountsByEvent(
-    liveWindowRows.map((eventRow) => eventRow.id),
-  );
+      const liveStatusRows = (liveStatusResponse.data ?? []) as EventRow[];
+      const liveWindowRows = (liveWindowResponse.data ?? []) as EventRow[];
+      const liveStatusCounts = await fetchParticipantCountsByEvent(
+        liveStatusRows.map((eventRow) => eventRow.id),
+      );
+      const liveWindowCounts = await fetchParticipantCountsByEvent(
+        liveWindowRows.map((eventRow) => eventRow.id),
+      );
 
-  const liveEventsByStatus = liveStatusRows.map((row) =>
-    mapEventRow(row, liveStatusCounts.get(row.id) ?? 0),
-  );
-  const liveEventsByTime = liveWindowRows
-    .map((row) => mapEventRow(row, liveWindowCounts.get(row.id) ?? 0))
-    .filter((event) => isEventLiveNow(event));
-  const liveEventMap = new Map<string, AppEvent>();
+      const liveEventsByStatus = liveStatusRows.map((row) =>
+        mapEventRow(row, liveStatusCounts.get(row.id) ?? 0),
+      );
+      const liveEventsByTime = liveWindowRows
+        .map((row) => mapEventRow(row, liveWindowCounts.get(row.id) ?? 0))
+        .filter((event) => isEventLiveNow(event));
+      const liveEventMap = new Map<string, AppEvent>();
 
-  for (const liveEvent of liveEventsByStatus) {
-    liveEventMap.set(liveEvent.id, liveEvent);
-  }
-  for (const liveEvent of liveEventsByTime) {
-    if (!liveEventMap.has(liveEvent.id)) {
-      liveEventMap.set(liveEvent.id, liveEvent);
-    }
-  }
+      for (const liveEvent of liveEventsByStatus) {
+        liveEventMap.set(liveEvent.id, liveEvent);
+      }
+      for (const liveEvent of liveEventsByTime) {
+        if (!liveEventMap.has(liveEvent.id)) {
+          liveEventMap.set(liveEvent.id, liveEvent);
+        }
+      }
 
-  const liveEvents = Array.from(liveEventMap.values());
-  const liveEventIds = liveEvents.map((event) => event.id);
+      const liveEvents = Array.from(liveEventMap.values());
+      const liveEventIds = liveEvents.map((event) => event.id);
 
-  let uniqueActiveParticipants = 0;
-  const onlineCutoff = new Date(Date.now() - 2 * 60 * 1000);
+      let uniqueActiveParticipants = 0;
+      const onlineCutoff = new Date(Date.now() - 2 * 60 * 1000);
 
-  const { data: onlinePresenceData, error: onlinePresenceError } = await supabase
-    .from('app_user_presence')
-    .select('user_id,is_online,last_seen_at')
-    .eq('is_online', true)
-    .gte('last_seen_at', toIso(onlineCutoff))
-    .limit(5000);
+      const { data: onlinePresenceData, error: onlinePresenceError } = await supabase
+        .from('app_user_presence')
+        .select('user_id,is_online,last_seen_at')
+        .eq('is_online', true)
+        .gte('last_seen_at', toIso(onlineCutoff))
+        .limit(5000);
 
-  if (onlinePresenceError) {
-    const message = toSupabaseErrorMessage(
-      onlinePresenceError,
-      'Failed to load online participant presence.',
-    );
-    if (!isMissingTableMessage(message, 'app_user_presence')) {
-      throw new Error(message);
-    }
-  } else {
-    uniqueActiveParticipants = new Set(
-      ((onlinePresenceData ?? []) as AppUserPresenceRow[]).map((entry) => entry.user_id),
-    ).size;
-  }
+      if (onlinePresenceError) {
+        const message = toSupabaseErrorMessage(
+          onlinePresenceError,
+          'Failed to load online participant presence.',
+        );
+        if (!isMissingTableMessage(message, 'app_user_presence')) {
+          throw new Error(message);
+        }
+      } else {
+        uniqueActiveParticipants = new Set(
+          ((onlinePresenceData ?? []) as AppUserPresenceRow[]).map((entry) => entry.user_id),
+        ).size;
+      }
 
-  if (liveEventIds.length > 0) {
-    const cutoff = new Date(Date.now() - 90 * 60 * 1000);
-    const { data, error } = await supabase
-      .from('event_participants')
-      .select('user_id,event_id,last_seen_at,is_active')
-      .in('event_id', liveEventIds)
-      .eq('is_active', true)
-      .gte('last_seen_at', toIso(cutoff));
+      if (liveEventIds.length > 0) {
+        const cutoff = new Date(Date.now() - 90 * 60 * 1000);
+        const { data, error } = await supabase
+          .from('event_participants')
+          .select('user_id,event_id,last_seen_at,is_active')
+          .in('event_id', liveEventIds)
+          .eq('is_active', true)
+          .gte('last_seen_at', toIso(cutoff));
 
-    if (error) {
-      throw new Error(toSupabaseErrorMessage(error, 'Failed to load community participants.'));
-    }
+        if (error) {
+          throw new Error(toSupabaseErrorMessage(error, 'Failed to load community participants.'));
+        }
 
-    if (uniqueActiveParticipants === 0) {
-      uniqueActiveParticipants = new Set(
-        ((data ?? []) as EventParticipantRow[]).map((entry) => entry.user_id),
+        if (uniqueActiveParticipants === 0) {
+          uniqueActiveParticipants = new Set(
+            ((data ?? []) as EventParticipantRow[]).map((entry) => entry.user_id),
+          ).size;
+        }
+      }
+
+      const countries = new Set(
+        liveEvents
+          .map(
+            (event) =>
+              event.countryCode?.trim().toUpperCase() || event.region?.trim().toUpperCase() || null,
+          )
+          .filter((value): value is string => Boolean(value)),
       ).size;
-    }
-  }
 
-  const countries = new Set(
-    liveEvents
-      .map(
-        (event) =>
-          event.countryCode?.trim().toUpperCase() || event.region?.trim().toUpperCase() || null,
-      )
-      .filter((value): value is string => Boolean(value)),
-  ).size;
+      const strongestLiveEvent = liveEvents
+        .slice()
+        .sort((a, b) => b.participants - a.participants || a.title.localeCompare(b.title))[0];
 
-  const strongestLiveEvent = liveEvents
-    .slice()
-    .sort((a, b) => b.participants - a.participants || a.title.localeCompare(b.title))[0];
+      const prioritizedAlerts = [
+        ...liveEvents
+          .slice()
+          .sort((a, b) => b.participants - a.participants || a.title.localeCompare(b.title)),
+        ...events.filter((event) => !liveEventMap.has(event.id)),
+      ];
 
-  const prioritizedAlerts = [
-    ...liveEvents
-      .slice()
-      .sort((a, b) => b.participants - a.participants || a.title.localeCompare(b.title)),
-    ...events.filter((event) => !liveEventMap.has(event.id)),
-  ];
+      const alerts = prioritizedAlerts.slice(0, 2).map((event) => ({
+        eventId: event.id,
+        subtitle: formatEventSubtitle(event),
+        title: event.title,
+      }));
 
-  const alerts = prioritizedAlerts.slice(0, 2).map((event) => ({
-    eventId: event.id,
-    subtitle: formatEventSubtitle(event),
-    title: event.title,
-  }));
-
-  return {
-    alerts,
-    countries,
-    events,
-    liveEvents: liveEvents.length,
-    strongestLiveEventId: strongestLiveEvent?.id ?? null,
-    strongestLiveEventTitle: strongestLiveEvent?.title ?? null,
-    uniqueActiveParticipants,
-  };
+      return {
+        alerts,
+        countries,
+        events,
+        liveEvents: liveEvents.length,
+        strongestLiveEventId: strongestLiveEvent?.id ?? null,
+        strongestLiveEventTitle: strongestLiveEvent?.title ?? null,
+        uniqueActiveParticipants,
+      };
+    },
+  );
 }
 
 export async function updateAppUserPresence(userId: string, isOnline: boolean) {
@@ -700,34 +1044,63 @@ export async function updateAppUserPresence(userId: string, isOnline: boolean) {
 }
 
 export async function fetchPrayerLibraryItems(): Promise<PrayerLibraryItem[]> {
-  const { data, error } = await supabase
-    .from('prayer_library_items')
-    .select('id,title,body,category,duration_minutes,starts_count')
-    .eq('is_public', true)
-    .order('created_at', { ascending: false })
-    .limit(40);
-
-  if (error) {
-    throw new Error(toSupabaseErrorMessage(error, 'Failed to load prayer library.'));
+  const now = Date.now();
+  if (prayerLibraryCache && now - prayerLibraryCache.cachedAt <= PRAYER_LIBRARY_CACHE_TTL_MS) {
+    return prayerLibraryCache.items;
   }
 
-  const rows = (data ?? []) as PrayerLibraryRow[];
-  return rows.map((row) => {
-    const duration = row.duration_minutes ?? 5;
-    const starts = row.starts_count ?? 0;
-    const category = row.category?.trim();
-    const categoryPart = category ? `${category} • ` : '';
+  if (prayerLibraryRequestPromise) {
+    return prayerLibraryRequestPromise;
+  }
 
-    return {
-      body: row.body,
-      category: category ?? null,
-      durationMinutes: duration,
-      id: row.id,
-      startsCount: starts,
-      subtitle: `${categoryPart}${formatDurationMinutes(duration)} • ${starts} starts`,
-      title: row.title,
+  prayerLibraryRequestPromise = (async () => {
+    const { data, error } = await supabase
+      .from('prayer_library_items')
+      .select('id,title,body,category,duration_minutes,starts_count')
+      .eq('is_public', true)
+      .order('created_at', { ascending: false })
+      .limit(40);
+
+    if (error) {
+      throw new Error(toSupabaseErrorMessage(error, 'Failed to load prayer library.'));
+    }
+
+    const rows = (data ?? []) as PrayerLibraryRow[];
+    const items = rows.map((row) => {
+      const duration = row.duration_minutes ?? 5;
+      const starts = row.starts_count ?? 0;
+      const category = row.category?.trim();
+      const categoryPart = category ? `${category} • ` : '';
+
+      return {
+        body: row.body,
+        category: category ?? null,
+        durationMinutes: duration,
+        id: row.id,
+        startsCount: starts,
+        subtitle: `${categoryPart}${formatDurationMinutes(duration)} • ${starts} starts`,
+        title: row.title,
+      };
+    });
+
+    for (const item of items) {
+      const normalizedTitle = normalizePrayerTitleKey(item.title);
+      if (normalizedTitle) {
+        prayerLibraryItemIdByTitleCache.set(normalizedTitle, item.id);
+      }
+    }
+
+    prayerLibraryCache = {
+      cachedAt: Date.now(),
+      items,
     };
+
+    return items;
+  })().finally(() => {
+    prayerLibraryRequestPromise = null;
   });
+
+  return prayerLibraryRequestPromise;
 }
 
 function getSeedEventLibraryItems(): EventLibraryItem[] {
@@ -735,27 +1108,45 @@ function getSeedEventLibraryItems(): EventLibraryItem[] {
 }
 
 export async function fetchEventLibraryItems(limit = 80): Promise<EventLibraryItem[]> {
-  const { data, error } = await supabase
-    .from('event_library_items')
-    .select('id,title,body,script_text,category,duration_minutes,starts_count')
-    .eq('is_public', true)
-    .order('created_at', { ascending: false })
-    .limit(limit);
+  const cacheKey = `${limit}`;
+  return loadWithTimedCache(
+    eventLibraryItemsCache,
+    eventLibraryItemsRequestCache,
+    cacheKey,
+    EVENT_LIBRARY_CACHE_TTL_MS,
+    async () => {
+      const { data, error } = await supabase
+        .from('event_library_items')
+        .select('id,title,body,script_text,category,duration_minutes,starts_count')
+        .eq('is_public', true)
+        .order('created_at', { ascending: false })
+        .limit(limit);
 
-  if (error) {
-    const message = toSupabaseErrorMessage(error, 'Failed to load event library.');
-    if (message.toLowerCase().includes('event_library_items')) {
-      return getSeedEventLibraryItems();
-    }
-    throw new Error(message);
-  }
+      if (error) {
+        const message = toSupabaseErrorMessage(error, 'Failed to load event library.');
+        if (message.toLowerCase().includes('event_library_items')) {
+          return getSeedEventLibraryItems();
+        }
+        throw new Error(message);
+      }
 
-  const rows = (data ?? []) as EventLibraryRow[];
-  if (rows.length === 0) {
-    return getSeedEventLibraryItems();
-  }
+      const rows = (data ?? []) as EventLibraryRow[];
+      if (rows.length === 0) {
+        return getSeedEventLibraryItems();
+      }
 
-  return rows.map(mapEventLibraryRow);
+      const items = rows.map(mapEventLibraryRow);
+      const cachedAt = Date.now();
+      for (const item of items) {
+        eventLibraryItemByIdCache.set(item.id, {
+          cachedAt,
+          value: item,
+        });
+      }
+
+      return items;
+    },
+  );
 }
 
 export async function fetchEventLibraryItemById(
@@ -766,27 +1157,35 @@ export async function fetchEventLibraryItemById(
     return null;
   }
 
-  const seedItem = getSeedEventLibraryItems().find((item) => item.id === normalizedId);
+  return loadWithTimedCache(
+    eventLibraryItemByIdCache,
+    eventLibraryItemByIdRequestCache,
+    normalizedId,
+    EVENT_LIBRARY_ITEM_CACHE_TTL_MS,
+    async () => {
+      const seedItem = getSeedEventLibraryItems().find((item) => item.id === normalizedId);
 
-  const { data, error } = await supabase
-    .from('event_library_items')
-    .select('id,title,body,script_text,category,duration_minutes,starts_count')
-    .eq('id', normalizedId)
-    .maybeSingle();
+      const { data, error } = await supabase
+        .from('event_library_items')
+        .select('id,title,body,script_text,category,duration_minutes,starts_count')
+        .eq('id', normalizedId)
+        .maybeSingle();
 
-  if (error) {
-    const message = toSupabaseErrorMessage(error, 'Failed to load event template.');
-    if (message.toLowerCase().includes('event_library_items')) {
-      return seedItem ?? null;
-    }
-    throw new Error(message);
-  }
+      if (error) {
+        const message = toSupabaseErrorMessage(error, 'Failed to load event template.');
+        if (message.toLowerCase().includes('event_library_items')) {
+          return seedItem ?? null;
+        }
+        throw new Error(message);
+      }
 
-  if (!data) {
-    return seedItem ?? null;
-  }
+      if (!data) {
+        return seedItem ?? null;
+      }
 
-  return mapEventLibraryRow(data as EventLibraryRow);
+      return mapEventLibraryRow(data as EventLibraryRow);
+    },
+  );
 }
 
 export async function incrementEventLibraryStart(itemId: string) {
@@ -816,67 +1215,100 @@ export async function incrementEventLibraryStart(itemId: string) {
 }
 
 export async function fetchNewsDrivenEvents(limit = 80): Promise<NewsDrivenEventItem[]> {
-  const nowIso = new Date().toISOString();
-  const endIso = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+  const cacheKey = `${limit}`;
+  return loadWithTimedCache(
+    newsDrivenEventsCache,
+    newsDrivenEventsRequestCache,
+    cacheKey,
+    NEWS_DRIVEN_EVENTS_CACHE_TTL_MS,
+    async () => {
+      const nowIso = new Date().toISOString();
+      const endIso = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
 
-  const { data, error } = await supabase
-    .from('news_driven_events')
-    .select(
-      'id,headline,summary,script_text,category,country_code,location_hint,duration_minutes,starts_at,source_title,source_url,event_day',
-    )
-    .gte('starts_at', nowIso)
-    .lte('starts_at', endIso)
-    .order('starts_at', { ascending: true })
-    .limit(limit);
+      const { data, error } = await supabase
+        .from('news_driven_events')
+        .select(
+          'id,headline,summary,script_text,category,country_code,location_hint,duration_minutes,starts_at,source_title,source_url,event_day',
+        )
+        .gte('starts_at', nowIso)
+        .lte('starts_at', endIso)
+        .order('starts_at', { ascending: true })
+        .limit(limit);
 
-  if (error) {
-    const message = toSupabaseErrorMessage(error, 'Failed to load news driven events.');
-    if (isMissingTableMessage(message, 'news_driven_events')) {
-      return [];
-    }
-    throw new Error(message);
-  }
+      if (error) {
+        const message = toSupabaseErrorMessage(error, 'Failed to load news driven events.');
+        if (isMissingTableMessage(message, 'news_driven_events')) {
+          return [];
+        }
+        throw new Error(message);
+      }
 
-  return ((data ?? []) as NewsDrivenEventRow[]).map(mapNewsDrivenEventRow);
+      return ((data ?? []) as NewsDrivenEventRow[]).map(mapNewsDrivenEventRow);
+    },
+  );
 }
 
 export async function fetchEventNotificationState(userId: string): Promise<EventNotificationState> {
-  const { data, error } = await supabase
-    .from('user_event_subscriptions')
-    .select('scope,subscription_key')
-    .eq('user_id', userId);
-
-  if (error) {
-    const message = toSupabaseErrorMessage(error, 'Failed to load event notification settings.');
-    if (isMissingTableMessage(message, 'user_event_subscriptions')) {
-      return {
-        subscribedAll: false,
-        subscriptionKeys: [],
-      };
-    }
-    throw new Error(message);
+  const normalizedUserId = userId.trim();
+  if (!normalizedUserId) {
+    return {
+      subscribedAll: false,
+      subscriptionKeys: [],
+    };
   }
 
-  const rows = (data ?? []) as UserEventSubscriptionRow[];
-  const subscriptionKeys = rows
-    .filter((row) => row.scope === 'event')
-    .map((row) => row.subscription_key)
-    .filter((value) => value.trim().length > 0);
-  const subscribedAll = rows.some((row) => row.scope === 'all');
+  return loadWithTimedCache(
+    eventNotificationStateCache,
+    eventNotificationStateRequestCache,
+    normalizedUserId,
+    EVENT_NOTIFICATION_STATE_CACHE_TTL_MS,
+    async () => {
+      const { data, error } = await supabase
+        .from('user_event_subscriptions')
+        .select('scope,subscription_key')
+        .eq('user_id', normalizedUserId);
 
-  return {
-    subscribedAll,
-    subscriptionKeys,
-  };
+      if (error) {
+        const message = toSupabaseErrorMessage(
+          error,
+          'Failed to load event notification settings.',
+        );
+        if (isMissingTableMessage(message, 'user_event_subscriptions')) {
+          return {
+            subscribedAll: false,
+            subscriptionKeys: [],
+          };
+        }
+        throw new Error(message);
+      }
+
+      const rows = (data ?? []) as UserEventSubscriptionRow[];
+      const subscriptionKeys = rows
+        .filter((row) => row.scope === 'event')
+        .map((row) => row.subscription_key)
+        .filter((value) => value.trim().length > 0);
+      const subscribedAll = rows.some((row) => row.scope === 'all');
+
+      return {
+        subscribedAll,
+        subscriptionKeys,
+      };
+    },
+  );
 }
 
 export async function setAllEventNotifications(userId: string, enabled: boolean) {
+  const normalizedUserId = userId.trim();
+  if (!normalizedUserId) {
+    return;
+  }
+
   if (enabled) {
     const { error } = await supabase.from('user_event_subscriptions').upsert(
       {
         scope: 'all',
         subscription_key: '*',
-        user_id: userId,
+        user_id: normalizedUserId,
       },
       {
         onConflict: 'user_id,scope,subscription_key',
@@ -891,13 +1323,14 @@ export async function setAllEventNotifications(userId: string, enabled: boolean)
       throw new Error(message);
     }
 
+    eventNotificationStateCache.delete(normalizedUserId);
     return;
   }
 
   const { error } = await supabase
     .from('user_event_subscriptions')
     .delete()
-    .eq('user_id', userId)
+    .eq('user_id', normalizedUserId)
     .eq('scope', 'all')
     .eq('subscription_key', '*');
 
@@ -908,6 +1341,8 @@ export async function setAllEventNotifications(userId: string, enabled: boolean)
     }
     throw new Error(message);
   }
+
+  eventNotificationStateCache.delete(normalizedUserId);
 }
 
 export async function setEventNotificationSubscription(input: {
@@ -915,6 +1350,11 @@ export async function setEventNotificationSubscription(input: {
   subscriptionKey: string;
   userId: string;
 }) {
+  const normalizedUserId = input.userId.trim();
+  if (!normalizedUserId) {
+    return;
+  }
+
   const subscriptionKey = input.subscriptionKey.trim();
   if (!subscriptionKey) {
     return;
@@ -925,7 +1365,7 @@ export async function setEventNotificationSubscription(input: {
       {
         scope: 'event',
         subscription_key: subscriptionKey,
-        user_id: input.userId,
+        user_id: normalizedUserId,
       },
       {
         onConflict: 'user_id,scope,subscription_key',
@@ -940,13 +1380,14 @@ export async function setEventNotificationSubscription(input: {
       throw new Error(message);
     }
 
+    eventNotificationStateCache.delete(normalizedUserId);
     return;
   }
 
   const { error } = await supabase
     .from('user_event_subscriptions')
     .delete()
-    .eq('user_id', input.userId)
+    .eq('user_id', normalizedUserId)
     .eq('scope', 'event')
     .eq('subscription_key', subscriptionKey);
 
@@ -957,36 +1398,54 @@ export async function setEventNotificationSubscription(input: {
     }
     throw new Error(message);
   }
+
+  eventNotificationStateCache.delete(normalizedUserId);
 }
 
 export async function fetchPrayerCircleMembers(): Promise<PrayerCircleMember[]> {
-  const { data, error } = await supabase.rpc('get_prayer_circle_members');
+  return loadWithTimedCache(
+    prayerCircleMembersCache,
+    prayerCircleMembersRequestCache,
+    'default',
+    CIRCLE_MEMBERS_CACHE_TTL_MS,
+    async () => {
+      const { data, error } = await supabase.rpc('get_prayer_circle_members');
 
-  if (error) {
-    throw new Error(toSupabaseErrorMessage(error, 'Failed to load prayer circle members.'));
-  }
+      if (error) {
+        throw new Error(toSupabaseErrorMessage(error, 'Failed to load prayer circle members.'));
+      }
 
-  return ((data ?? []) as PrayerCircleMemberRpcRow[]).map((row) => ({
-    displayName: row.display_name?.trim() || 'Member',
-    isOwner: Boolean(row.is_owner),
-    joinedAt: row.joined_at,
-    userId: row.user_id,
-  }));
+      return ((data ?? []) as PrayerCircleMemberRpcRow[]).map((row) => ({
+        displayName: row.display_name?.trim() || 'Member',
+        isOwner: Boolean(row.is_owner),
+        joinedAt: row.joined_at,
+        userId: row.user_id,
+      }));
+    },
+  );
 }
 
 export async function fetchEventsCircleMembers(): Promise<PrayerCircleMember[]> {
-  const { data, error } = await supabase.rpc('get_events_circle_members');
+  return loadWithTimedCache(
+    eventsCircleMembersCache,
+    eventsCircleMembersRequestCache,
+    'default',
+    CIRCLE_MEMBERS_CACHE_TTL_MS,
+    async () => {
+      const { data, error } = await supabase.rpc('get_events_circle_members');
 
-  if (error) {
-    throw new Error(toSupabaseErrorMessage(error, 'Failed to load events circle members.'));
-  }
+      if (error) {
+        throw new Error(toSupabaseErrorMessage(error, 'Failed to load events circle members.'));
+      }
 
-  return ((data ?? []) as PrayerCircleMemberRpcRow[]).map((row) => ({
-    displayName: row.display_name?.trim() || 'Member',
-    isOwner: Boolean(row.is_owner),
-    joinedAt: row.joined_at,
-    userId: row.user_id,
-  }));
+      return ((data ?? []) as PrayerCircleMemberRpcRow[]).map((row) => ({
+        displayName: row.display_name?.trim() || 'Member',
+        isOwner: Boolean(row.is_owner),
+        joinedAt: row.joined_at,
+        userId: row.user_id,
+      }));
+    },
+  );
 }
 
 export async function searchUsersForPrayerCircle(
@@ -1017,6 +1476,8 @@ export async function addPrayerCircleMember(targetUserId: string) {
   if (error) {
     throw new Error(toSupabaseErrorMessage(error, 'Failed to add user to prayer circle.'));
   }
+
+  prayerCircleMembersCache.delete('default');
 }
 
 export async function addEventsCircleMember(targetUserId: string) {
@@ -1027,6 +1488,8 @@ export async function addEventsCircleMember(targetUserId: string) {
   if (error) {
     throw new Error(toSupabaseErrorMessage(error, 'Failed to add user to events circle.'));
   }
+
+  eventsCircleMembersCache.delete('default');
 }
 
 export async function removePrayerCircleMember(targetUserId: string) {
@@ -1037,6 +1500,8 @@ export async function removePrayerCircleMember(targetUserId: string) {
   if (error) {
     throw new Error(toSupabaseErrorMessage(error, 'Failed to remove user from prayer circle.'));
   }
+
+  prayerCircleMembersCache.delete('default');
 }
 
 export async function removeEventsCircleMember(targetUserId: string) {
@@ -1047,36 +1512,56 @@ export async function removeEventsCircleMember(targetUserId: string) {
   if (error) {
     throw new Error(toSupabaseErrorMessage(error, 'Failed to remove user from events circle.'));
   }
+
+  eventsCircleMembersCache.delete('default');
 }
 
 export async function fetchUserJournalEntries(userId: string): Promise<UserJournalEntry[]> {
-  const { data, error } = await supabase
-    .from('user_journal_entries')
-    .select('id,content,created_at,updated_at')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: true });
-
-  if (error) {
-    throw new Error(toSupabaseErrorMessage(error, 'Failed to load journal entries.'));
+  const normalizedUserId = userId.trim();
+  if (!normalizedUserId) {
+    return [];
   }
 
-  return ((data ?? []) as UserJournalEntryRow[]).map((row) => ({
-    content: row.content ?? '',
-    createdAt: row.created_at,
-    id: row.id,
-    updatedAt: row.updated_at,
-  }));
+  return loadWithTimedCache(
+    userJournalEntriesCache,
+    userJournalEntriesRequestCache,
+    normalizedUserId,
+    USER_JOURNAL_ENTRIES_CACHE_TTL_MS,
+    async () => {
+      const { data, error } = await supabase
+        .from('user_journal_entries')
+        .select('id,content,created_at,updated_at')
+        .eq('user_id', normalizedUserId)
+        .order('created_at', { ascending: true });
+
+      if (error) {
+        throw new Error(toSupabaseErrorMessage(error, 'Failed to load journal entries.'));
+      }
+
+      return ((data ?? []) as UserJournalEntryRow[]).map((row) => ({
+        content: row.content ?? '',
+        createdAt: row.created_at,
+        id: row.id,
+        updatedAt: row.updated_at,
+      }));
+    },
+  );
 }
 
 export async function createUserJournalEntry(input: {
   content: string;
   userId: string;
 }): Promise<UserJournalEntry> {
+  const normalizedUserId = input.userId.trim();
+  if (!normalizedUserId) {
+    throw new Error('Cannot create a journal entry without a user.');
+  }
+
   const { data, error } = await supabase
     .from('user_journal_entries')
     .insert({
       content: input.content,
-      user_id: input.userId,
+      user_id: normalizedUserId,
     })
     .select('id,content,created_at,updated_at')
     .single();
@@ -1086,12 +1571,26 @@ export async function createUserJournalEntry(input: {
   }
 
   const row = data as UserJournalEntryRow;
-  return {
+  const createdEntry = {
     content: row.content ?? '',
     createdAt: row.created_at,
     id: row.id,
     updatedAt: row.updated_at,
   };
+
+  const cachedEntries = readFreshTimedCache(
+    userJournalEntriesCache,
+    normalizedUserId,
+    USER_JOURNAL_ENTRIES_CACHE_TTL_MS,
+  );
+  if (cachedEntries) {
+    writeTimedCache(userJournalEntriesCache, normalizedUserId, [
+      ...cachedEntries.value,
+      createdEntry,
+    ]);
+  }
+
+  return createdEntry;
 }
 
 export async function updateUserJournalEntry(input: {
@@ -1099,13 +1598,18 @@ export async function updateUserJournalEntry(input: {
   entryId: string;
   userId: string;
 }): Promise<UserJournalEntry> {
+  const normalizedUserId = input.userId.trim();
+  if (!normalizedUserId) {
+    throw new Error('Cannot update a journal entry without a user.');
+  }
+
   const { data, error } = await supabase
     .from('user_journal_entries')
     .update({
       content: input.content,
     })
     .eq('id', input.entryId)
-    .eq('user_id', input.userId)
+    .eq('user_id', normalizedUserId)
     .select('id,content,created_at,updated_at')
     .single();
 
@@ -1114,12 +1618,27 @@ export async function updateUserJournalEntry(input: {
   }
 
   const row = data as UserJournalEntryRow;
-  return {
+  const updatedEntry = {
     content: row.content ?? '',
     createdAt: row.created_at,
     id: row.id,
     updatedAt: row.updated_at,
   };
+
+  const cachedEntries = readFreshTimedCache(
+    userJournalEntriesCache,
+    normalizedUserId,
+    USER_JOURNAL_ENTRIES_CACHE_TTL_MS,
+  );
+  if (cachedEntries) {
+    writeTimedCache(
+      userJournalEntriesCache,
+      normalizedUserId,
+      cachedEntries.value.map((entry) => (entry.id === updatedEntry.id ? updatedEntry : entry)),
+    );
+  }
+
+  return updatedEntry;
 }
 
 export async function incrementPrayerLibraryStart(itemId: string) {
@@ -1147,55 +1666,130 @@ export async function incrementPrayerLibraryStart(itemId: string) {
 export async function fetchPrayerScriptVariantByTitle(input: {
   durationMinutes: number;
   language?: string;
+  prayerLibraryItemId?: string;
   title: string;
 }): Promise<string | null> {
+  const prayerLibraryItemIdInput = input.prayerLibraryItemId?.trim() || '';
   const title = input.title.trim();
-  if (!title) {
+  if (!prayerLibraryItemIdInput && !title) {
     return null;
   }
 
   const language = input.language?.trim() || 'en';
-
-  const { data: prayerItem, error: prayerItemError } = await supabase
-    .from('prayer_library_items')
-    .select('id,title,is_public')
-    .eq('title', title)
-    .eq('is_public', true)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (prayerItemError) {
-    throw new Error(
-      toSupabaseErrorMessage(prayerItemError, 'Failed to load prayer library item for script.'),
-    );
-  }
-
-  const prayerLibraryItemId = (prayerItem as { id?: string } | null)?.id;
-  if (!prayerLibraryItemId) {
+  const normalizedDurationMinutes = Math.max(1, Math.round(input.durationMinutes));
+  const requestedCacheKey = buildPrayerScriptCacheKey({
+    durationMinutes: normalizedDurationMinutes,
+    language,
+    ...(prayerLibraryItemIdInput ? { prayerLibraryItemId: prayerLibraryItemIdInput } : {}),
+    ...(title ? { title } : {}),
+  });
+  if (!requestedCacheKey) {
     return null;
   }
 
-  const { data: scriptRow, error: scriptError } = await supabase
-    .from('prayer_library_scripts')
-    .select('id,script_text,duration_minutes,language')
-    .eq('prayer_library_item_id', prayerLibraryItemId)
-    .eq('duration_minutes', input.durationMinutes)
-    .eq('language', language)
-    .order('updated_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (scriptError) {
-    throw new Error(toSupabaseErrorMessage(scriptError, 'Failed to load prayer script variant.'));
+  if (prayerScriptVariantCache.has(requestedCacheKey)) {
+    return prayerScriptVariantCache.get(requestedCacheKey) ?? null;
   }
 
-  const script = ((scriptRow as PrayerLibraryScriptRow | null)?.script_text ?? '').trim();
-  if (!script) {
-    return null;
+  const inFlightRequest = prayerScriptVariantRequestCache.get(requestedCacheKey);
+  if (inFlightRequest) {
+    return inFlightRequest;
   }
 
-  return script;
+  const loadPromise = (async () => {
+    let prayerLibraryItemId = prayerLibraryItemIdInput;
+
+    if (!prayerLibraryItemId && title) {
+      const normalizedTitle = normalizePrayerTitleKey(title);
+      prayerLibraryItemId = prayerLibraryItemIdByTitleCache.get(normalizedTitle) ?? '';
+
+      if (!prayerLibraryItemId) {
+        const { data: prayerItem, error: prayerItemError } = await supabase
+          .from('prayer_library_items')
+          .select('id,title,is_public')
+          .eq('title', title)
+          .eq('is_public', true)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (prayerItemError) {
+          throw new Error(
+            toSupabaseErrorMessage(
+              prayerItemError,
+              'Failed to load prayer library item for script.',
+            ),
+          );
+        }
+
+        prayerLibraryItemId = ((prayerItem as { id?: string } | null)?.id ?? '').trim();
+        if (prayerLibraryItemId) {
+          prayerLibraryItemIdByTitleCache.set(normalizedTitle, prayerLibraryItemId);
+        }
+      }
+    }
+
+    if (!prayerLibraryItemId) {
+      return null;
+    }
+
+    const { data: scriptRow, error: scriptError } = await supabase
+      .from('prayer_library_scripts')
+      .select('id,script_text,duration_minutes,language')
+      .eq('prayer_library_item_id', prayerLibraryItemId)
+      .eq('duration_minutes', normalizedDurationMinutes)
+      .eq('language', language)
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (scriptError) {
+      throw new Error(toSupabaseErrorMessage(scriptError, 'Failed to load prayer script variant.'));
+    }
+
+    const script = ((scriptRow as PrayerLibraryScriptRow | null)?.script_text ?? '').trim();
+    const normalizedScript = script.length > 0 ? script : null;
+
+    const idCacheKey = buildPrayerScriptCacheKey({
+      durationMinutes: normalizedDurationMinutes,
+      language,
+      prayerLibraryItemId,
+    });
+    if (idCacheKey) {
+      prayerScriptVariantCache.set(idCacheKey, normalizedScript);
+    }
+
+    if (title) {
+      const titleCacheKey = buildPrayerScriptCacheKey({
+        durationMinutes: normalizedDurationMinutes,
+        language,
+        title,
+      });
+      if (titleCacheKey) {
+        prayerScriptVariantCache.set(titleCacheKey, normalizedScript);
+      }
+    }
+
+    return normalizedScript;
+  })().finally(() => {
+    prayerScriptVariantRequestCache.delete(requestedCacheKey);
+  });
+
+  prayerScriptVariantRequestCache.set(requestedCacheKey, loadPromise);
+  const nextScript = await loadPromise;
+  prayerScriptVariantCache.set(requestedCacheKey, nextScript);
+  return nextScript;
+}
+
+export function prefetchPrayerScriptVariantByTitle(input: {
+  durationMinutes: number;
+  language?: string;
+  prayerLibraryItemId?: string;
+  title: string;
+}) {
+  void fetchPrayerScriptVariantByTitle(input).catch(() => {
+    // Prefetch is best-effort and intentionally non-blocking.
+  });
 }
 
 export async function fetchLatestIntention(userId: string): Promise<string> {
@@ -1231,40 +1825,53 @@ export async function saveIntention(userId: string, intention: string) {
 }
 
 export async function fetchUserPreferences(userId: string): Promise<UserPreferences> {
-  const { error: upsertError } = await supabase.from('profiles').upsert(
-    {
-      id: userId,
-    },
-    {
-      onConflict: 'id',
+  const normalizedUserId = userId.trim();
+  if (!normalizedUserId) {
+    throw new Error('Cannot load preferences without a user.');
+  }
+
+  return loadWithTimedCache(
+    userPreferencesCache,
+    userPreferencesRequestCache,
+    normalizedUserId,
+    USER_PREFERENCES_CACHE_TTL_MS,
+    async () => {
+      const { error: upsertError } = await supabase.from('profiles').upsert(
+        {
+          id: normalizedUserId,
+        },
+        {
+          onConflict: 'id',
+        },
+      );
+
+      if (upsertError) {
+        throw new Error(toSupabaseErrorMessage(upsertError, 'Failed to initialize profile.'));
+      }
+
+      const { data, error } = await supabase
+        .from('profiles')
+        .select(
+          'id,display_name,preferred_voice_id,preferred_breath_mode,preferred_ambient,preferred_session_minutes,high_contrast_mode,voice_enabled',
+        )
+        .eq('id', normalizedUserId)
+        .single();
+
+      if (error) {
+        throw new Error(toSupabaseErrorMessage(error, 'Failed to load profile preferences.'));
+      }
+
+      const row = data as ProfileRow;
+      return {
+        highContrastMode: Boolean(row.high_contrast_mode),
+        preferredAmbient: row.preferred_ambient?.trim() || 'Bowls',
+        preferredBreathMode: row.preferred_breath_mode?.trim() || 'Deep',
+        preferredSessionMinutes: row.preferred_session_minutes ?? 5,
+        preferredVoiceId: row.preferred_voice_id?.trim() || '',
+        voiceEnabled: row.voice_enabled ?? true,
+      };
     },
   );
-
-  if (upsertError) {
-    throw new Error(toSupabaseErrorMessage(upsertError, 'Failed to initialize profile.'));
-  }
-
-  const { data, error } = await supabase
-    .from('profiles')
-    .select(
-      'id,display_name,preferred_voice_id,preferred_breath_mode,preferred_ambient,preferred_session_minutes,high_contrast_mode,voice_enabled',
-    )
-    .eq('id', userId)
-    .single();
-
-  if (error) {
-    throw new Error(toSupabaseErrorMessage(error, 'Failed to load profile preferences.'));
-  }
-
-  const row = data as ProfileRow;
-  return {
-    highContrastMode: Boolean(row.high_contrast_mode),
-    preferredAmbient: row.preferred_ambient?.trim() || 'Bowls',
-    preferredBreathMode: row.preferred_breath_mode?.trim() || 'Deep',
-    preferredSessionMinutes: row.preferred_session_minutes ?? 5,
-    preferredVoiceId: row.preferred_voice_id?.trim() || '',
-    voiceEnabled: row.voice_enabled ?? true,
-  };
 }
 
 function calculateSoloStreakDays(completedDates: string[]) {
@@ -1326,158 +1933,242 @@ function calculateImpactChangePercent(thisWeekMinutes: number, previousWeekMinut
 }
 
 export async function fetchProfileSummary(userId: string): Promise<ProfileSummary> {
-  const now = new Date();
-  const weekStart = startOfWeekMonday(now);
-  const previousWeekStart = new Date(weekStart);
-  previousWeekStart.setDate(previousWeekStart.getDate() - 7);
-
-  const [preferences, membershipRes, eventParticipantRes, soloSessionsRes] = await Promise.all([
-    fetchUserPreferences(userId),
-    supabase.from('circle_members').select('circle_id').eq('user_id', userId),
-    supabase
-      .from('event_participants')
-      .select('event_id,joined_at')
-      .eq('user_id', userId)
-      .order('joined_at', { ascending: false }),
-    supabase
-      .from('solo_sessions')
-      .select('id,duration_seconds,completed_at')
-      .eq('user_id', userId)
-      .order('completed_at', { ascending: false }),
-  ]);
-
-  if (membershipRes.error) {
-    throw new Error(toSupabaseErrorMessage(membershipRes.error, 'Failed to load circle stats.'));
-  }
-  if (eventParticipantRes.error) {
-    throw new Error(
-      toSupabaseErrorMessage(eventParticipantRes.error, 'Failed to load event participation.'),
-    );
-  }
-  if (soloSessionsRes.error) {
-    throw new Error(toSupabaseErrorMessage(soloSessionsRes.error, 'Failed to load solo stats.'));
+  const normalizedUserId = userId.trim();
+  if (!normalizedUserId) {
+    throw new Error('Cannot load profile summary without a user.');
   }
 
-  const circleIds = ((membershipRes.data ?? []) as { circle_id: string }[]).map(
-    (row) => row.circle_id,
-  );
+  return loadWithTimedCache(
+    profileSummaryCache,
+    profileSummaryRequestCache,
+    normalizedUserId,
+    PROFILE_SUMMARY_CACHE_TTL_MS,
+    async () => {
+      const now = new Date();
+      const weekStart = startOfWeekMonday(now);
+      const previousWeekStart = new Date(weekStart);
+      previousWeekStart.setDate(previousWeekStart.getDate() - 7);
 
-  let circleMembers = 0;
-  if (circleIds.length > 0) {
-    const { data, error } = await supabase
-      .from('circle_members')
-      .select('user_id,circle_id')
-      .in('circle_id', circleIds);
+      const [preferences, membershipRes, eventParticipantRes, soloSessionsRes] = await Promise.all([
+        fetchUserPreferences(normalizedUserId),
+        supabase.from('circle_members').select('circle_id').eq('user_id', normalizedUserId),
+        supabase
+          .from('event_participants')
+          .select('event_id,joined_at')
+          .eq('user_id', normalizedUserId)
+          .order('joined_at', { ascending: false }),
+        supabase
+          .from('solo_sessions')
+          .select('id,duration_seconds,completed_at')
+          .eq('user_id', normalizedUserId)
+          .order('completed_at', { ascending: false }),
+      ]);
 
-    if (error) {
-      throw new Error(toSupabaseErrorMessage(error, 'Failed to load circle membership counts.'));
-    }
+      if (membershipRes.error) {
+        throw new Error(
+          toSupabaseErrorMessage(membershipRes.error, 'Failed to load circle stats.'),
+        );
+      }
+      if (eventParticipantRes.error) {
+        throw new Error(
+          toSupabaseErrorMessage(eventParticipantRes.error, 'Failed to load event participation.'),
+        );
+      }
+      if (soloSessionsRes.error) {
+        throw new Error(
+          toSupabaseErrorMessage(soloSessionsRes.error, 'Failed to load solo stats.'),
+        );
+      }
 
-    circleMembers = new Set(
-      ((data ?? []) as { user_id: string }[])
-        .map((row) => row.user_id)
-        .filter((memberId) => memberId !== userId),
-    ).size;
-  }
+      const circleIds = ((membershipRes.data ?? []) as { circle_id: string }[]).map(
+        (row) => row.circle_id,
+      );
 
-  const eventRows = (eventParticipantRes.data ?? []) as { event_id: string; joined_at: string }[];
-  const eventsJoinedThisWeek = new Set(
-    eventRows
-      .filter((row) => new Date(row.joined_at).getTime() >= weekStart.getTime())
-      .map((row) => row.event_id),
-  ).size;
+      let circleMembers = 0;
+      if (circleIds.length > 0) {
+        const { data, error } = await supabase
+          .from('circle_members')
+          .select('user_id,circle_id')
+          .in('circle_id', circleIds);
 
-  const sessionRows = (soloSessionsRes.data ?? []) as SoloSessionRow[];
-  const completedSessionRows = sessionRows.filter((row) => Boolean(row.completed_at));
-  const minutesPrayed = minutesFromSeconds(
-    completedSessionRows.reduce((acc, row) => acc + (row.duration_seconds ?? 0), 0),
-  );
-  const sessionsThisWeek = completedSessionRows.filter((row) => {
-    const completedAt = row.completed_at ? new Date(row.completed_at).getTime() : 0;
-    return completedAt >= weekStart.getTime();
-  }).length;
+        if (error) {
+          throw new Error(
+            toSupabaseErrorMessage(error, 'Failed to load circle membership counts.'),
+          );
+        }
 
-  const thisWeekMinutes = minutesFromSeconds(
-    completedSessionRows
-      .filter((row) => {
+        circleMembers = new Set(
+          ((data ?? []) as { user_id: string }[])
+            .map((row) => row.user_id)
+            .filter((memberId) => memberId !== normalizedUserId),
+        ).size;
+      }
+
+      const eventRows = (eventParticipantRes.data ?? []) as {
+        event_id: string;
+        joined_at: string;
+      }[];
+      const eventsJoinedThisWeek = new Set(
+        eventRows
+          .filter((row) => new Date(row.joined_at).getTime() >= weekStart.getTime())
+          .map((row) => row.event_id),
+      ).size;
+
+      const sessionRows = (soloSessionsRes.data ?? []) as SoloSessionRow[];
+      const completedSessionRows = sessionRows.filter((row) => Boolean(row.completed_at));
+      const minutesPrayed = minutesFromSeconds(
+        completedSessionRows.reduce((acc, row) => acc + (row.duration_seconds ?? 0), 0),
+      );
+      const sessionsThisWeek = completedSessionRows.filter((row) => {
         const completedAt = row.completed_at ? new Date(row.completed_at).getTime() : 0;
         return completedAt >= weekStart.getTime();
-      })
-      .reduce((acc, row) => acc + (row.duration_seconds ?? 0), 0),
-  );
+      }).length;
 
-  const previousWeekMinutes = minutesFromSeconds(
-    completedSessionRows
-      .filter((row) => {
-        const completedAt = row.completed_at ? new Date(row.completed_at).getTime() : 0;
-        return completedAt >= previousWeekStart.getTime() && completedAt < weekStart.getTime();
-      })
-      .reduce((acc, row) => acc + (row.duration_seconds ?? 0), 0),
-  );
+      const thisWeekMinutes = minutesFromSeconds(
+        completedSessionRows
+          .filter((row) => {
+            const completedAt = row.completed_at ? new Date(row.completed_at).getTime() : 0;
+            return completedAt >= weekStart.getTime();
+          })
+          .reduce((acc, row) => acc + (row.duration_seconds ?? 0), 0),
+      );
 
-  const soloStreakDays = calculateSoloStreakDays(
-    completedSessionRows
-      .map((row) => row.completed_at)
-      .filter((value): value is string => Boolean(value)),
-  );
+      const previousWeekMinutes = minutesFromSeconds(
+        completedSessionRows
+          .filter((row) => {
+            const completedAt = row.completed_at ? new Date(row.completed_at).getTime() : 0;
+            return completedAt >= previousWeekStart.getTime() && completedAt < weekStart.getTime();
+          })
+          .reduce((acc, row) => acc + (row.duration_seconds ?? 0), 0),
+      );
 
-  return {
-    circleMembers,
-    eventsJoinedThisWeek,
-    highContrastMode: preferences.highContrastMode,
-    minutesPrayed,
-    sessionsThisWeek,
-    soloStreakDays,
-    weeklyImpactChangePercent: calculateImpactChangePercent(thisWeekMinutes, previousWeekMinutes),
-  };
+      const soloStreakDays = calculateSoloStreakDays(
+        completedSessionRows
+          .map((row) => row.completed_at)
+          .filter((value): value is string => Boolean(value)),
+      );
+
+      return {
+        circleMembers,
+        eventsJoinedThisWeek,
+        highContrastMode: preferences.highContrastMode,
+        minutesPrayed,
+        sessionsThisWeek,
+        soloStreakDays,
+        weeklyImpactChangePercent: calculateImpactChangePercent(
+          thisWeekMinutes,
+          previousWeekMinutes,
+        ),
+      };
+    },
+  );
 }
 
 export async function setHighContrastMode(userId: string, enabled: boolean) {
+  const normalizedUserId = userId.trim();
+  if (!normalizedUserId) {
+    return;
+  }
+
   const { error } = await supabase
     .from('profiles')
     .update({ high_contrast_mode: enabled })
-    .eq('id', userId);
+    .eq('id', normalizedUserId);
 
   if (error) {
     throw new Error(toSupabaseErrorMessage(error, 'Failed to update accessibility preference.'));
   }
+
+  userPreferencesCache.delete(normalizedUserId);
+  profileSummaryCache.delete(normalizedUserId);
 }
 
 export async function fetchSoloStats(userId: string): Promise<SoloStats> {
-  const now = new Date();
-  const weekStart = startOfWeekMonday(now);
-  const todayStart = startOfDay(now);
-
-  const { data, error } = await supabase
-    .from('solo_sessions')
-    .select('id,duration_seconds,completed_at')
-    .eq('user_id', userId)
-    .not('completed_at', 'is', null)
-    .order('completed_at', { ascending: false });
-
-  if (error) {
-    throw new Error(toSupabaseErrorMessage(error, 'Failed to load solo progress.'));
+  const normalizedUserId = userId.trim();
+  if (!normalizedUserId) {
+    return {
+      minutesThisWeek: 0,
+      sessionsThisWeek: 0,
+      sessionsToday: 0,
+    };
   }
 
-  const sessions = (data ?? []) as SoloSessionRow[];
-  const sessionsThisWeek = sessions.filter((row) => {
-    const completedAt = row.completed_at ? new Date(row.completed_at).getTime() : 0;
-    return completedAt >= weekStart.getTime();
-  });
-  const sessionsToday = sessions.filter((row) => {
-    const completedAt = row.completed_at ? new Date(row.completed_at).getTime() : 0;
-    return completedAt >= todayStart.getTime();
-  });
+  return loadWithTimedCache(
+    soloStatsCache,
+    soloStatsRequestCache,
+    normalizedUserId,
+    SOLO_STATS_CACHE_TTL_MS,
+    async () => {
+      const now = new Date();
+      const weekStart = startOfWeekMonday(now);
+      const todayStart = startOfDay(now);
 
-  const minutesThisWeek = minutesFromSeconds(
-    sessionsThisWeek.reduce((acc, row) => acc + (row.duration_seconds ?? 0), 0),
+      const { data, error } = await supabase
+        .from('solo_sessions')
+        .select('id,duration_seconds,completed_at')
+        .eq('user_id', normalizedUserId)
+        .not('completed_at', 'is', null)
+        .order('completed_at', { ascending: false });
+
+      if (error) {
+        throw new Error(toSupabaseErrorMessage(error, 'Failed to load solo progress.'));
+      }
+
+      const sessions = (data ?? []) as SoloSessionRow[];
+      const sessionsThisWeek = sessions.filter((row) => {
+        const completedAt = row.completed_at ? new Date(row.completed_at).getTime() : 0;
+        return completedAt >= weekStart.getTime();
+      });
+      const sessionsToday = sessions.filter((row) => {
+        const completedAt = row.completed_at ? new Date(row.completed_at).getTime() : 0;
+        return completedAt >= todayStart.getTime();
+      });
+
+      const minutesThisWeek = minutesFromSeconds(
+        sessionsThisWeek.reduce((acc, row) => acc + (row.duration_seconds ?? 0), 0),
+      );
+
+      return {
+        minutesThisWeek,
+        sessionsThisWeek: sessionsThisWeek.length,
+        sessionsToday: sessionsToday.length,
+      };
+    },
   );
+}
 
-  return {
-    minutesThisWeek,
-    sessionsThisWeek: sessionsThisWeek.length,
-    sessionsToday: sessionsToday.length,
-  };
+export function prefetchCoreAppData(userId: string) {
+  const normalizedUserId = userId.trim();
+  if (!normalizedUserId) {
+    return;
+  }
+
+  const inFlight = coreAppDataPrefetchRequests.get(normalizedUserId);
+  if (inFlight) {
+    return;
+  }
+
+  const request = (async () => {
+    await Promise.allSettled([
+      fetchPrayerLibraryItems(),
+      fetchEvents(120),
+      fetchEventLibraryItems(80),
+      fetchNewsDrivenEvents(80),
+      fetchActiveEventUsers(15),
+      fetchCommunitySnapshot(),
+      fetchEventNotificationState(normalizedUserId),
+      fetchUserPreferences(normalizedUserId),
+      fetchProfileSummary(normalizedUserId),
+      fetchUserJournalEntries(normalizedUserId),
+      fetchSoloStats(normalizedUserId),
+      fetchPrayerCircleMembers(),
+      fetchEventsCircleMembers(),
+    ]);
+  })().finally(() => {
+    coreAppDataPrefetchRequests.delete(normalizedUserId);
+  });
+
+  coreAppDataPrefetchRequests.set(normalizedUserId, request);
 }
 
 export async function recordSoloSession(input: {
@@ -1500,6 +2191,12 @@ export async function recordSoloSession(input: {
 
   if (error) {
     throw new Error(toSupabaseErrorMessage(error, 'Failed to record solo session.'));
+  }
+
+  const normalizedUserId = input.userId.trim();
+  if (normalizedUserId) {
+    soloStatsCache.delete(normalizedUserId);
+    profileSummaryCache.delete(normalizedUserId);
   }
 }
 
@@ -1558,6 +2255,8 @@ export async function joinEventRoom(eventId: string, userId: string) {
   if (error) {
     throw new Error(toSupabaseErrorMessage(error, 'Failed to join room.'));
   }
+
+  invalidateEventRuntimeCaches(eventId);
 }
 
 export async function leaveEventRoom(eventId: string, userId: string) {
@@ -1573,6 +2272,8 @@ export async function leaveEventRoom(eventId: string, userId: string) {
   if (error) {
     throw new Error(toSupabaseErrorMessage(error, 'Failed to leave room.'));
   }
+
+  invalidateEventRuntimeCaches(eventId);
 }
 
 export async function refreshEventPresence(eventId: string, userId: string) {
@@ -1588,5 +2289,10 @@ export async function refreshEventPresence(eventId: string, userId: string) {
 
   if (error) {
     throw new Error(toSupabaseErrorMessage(error, 'Failed to refresh room presence.'));
+  }
+
+  activeEventUsersCache.clear();
+  if (eventId.trim()) {
+    eventByIdCache.delete(eventId.trim());
   }
 }

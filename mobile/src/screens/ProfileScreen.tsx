@@ -22,6 +22,8 @@ import {
   createUserJournalEntry,
   fetchProfileSummary,
   fetchUserJournalEntries,
+  getCachedProfileSummary,
+  getCachedUserJournalEntries,
   updateUserJournalEntry,
   type ProfileSummary,
 } from '../lib/api/data';
@@ -74,35 +76,15 @@ export function ProfileScreen() {
   const journalPagesRef = useRef<JournalPageState[]>(journalPages);
   const userIdRef = useRef<string | null>(null);
 
-  const loadProfile = useCallback(async (nextUser: User | null) => {
-    if (!nextUser) {
-      setSummary(null);
-      setLoadingProfile(false);
-      return;
-    }
-
-    setLoadingProfile(true);
-    try {
-      const nextSummary = await fetchProfileSummary(nextUser.id);
-      setSummary(nextSummary);
-      setError(null);
-    } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : 'Failed to load profile.');
-    } finally {
-      setLoadingProfile(false);
-    }
-  }, []);
-
-  const loadJournal = useCallback(async (nextUser: User | null) => {
-    if (!nextUser) {
-      setJournalPages([createDraftJournalPage()]);
-      setCurrentJournalPageIndex(0);
-      setJournalError(null);
-      return;
-    }
-
-    try {
-      const entries = await fetchUserJournalEntries(nextUser.id);
+  const applyJournalEntries = useCallback(
+    (
+      entries: {
+        content: string;
+        createdAt: string;
+        id: string;
+        updatedAt: string;
+      }[],
+    ) => {
       const pages = entries.map((entry) => ({
         content: entry.content,
         createdAt: entry.createdAt,
@@ -115,17 +97,67 @@ export function ProfileScreen() {
       if (pages.length === 0) {
         setJournalPages([createDraftJournalPage()]);
         setCurrentJournalPageIndex(0);
-      } else {
-        setJournalPages(pages);
-        setCurrentJournalPageIndex(pages.length - 1);
+        return;
       }
-      setJournalError(null);
+
+      setJournalPages(pages);
+      setCurrentJournalPageIndex(pages.length - 1);
+    },
+    [],
+  );
+
+  const loadProfile = useCallback(async (nextUser: User | null) => {
+    if (!nextUser) {
+      setSummary(null);
+      setLoadingProfile(false);
+      return;
+    }
+
+    const cachedSummary = getCachedProfileSummary(nextUser.id);
+    if (cachedSummary) {
+      setSummary(cachedSummary);
+      setLoadingProfile(false);
+    } else {
+      setLoadingProfile(true);
+    }
+
+    try {
+      const nextSummary = await fetchProfileSummary(nextUser.id);
+      setSummary(nextSummary);
+      setError(null);
     } catch (nextError) {
-      setJournalError(nextError instanceof Error ? nextError.message : 'Failed to load journal.');
-      setJournalPages([createDraftJournalPage()]);
-      setCurrentJournalPageIndex(0);
+      setError(nextError instanceof Error ? nextError.message : 'Failed to load profile.');
+    } finally {
+      setLoadingProfile(false);
     }
   }, []);
+
+  const loadJournal = useCallback(
+    async (nextUser: User | null) => {
+      if (!nextUser) {
+        setJournalPages([createDraftJournalPage()]);
+        setCurrentJournalPageIndex(0);
+        setJournalError(null);
+        return;
+      }
+
+      const cachedEntries = getCachedUserJournalEntries(nextUser.id);
+      if (cachedEntries) {
+        applyJournalEntries(cachedEntries);
+      }
+
+      try {
+        const entries = await fetchUserJournalEntries(nextUser.id);
+        applyJournalEntries(entries);
+        setJournalError(null);
+      } catch (nextError) {
+        setJournalError(nextError instanceof Error ? nextError.message : 'Failed to load journal.');
+        setJournalPages([createDraftJournalPage()]);
+        setCurrentJournalPageIndex(0);
+      }
+    },
+    [applyJournalEntries],
+  );
 
   const persistPageByLocalId = useCallback(async (localId: string) => {
     const userId = userIdRef.current;
@@ -193,7 +225,9 @@ export function ProfileScreen() {
 
       setJournalError(null);
     } catch (nextError) {
-      setJournalError(nextError instanceof Error ? nextError.message : 'Failed to save journal page.');
+      setJournalError(
+        nextError instanceof Error ? nextError.message : 'Failed to save journal page.',
+      );
     } finally {
       setJournalSavingLocalId((current) => (current === localId ? null : current));
     }
@@ -318,7 +352,7 @@ export function ProfileScreen() {
     return () => {
       clearTimeout(saveTimeout);
     };
-  }, [activeJournalPage?.content, activeJournalPage?.localId, persistPageByLocalId]);
+  }, [activeJournalPage, persistPageByLocalId]);
 
   const onSignOut = async () => {
     setError(null);
@@ -397,7 +431,12 @@ export function ProfileScreen() {
               Journal
             </Typography>
           </View>
-          <Typography allowFontScaling={false} color={colors.textSecondary} variant="Caption" weight="bold">
+          <Typography
+            allowFontScaling={false}
+            color={colors.textSecondary}
+            variant="Caption"
+            weight="bold"
+          >
             {`Page ${Math.min(currentJournalPageIndex + 1, journalPages.length)} of ${journalPages.length}`}
           </Typography>
         </View>

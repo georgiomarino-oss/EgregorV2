@@ -216,40 +216,13 @@ async function supabaseRestRequest({
   return requestJson(url, init);
 }
 
-async function fetchPublicPrayerItems({ serviceRoleKey, supabaseUrl }) {
+async function fetchEventLibraryItems({ serviceRoleKey, supabaseUrl }) {
   const rows = [];
   let offset = 0;
 
   while (true) {
     const page = await supabaseRestRequest({
-      pathWithQuery: `/rest/v1/prayer_library_items?select=id,title,is_public&is_public=eq.true&order=created_at.asc&limit=${PAGE_SIZE}&offset=${offset}`,
-      serviceRoleKey,
-      supabaseUrl,
-    });
-
-    if (!Array.isArray(page) || page.length === 0) {
-      break;
-    }
-
-    rows.push(...page);
-
-    if (page.length < PAGE_SIZE) {
-      break;
-    }
-
-    offset += PAGE_SIZE;
-  }
-
-  return rows;
-}
-
-async function fetchPrayerScripts({ serviceRoleKey, supabaseUrl }) {
-  const rows = [];
-  let offset = 0;
-
-  while (true) {
-    const page = await supabaseRestRequest({
-      pathWithQuery: `/rest/v1/prayer_library_scripts?select=id,prayer_library_item_id,duration_minutes,language,script_text&order=updated_at.desc&limit=${PAGE_SIZE}&offset=${offset}`,
+      pathWithQuery: `/rest/v1/event_library_items?select=id,title,body,script_text,duration_minutes&order=updated_at.desc&limit=${PAGE_SIZE}&offset=${offset}`,
       serviceRoleKey,
       supabaseUrl,
     });
@@ -312,9 +285,7 @@ async function invokeGeneratePrayerAudio({ job, serviceRoleKey, supabaseUrl }) {
       body: JSON.stringify({
         allowGeneration: true,
         durationMinutes: job.durationMinutes,
-        language: job.language,
-        prayerLibraryItemId: job.prayerLibraryItemId,
-        prayerLibraryScriptId: job.prayerLibraryScriptId,
+        language: "en",
         script: job.scriptText,
         title: job.title,
         voiceId: job.voice.id,
@@ -344,46 +315,34 @@ async function main() {
     `Voices: ${voices.map((voice) => `${voice.label}:${voice.id}`).join(", ")}`,
   );
 
-  const [items, scripts] = await Promise.all([
-    fetchPublicPrayerItems({ serviceRoleKey, supabaseUrl }),
-    fetchPrayerScripts({ serviceRoleKey, supabaseUrl }),
-  ]);
+  const items = await fetchEventLibraryItems({ serviceRoleKey, supabaseUrl });
 
-  const publicItemById = new Map(
-    items.filter((item) => item.id).map((item) => [item.id, item]),
-  );
+  const filteredItems = items
+    .map((item) => {
+      const script =
+        typeof item.script_text === "string" && item.script_text.trim()
+          ? item.script_text.trim()
+          : typeof item.body === "string" && item.body.trim()
+            ? item.body.trim()
+            : "";
 
-  const filteredScripts = scripts
-    .filter((script) => {
-      if (
-        !script?.id ||
-        !script?.prayer_library_item_id ||
-        typeof script.script_text !== "string"
-      ) {
-        return false;
-      }
-      return publicItemById.has(script.prayer_library_item_id);
+      return {
+        durationMinutes: Number(item.duration_minutes ?? 0) || null,
+        itemId: item.id,
+        scriptText: script,
+        title:
+          typeof item.title === "string" && item.title.trim()
+            ? item.title.trim()
+            : "Event",
+      };
     })
-    .map((script) => ({
-      durationMinutes: Number(script.duration_minutes ?? 0) || null,
-      language:
-        typeof script.language === "string" && script.language.trim()
-          ? script.language
-          : "en",
-      prayerLibraryItemId: script.prayer_library_item_id,
-      prayerLibraryScriptId: script.id,
-      scriptText: script.script_text.trim(),
-      title:
-        publicItemById.get(script.prayer_library_item_id)?.title?.trim() ||
-        null,
-    }))
-    .filter((script) => Boolean(script.scriptText));
+    .filter((item) => item.itemId && item.scriptText);
 
   const jobs = [];
-  for (const script of filteredScripts) {
+  for (const item of filteredItems) {
     for (const voice of voices) {
       jobs.push({
-        ...script,
+        ...item,
         voice,
       });
     }
@@ -393,13 +352,13 @@ async function main() {
     options.limit && options.limit > 0 ? jobs.slice(0, options.limit) : jobs;
 
   console.log(
-    `${options.dryRun ? "Planned" : "Starting"} prewarm for ${limitedJobs.length} artifacts (${filteredScripts.length} scripts x ${voices.length} voices).`,
+    `${options.dryRun ? "Planned" : "Starting"} event-library prewarm for ${limitedJobs.length} artifacts (${filteredItems.length} items x ${voices.length} voices).`,
   );
 
   if (options.dryRun) {
     limitedJobs.slice(0, 20).forEach((job, index) => {
       console.log(
-        `[dry-run ${index + 1}] ${job.title ?? "Untitled"} (${job.durationMinutes ?? "?"} min, ${job.language}) -> ${job.voice.label}`,
+        `[dry-run ${index + 1}] ${job.title} (${job.durationMinutes ?? "?"} min) -> ${job.voice.label}`,
       );
     });
     if (limitedJobs.length > 20) {
@@ -424,7 +383,7 @@ async function main() {
         });
         successCount += 1;
         console.log(
-          `[${index + 1}/${limitedJobs.length}] OK ${job.title ?? "Untitled"} ${job.durationMinutes ?? "?"}m -> ${job.voice.label}`,
+          `[${index + 1}/${limitedJobs.length}] OK ${job.title} ${job.durationMinutes ?? "?"}m -> ${job.voice.label}`,
         );
       } catch (error) {
         failureCount += 1;
@@ -435,21 +394,19 @@ async function main() {
           voice: job.voice.label,
         });
         console.error(
-          `[${index + 1}/${limitedJobs.length}] FAIL ${job.title ?? "Untitled"} -> ${job.voice.label}: ${message}`,
+          `[${index + 1}/${limitedJobs.length}] FAIL ${job.title} -> ${job.voice.label}: ${message}`,
         );
       }
     },
   );
 
   console.log(
-    `Prewarm complete. Success: ${successCount}. Failed: ${failureCount}.`,
+    `Event-library prewarm complete. Success: ${successCount}. Failed: ${failureCount}.`,
   );
   if (failures.length > 0) {
     console.log("Failure summary:");
     failures.slice(0, 20).forEach((entry) => {
-      console.log(
-        `- ${entry.title ?? "Untitled"} (${entry.voice}): ${entry.message}`,
-      );
+      console.log(`- ${entry.title} (${entry.voice}): ${entry.message}`);
     });
   }
 }

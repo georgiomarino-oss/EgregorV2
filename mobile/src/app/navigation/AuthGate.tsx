@@ -4,7 +4,8 @@ import { ActivityIndicator, AppState, StyleSheet, View } from 'react-native';
 import type { Session } from '@supabase/supabase-js';
 
 import { Typography } from '../../components/Typography';
-import { updateAppUserPresence } from '../../lib/api/data';
+import { prefetchCoreAppData, updateAppUserPresence } from '../../lib/api/data';
+import { prefetchEventAndPrayerAudioArtifacts } from '../../lib/artifactPrefetch';
 import { supabase } from '../../lib/supabase';
 import { colors } from '../../theme/tokens';
 import { RootNavigator } from './RootNavigator';
@@ -97,6 +98,15 @@ export function AuthGate({ captureTarget }: AuthGateProps) {
       appStateSubscription.remove();
       void updateAppUserPresence(userId, false);
     };
+  }, [forcedAuthState, session?.user?.id]);
+
+  useEffect(() => {
+    if (!session?.user?.id || forcedAuthState !== null) {
+      return;
+    }
+
+    prefetchCoreAppData(session.user.id);
+    prefetchEventAndPrayerAudioArtifacts(session.user.id);
   }, [forcedAuthState, session?.user?.id]);
 
   if (forcedAuthState !== null) {

@@ -13,8 +13,24 @@ export type MainTabParamList = {
 export type SoloStackParamList = {
   PrayerLibrary: undefined;
   SoloHome: undefined;
-  SoloLive: { intention?: string; scriptPreset?: string } | undefined;
-  SoloSetup: { intention?: string; scriptPreset?: string } | undefined;
+  SoloLive:
+    | {
+        allowAudioGeneration?: boolean;
+        durationMinutes?: number;
+        intention?: string;
+        prayerLibraryItemId?: string;
+        scriptPreset?: string;
+      }
+    | undefined;
+  SoloSetup:
+    | {
+        allowAudioGeneration?: boolean;
+        durationMinutes?: number;
+        intention?: string;
+        prayerLibraryItemId?: string;
+        scriptPreset?: string;
+      }
+    | undefined;
 };
 
 export type CommunityStackParamList = {
