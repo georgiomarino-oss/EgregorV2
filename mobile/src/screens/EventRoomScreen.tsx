@@ -67,6 +67,23 @@ function formatClock(totalSeconds: number) {
   return `${minutes}:${seconds}`;
 }
 
+function formatCountdownPhrase(totalSeconds: number) {
+  const clamped = Math.max(0, Math.floor(totalSeconds));
+  const hours = Math.floor(clamped / 3600);
+  const minutes = Math.floor((clamped % 3600) / 60);
+  const seconds = clamped % 60;
+
+  if (hours > 0) {
+    return `${hours}h ${minutes.toString().padStart(2, '0')}m`;
+  }
+
+  if (minutes > 0) {
+    return `${minutes}m ${seconds.toString().padStart(2, '0')}s`;
+  }
+
+  return `${seconds}s`;
+}
+
 function buildFallbackEventScript(description?: string | null, hostNote?: string | null) {
   return [description?.trim(), hostNote?.trim()]
     .filter((value): value is string => Boolean(value && value.length > 0))
@@ -192,7 +209,7 @@ export function EventRoomScreen() {
 
   const elapsedLabel = formatClock(activeElapsedMillis / 1000);
   const remainingLabel = formatClock(remainingEventMillis / 1000);
-  const startCountdownLabel = formatClock(remainingUntilStartMillis / 1000);
+  const startCountdownPhrase = formatCountdownPhrase(remainingUntilStartMillis / 1000);
   const isVeryCompactHeight = viewportHeight <= 700;
   const isCompactHeight = viewportHeight <= 780;
   const isNarrowWidth = viewportWidth <= 360;
@@ -814,7 +831,11 @@ export function EventRoomScreen() {
             <Typography
               accessibilityRole="header"
               allowFontScaling={false}
-              style={styles.prayerTitle}
+              style={[
+                styles.prayerTitle,
+                useCompactLayout && styles.prayerTitleCompact,
+                isVeryCompactHeight && styles.prayerTitleVeryCompact,
+              ]}
               variant="H1"
               weight="bold"
             >
@@ -984,7 +1005,7 @@ export function EventRoomScreen() {
                   variant="Body"
                   weight="bold"
                 >
-                  {hasStarted ? `${remainingLabel} left` : `${startCountdownLabel} to start`}
+                  {hasStarted ? `${remainingLabel} left` : `Starts in ${startCountdownPhrase}`}
                 </Typography>
                 <MaterialCommunityIcons
                   color={hasStarted ? colors.success : colors.warning}
@@ -1113,7 +1134,7 @@ export function EventRoomScreen() {
 
           {showCenterStatusHint && !hasStarted ? (
             <Typography allowFontScaling={false} color={colors.warning} variant="Caption">
-              Event starts in {startCountdownLabel}. Audio will begin automatically.
+              Event begins in {startCountdownPhrase}. Audio starts automatically.
             </Typography>
           ) : null}
 
@@ -1313,21 +1334,24 @@ const styles = StyleSheet.create({
   collectiveMetaRow: {
     alignItems: 'center',
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: spacing.xs,
     justifyContent: 'center',
+    rowGap: spacing.xxs,
   },
   collectiveMetaRowCompact: {
     gap: spacing.xxs,
   },
   collectiveMetaRowVeryCompact: {
     gap: 3,
+    rowGap: 2,
   },
   collectiveStatsChip: {
     alignItems: 'center',
     backgroundColor: roomAtmosphere.collective.selectorBackground,
     borderColor: roomAtmosphere.collective.selectorBorder,
     borderRadius: radii.pill,
-    borderWidth: 0.8,
+    borderWidth: 0.7,
     flexDirection: 'row',
     gap: spacing.xs,
     minHeight: 32,
@@ -1366,7 +1390,7 @@ const styles = StyleSheet.create({
   dropdownOptionActive: {
     backgroundColor: roomAtmosphere.collective.selectorBackground,
     borderColor: roomAtmosphere.collective.transportFill,
-    borderWidth: 0.8,
+    borderWidth: 0.7,
   },
   dropdownOptionPressed: {
     transform: [{ scale: 0.99 }],
@@ -1378,9 +1402,11 @@ const styles = StyleSheet.create({
   headerBlock: {
     alignItems: 'center',
     gap: spacing.xxs,
+    paddingHorizontal: spacing.xs,
   },
   headerBlockCompact: {
     gap: 2,
+    paddingHorizontal: spacing.xxs,
   },
   iconButtonPressed: {
     transform: [{ scale: 0.97 }],
@@ -1390,7 +1416,7 @@ const styles = StyleSheet.create({
     backgroundColor: roomAtmosphere.collective.selectorBackground,
     borderColor: roomAtmosphere.collective.selectorBorder,
     borderRadius: radii.pill,
-    borderWidth: 0.8,
+    borderWidth: 0.7,
     height: 52,
     justifyContent: 'center',
     width: 52,
@@ -1417,7 +1443,7 @@ const styles = StyleSheet.create({
     backgroundColor: roomAtmosphere.collective.selectorBackground,
     borderColor: roomAtmosphere.collective.selectorBorder,
     borderRadius: radii.pill,
-    borderWidth: 0.8,
+    borderWidth: 0.7,
     flexDirection: 'row',
     gap: spacing.xs,
     justifyContent: 'center',
@@ -1436,7 +1462,7 @@ const styles = StyleSheet.create({
     backgroundColor: roomAtmosphere.collective.panelBackground,
     borderColor: roomAtmosphere.collective.selectorBorder,
     borderRadius: radii.pill,
-    borderWidth: 0.8,
+    borderWidth: 0.7,
     height: 28,
     justifyContent: 'center',
     width: 28,
@@ -1464,7 +1490,7 @@ const styles = StyleSheet.create({
   liveChip: {
     alignItems: 'center',
     borderRadius: radii.pill,
-    borderWidth: 0.8,
+    borderWidth: 0.7,
     minHeight: 32,
     justifyContent: 'center',
     paddingHorizontal: spacing.sm,
@@ -1501,7 +1527,7 @@ const styles = StyleSheet.create({
     backgroundColor: roomAtmosphere.collective.selectorBackground,
     borderColor: roomAtmosphere.collective.selectorBorder,
     borderRadius: radii.pill,
-    borderWidth: 0.8,
+    borderWidth: 0.7,
     height: 96,
     justifyContent: 'center',
     width: 96,
@@ -1522,13 +1548,22 @@ const styles = StyleSheet.create({
     transform: [{ scale: 0.98 }],
   },
   prayerTitle: {
+    lineHeight: 34,
+    maxWidth: '94%',
     textAlign: 'center',
+  },
+  prayerTitleCompact: {
+    lineHeight: 31,
+  },
+  prayerTitleVeryCompact: {
+    lineHeight: 28,
+    maxWidth: '96%',
   },
   progressFill: {
     backgroundColor: roomAtmosphere.collective.transportFill,
     borderColor: roomAtmosphere.collective.selectorBorder,
     borderRadius: radii.pill,
-    borderWidth: 0.8,
+    borderWidth: 0.7,
     height: '100%',
   },
   progressLabels: {
@@ -1542,7 +1577,7 @@ const styles = StyleSheet.create({
     backgroundColor: roomAtmosphere.collective.transportTrack,
     borderColor: roomAtmosphere.collective.selectorBorder,
     borderRadius: radii.pill,
-    borderWidth: 0.8,
+    borderWidth: 0.7,
     height: 16,
     overflow: 'hidden',
   },
@@ -1559,7 +1594,7 @@ const styles = StyleSheet.create({
     backgroundColor: roomAtmosphere.collective.panelBackground,
     borderColor: roomAtmosphere.collective.panelBorder,
     borderRadius: radii.xl,
-    borderWidth: 0.8,
+    borderWidth: 0.7,
     minHeight: 188,
     overflow: 'hidden',
     width: '100%',
@@ -1661,7 +1696,7 @@ const styles = StyleSheet.create({
     backgroundColor: roomAtmosphere.collective.selectorBackground,
     borderColor: roomAtmosphere.collective.selectorBorder,
     borderRadius: radii.pill,
-    borderWidth: 0.8,
+    borderWidth: 0.7,
     flexDirection: 'row',
     gap: spacing.xs,
     minHeight: 46,
@@ -1684,12 +1719,15 @@ const styles = StyleSheet.create({
   selectorRow: {
     flexDirection: 'row',
     gap: spacing.sm,
+    marginTop: spacing.xxs,
   },
   selectorRowCompact: {
     gap: spacing.xs,
+    marginTop: 2,
   },
   selectorRowVeryCompact: {
     gap: spacing.xxs,
+    marginTop: 1,
   },
   selectorValue: {
     flex: 1,
@@ -1721,7 +1759,7 @@ const styles = StyleSheet.create({
     backgroundColor: roomAtmosphere.collective.panelBackground,
     borderColor: roomAtmosphere.collective.selectorBorder,
     borderRadius: radii.pill,
-    borderWidth: 0.8,
+    borderWidth: 0.7,
     height: 26,
     justifyContent: 'center',
     width: 26,

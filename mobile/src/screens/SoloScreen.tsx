@@ -22,7 +22,7 @@ import {
   type PrayerLibraryItem,
 } from '../lib/api/data';
 import { prefetchPrayerAudio } from '../lib/api/functions';
-import { HOME_CARD_GAP, PROFILE_SECTION_GAP, SCREEN_PAD_X } from '../theme/figmaV2Layout';
+import { HOME_CARD_GAP, SCREEN_PAD_X } from '../theme/figmaV2Layout';
 import { CARD_PADDING_LG } from '../theme/layout';
 import { radii, soloSurface, spacing } from '../theme/tokens';
 
@@ -311,7 +311,8 @@ export function SoloScreen() {
 
 const styles = StyleSheet.create({
   content: {
-    gap: PROFILE_SECTION_GAP,
+    gap: spacing.md,
+    paddingBottom: spacing.sm,
   },
   dot: {
     borderRadius: radii.pill,
@@ -335,6 +336,7 @@ const styles = StyleSheet.create({
   },
   prayerRail: {
     gap: HOME_CARD_GAP,
+    paddingBottom: spacing.xxs,
     paddingRight: 0,
   },
 });

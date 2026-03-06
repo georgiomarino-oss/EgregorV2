@@ -1,6 +1,6 @@
 import ambientAnimation from '../../assets/lottie/cosmic-ambient.json';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { StyleSheet } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -18,6 +18,7 @@ import {
 } from '../lib/api/data';
 import { supabase } from '../lib/supabase';
 import { sectionGap } from '../theme/layout';
+import { spacing } from '../theme/tokens';
 
 type CommunityNavigation = NativeStackNavigationProp<CommunityStackParamList, 'CommunityHome'>;
 
@@ -116,21 +117,23 @@ export function CommunityScreen() {
 
   return (
     <Screen ambientSource={ambientAnimation} contentContainerStyle={styles.content} variant="home">
-      <GlobalPulseHero
-        liveEvents={snapshot?.liveEvents ?? 0}
-        strongestLiveEventTitle={snapshot?.strongestLiveEventTitle ?? null}
-      />
+      <View style={styles.topStack}>
+        <GlobalPulseHero
+          liveEvents={snapshot?.liveEvents ?? 0}
+          strongestLiveEventTitle={snapshot?.strongestLiveEventTitle ?? null}
+        />
 
-      <LiveMetricsPanel
-        countries={snapshot?.countries ?? 0}
-        liveEvents={snapshot?.liveEvents ?? 0}
-        loading={loading && !snapshot}
-        onPrimaryAction={onPrimaryAction}
-        primaryActionTitle={
-          snapshot?.strongestLiveEventTitle ? 'Join strongest live room' : 'Explore events'
-        }
-        uniqueActiveParticipants={snapshot?.uniqueActiveParticipants ?? 0}
-      />
+        <LiveMetricsPanel
+          countries={snapshot?.countries ?? 0}
+          liveEvents={snapshot?.liveEvents ?? 0}
+          loading={loading && !snapshot}
+          onPrimaryAction={onPrimaryAction}
+          primaryActionTitle={
+            snapshot?.strongestLiveEventTitle ? 'Join strongest live room' : 'Explore events'
+          }
+          uniqueActiveParticipants={snapshot?.uniqueActiveParticipants ?? 0}
+        />
+      </View>
 
       {emptyState ? (
         <>
@@ -167,7 +170,10 @@ export function CommunityScreen() {
 
 const styles = StyleSheet.create({
   content: {
+    gap: spacing.md,
+    paddingBottom: spacing.md,
+  },
+  topStack: {
     gap: sectionGap,
-    paddingBottom: sectionGap,
   },
 });

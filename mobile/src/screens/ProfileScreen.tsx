@@ -463,12 +463,14 @@ export function ProfileScreen() {
 
 const styles = StyleSheet.create({
   content: {
-    gap: PROFILE_SECTION_GAP,
+    gap: PROFILE_SECTION_GAP + spacing.xxs,
+    paddingBottom: spacing.sm,
   },
   feedbackCard: {
     minHeight: 44,
   },
   utilityPanel: {
     gap: spacing.xs,
+    marginTop: spacing.xxs,
   },
 });

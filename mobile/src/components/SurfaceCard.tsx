@@ -54,7 +54,7 @@ const surfaceRecipeMap = {
   profileRow: figmaV2Reference.surfaces.profileRow,
   welcomeMain: figmaV2Reference.surfaces.welcomeMainCard,
 } as const;
-const SURFACE_BORDER_SOFTEN_FACTOR = 0.9;
+const SURFACE_BORDER_SOFTEN_FACTOR = 0.8;
 
 type SurfaceRecipe = (typeof surfaceRecipeMap)[keyof typeof surfaceRecipeMap];
 

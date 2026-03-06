@@ -8,7 +8,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { EventsStackParamList } from '../app/navigation/types';
 import { Screen } from '../components/Screen';
 import { getDeviceTimeZoneLabel } from '../lib/dateTime';
-import { PROFILE_SECTION_GAP } from '../theme/figmaV2Layout';
+import { spacing } from '../theme/tokens';
 import { EmbeddedGlobeCard } from '../features/events/components/EmbeddedGlobeCard';
 import { EventFilterBar } from '../features/events/components/EventFilterBar';
 import { EventsHeader } from '../features/events/components/EventsHeader';
@@ -199,6 +199,7 @@ export function EventsScreen() {
 
 const styles = StyleSheet.create({
   content: {
-    gap: PROFILE_SECTION_GAP,
+    gap: spacing.md,
+    paddingBottom: spacing.sm,
   },
 });
