@@ -1,8 +1,19 @@
 import ambientAnimation from '../../assets/lottie/cosmic-ambient.json';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Easing, Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
+import {
+  Alert,
+  AppState,
+  Animated,
+  Easing,
+  Pressable,
+  Share,
+  StyleSheet,
+  View,
+  useWindowDimensions,
+} from 'react-native';
 
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import * as Clipboard from 'expo-clipboard';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
@@ -13,12 +24,27 @@ import { LiveLogo } from '../components/LiveLogo';
 import { Screen } from '../components/Screen';
 import { Typography } from '../components/Typography';
 import {
+  createSharedSoloSession,
+  endSharedSoloSession,
+  fetchPrayerCircleMembers,
   fetchPrayerScriptVariantByTitle,
+  findReusableSharedSoloSession,
+  fetchSharedSoloSessionSnapshot,
   fetchUserPreferences,
+  getCachedPrayerCircleMembers,
+  joinSharedSoloSession,
+  leaveSharedSoloSession,
   prefetchPrayerScriptVariantByTitle,
+  refreshSharedSoloSessionPresence,
   recordSoloSession,
+  subscribeSharedSoloSession,
+  updateSharedSoloSessionHostState,
+  type SharedSoloSessionPlaybackState,
+  type SharedSoloSession,
+  type SharedSoloSessionParticipant,
 } from '../lib/api/data';
 import { prefetchPrayerAudio } from '../lib/api/functions';
+import { buildSoloInviteMessage, buildSoloInviteUrl, buildSoloShareMessage } from '../lib/invite';
 import { supabase } from '../lib/supabase';
 import { sectionGap } from '../theme/layout';
 import { colors, motion, radii, roomAtmosphere, spacing } from '../theme/tokens';
@@ -47,12 +73,28 @@ const DEFAULT_MINUTE_OPTION: (typeof MINUTE_OPTIONS)[number] = 10;
 const DEFAULT_ELEVENLABS_VOICE_ID = 'V904i8ujLitGpMyoTznT';
 const MAX_SCRIPT_LINES = 4;
 const MIN_RECORDABLE_SESSION_SECONDS = 20;
+const SHARED_SOLO_HOST_SYNC_INTERVAL_MS = 2_000;
+const SHARED_SOLO_PARTICIPANT_SYNC_THRESHOLD_MS = 1_250;
+const SHARED_SOLO_PRESENCE_HEARTBEAT_MS = 20_000;
+const SHARED_SOLO_SNAPSHOT_REFRESH_MS = 30_000;
+const SHARED_SOLO_JOIN_NOTICE_MS = 4_000;
 const ELEVENLABS_VOICE_ID_BY_LABEL: Partial<Record<(typeof VOICE_OPTIONS)[number], string>> = {
   Oliver: 'jfIS2w2yJi0grJZPyEsk',
   Amaya: 'BFvr34n3gOoz0BAf9Rwn',
   Rainbird: 'bgU7lBMo69PNEOWHFqxM',
   Dominic: 'V904i8ujLitGpMyoTznT',
 };
+const VOICE_LABEL_BY_ELEVENLABS_ID = Object.entries(ELEVENLABS_VOICE_ID_BY_LABEL).reduce(
+  (accumulator, [label, voiceId]) => {
+    if (!voiceId) {
+      return accumulator;
+    }
+
+    accumulator[voiceId] = label as (typeof VOICE_OPTIONS)[number];
+    return accumulator;
+  },
+  {} as Record<string, (typeof VOICE_OPTIONS)[number]>,
+);
 
 function formatClock(totalSeconds: number) {
   const clamped = Math.max(0, Math.floor(totalSeconds));
@@ -88,9 +130,25 @@ export function SoloLiveScreen() {
   const [scriptText, setScriptText] = useState(route.params?.scriptPreset ?? '');
   const [loadingScript, setLoadingScript] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sessionUserId, setSessionUserId] = useState('');
+  const [activeSharedSessionId, setActiveSharedSessionId] = useState(
+    route.params?.sharedSessionId?.trim() || '',
+  );
+  const [sharedSession, setSharedSession] = useState<SharedSoloSession | null>(null);
+  const [sharedParticipants, setSharedParticipants] = useState<SharedSoloSessionParticipant[]>([]);
+  const [sharedJoinNotice, setSharedJoinNotice] = useState<string | null>(null);
   const scriptTextRef = useRef(scriptText);
   const sessionUserIdRef = useRef<string | null>(null);
   const recordedSessionAudioKeyRef = useRef<string | null>(null);
+  const sharedPresenceJoinedRef = useRef(false);
+  const sharedPresenceLeftRef = useRef(false);
+  const sharedPlaybackNoticeShownRef = useRef(false);
+  const sharedStartedAtRef = useRef<string | null>(null);
+  const sharedHostSyncAtRef = useRef(0);
+  const sharedJoinedCountRef = useRef(0);
+  const sharedUnsubscribeRef = useRef<(() => void) | null>(null);
+  const sharedJoinNoticeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingSharedSessionPromiseRef = useRef<Promise<string> | null>(null);
   const { height: viewportHeight, width: viewportWidth } = useWindowDimensions();
   const reduceMotionEnabled = useReducedMotion();
   const headerIntro = useMemo(() => new Animated.Value(0), []);
@@ -115,14 +173,23 @@ export function SoloLiveScreen() {
   const isCompactHeight = viewportHeight <= 780;
   const isNarrowWidth = viewportWidth <= 360;
   const useCompactLayout = isCompactHeight || isNarrowWidth;
+  const sharedSessionId = activeSharedSessionId.trim();
+  const isSharedSessionActive = sharedSessionId.length > 0;
+  const isSharedHost = Boolean(
+    sharedSession && sessionUserId && sharedSession.hostUserId === sessionUserId,
+  );
+  const isSharedParticipant = Boolean(isSharedSessionActive && sharedSession && !isSharedHost);
+  const sharedJoinedCount = sharedParticipants.length;
 
   const {
+    ensureAudioPlayer,
     isMuted,
     isRunning,
     loadingAudio,
     pause,
     play,
     positionMillis: elapsedMillis,
+    seekTo,
     setMuted,
     stop,
     timedWords,
@@ -183,6 +250,22 @@ export function SoloLiveScreen() {
     setIsInviteOpen(false);
   }, []);
 
+  const resolveSessionUserId = useCallback(async () => {
+    let userId = sessionUserIdRef.current;
+    if (userId) {
+      return userId;
+    }
+
+    const { data, error: userError } = await supabase.auth.getUser();
+    userId = userError ? null : (data.user?.id?.trim() ?? null);
+    sessionUserIdRef.current = userId;
+    if (userId) {
+      setSessionUserId(userId);
+    }
+
+    return userId;
+  }, []);
+
   const recordSessionIfNeeded = useCallback(async () => {
     if (recordedSessionAudioKeyRef.current === activeAudioKey) {
       return;
@@ -193,12 +276,7 @@ export function SoloLiveScreen() {
       return;
     }
 
-    let userId = sessionUserIdRef.current;
-    if (!userId) {
-      const { data } = await supabase.auth.getUser();
-      userId = data.user?.id?.trim() || null;
-      sessionUserIdRef.current = userId;
-    }
+    const userId = await resolveSessionUserId();
 
     if (!userId) {
       return;
@@ -216,7 +294,90 @@ export function SoloLiveScreen() {
       userId,
     });
     recordedSessionAudioKeyRef.current = activeAudioKey;
-  }, [activeAudioKey, activePrayerTitle, elapsedMillis, resolvedScriptText, totalSeconds]);
+  }, [
+    activeAudioKey,
+    activePrayerTitle,
+    elapsedMillis,
+    resolveSessionUserId,
+    resolvedScriptText,
+    totalSeconds,
+  ]);
+
+  const refreshSharedSnapshot = useCallback(
+    async (nextSessionId?: string) => {
+      const targetSessionId = (nextSessionId ?? sharedSessionId).trim();
+      if (!targetSessionId) {
+        return null;
+      }
+
+      const userId = await resolveSessionUserId();
+      if (!userId) {
+        return null;
+      }
+
+      const snapshot = await fetchSharedSoloSessionSnapshot(targetSessionId, userId);
+      setActiveSharedSessionId(snapshot.session.id);
+      setSharedSession(snapshot.session);
+      setSharedParticipants(snapshot.participants);
+      sharedStartedAtRef.current = snapshot.session.startedAt;
+
+      const syncedScript = snapshot.session.scriptText.trim();
+      if (syncedScript && syncedScript !== scriptTextRef.current.trim()) {
+        setScriptText(syncedScript);
+      }
+
+      if (
+        MINUTE_OPTIONS.includes(snapshot.session.durationMinutes as (typeof MINUTE_OPTIONS)[number])
+      ) {
+        setSelectedMinutes(snapshot.session.durationMinutes as (typeof MINUTE_OPTIONS)[number]);
+      }
+
+      const syncedVoice = VOICE_LABEL_BY_ELEVENLABS_ID[snapshot.session.voiceId];
+      if (syncedVoice) {
+        setSelectedVoice(syncedVoice);
+      }
+
+      const previousCount = sharedJoinedCountRef.current;
+      sharedJoinedCountRef.current = snapshot.joinedCount;
+      const isHostSnapshot = snapshot.session.hostUserId === userId;
+      if (isHostSnapshot && previousCount > 0 && snapshot.joinedCount > previousCount) {
+        setSharedJoinNotice(
+          snapshot.joinedCount > 2
+            ? 'More people joined your prayer.'
+            : 'Someone joined your prayer.',
+        );
+
+        if (sharedJoinNoticeTimeoutRef.current) {
+          clearTimeout(sharedJoinNoticeTimeoutRef.current);
+        }
+        sharedJoinNoticeTimeoutRef.current = setTimeout(() => {
+          setSharedJoinNotice(null);
+          sharedJoinNoticeTimeoutRef.current = null;
+        }, SHARED_SOLO_JOIN_NOTICE_MS);
+      }
+
+      return snapshot;
+    },
+    [resolveSessionUserId, sharedSessionId],
+  );
+
+  const leaveSharedPresence = useCallback(async () => {
+    if (!sharedSessionId || sharedPresenceLeftRef.current || !sharedPresenceJoinedRef.current) {
+      return;
+    }
+
+    const userId = await resolveSessionUserId();
+    if (!userId) {
+      return;
+    }
+
+    sharedPresenceLeftRef.current = true;
+    try {
+      await leaveSharedSoloSession(sharedSessionId, userId);
+    } catch {
+      // Shared session leave is best-effort on screen exit.
+    }
+  }, [resolveSessionUserId, sharedSessionId]);
 
   const onExitSession = useCallback(() => {
     closeAllSelectors();
@@ -227,10 +388,40 @@ export function SoloLiveScreen() {
       } catch {
         // Non-blocking; session recording should not block room exit.
       }
+      if (sharedSessionId && isSharedHost) {
+        try {
+          const userId = await resolveSessionUserId();
+          if (userId) {
+            await endSharedSoloSession(sharedSessionId, userId);
+            setSharedSession((current) =>
+              current
+                ? {
+                    ...current,
+                    endedAt: new Date().toISOString(),
+                    playbackState: 'ended',
+                    status: 'ended',
+                  }
+                : current,
+            );
+          }
+        } catch {
+          // Ending a shared session is best-effort.
+        }
+      }
+      await leaveSharedPresence();
       await stop();
       navigation.goBack();
     })();
-  }, [closeAllSelectors, navigation, recordSessionIfNeeded, stop]);
+  }, [
+    closeAllSelectors,
+    isSharedHost,
+    leaveSharedPresence,
+    navigation,
+    recordSessionIfNeeded,
+    resolveSessionUserId,
+    sharedSessionId,
+    stop,
+  ]);
 
   const loadSelectedScript = useCallback(async () => {
     if (!scriptLookupTitle && !prayerLibraryItemId) {
@@ -268,6 +459,15 @@ export function SoloLiveScreen() {
   }, [scriptText]);
 
   useEffect(() => {
+    const routeSessionId = route.params?.sharedSessionId?.trim() || '';
+    if (!routeSessionId || routeSessionId === sharedSessionId) {
+      return;
+    }
+
+    setActiveSharedSessionId(routeSessionId);
+  }, [route.params?.sharedSessionId, sharedSessionId]);
+
+  useEffect(() => {
     let active = true;
 
     const loadPreferences = async () => {
@@ -303,6 +503,7 @@ export function SoloLiveScreen() {
         }
 
         sessionUserIdRef.current = data.user.id;
+        setSessionUserId(data.user.id);
       } catch {
         // Non-blocking for UI.
       }
@@ -372,6 +573,116 @@ export function SoloLiveScreen() {
   ]);
 
   useEffect(() => {
+    if (!sharedSessionId) {
+      setSharedSession(null);
+      setSharedParticipants([]);
+      sharedJoinedCountRef.current = 0;
+      sharedPresenceJoinedRef.current = false;
+      sharedPresenceLeftRef.current = false;
+      sharedPlaybackNoticeShownRef.current = false;
+      sharedStartedAtRef.current = null;
+      sharedHostSyncAtRef.current = 0;
+      if (sharedUnsubscribeRef.current) {
+        sharedUnsubscribeRef.current();
+        sharedUnsubscribeRef.current = null;
+      }
+      return;
+    }
+
+    let active = true;
+    let heartbeat: ReturnType<typeof setInterval> | null = null;
+
+    const refreshSharedState = () => {
+      void refreshSharedSnapshot(sharedSessionId).catch(() => {
+        // Shared session realtime refresh is best-effort.
+      });
+    };
+
+    const bootstrapSharedSession = async () => {
+      const userId = await resolveSessionUserId();
+      if (!active || !userId) {
+        return;
+      }
+
+      try {
+        await joinSharedSoloSession({
+          sessionId: sharedSessionId,
+          userId,
+        });
+        sharedPresenceJoinedRef.current = true;
+        sharedPresenceLeftRef.current = false;
+
+        const snapshot = await refreshSharedSnapshot(sharedSessionId);
+        if (!active || !snapshot) {
+          return;
+        }
+      } catch (nextError) {
+        if (!active) {
+          return;
+        }
+
+        const message =
+          nextError instanceof Error
+            ? nextError.message
+            : 'Could not join this shared prayer session.';
+        setError(message);
+        return;
+      }
+
+      refreshSharedState();
+
+      if (sharedUnsubscribeRef.current) {
+        sharedUnsubscribeRef.current();
+      }
+      sharedUnsubscribeRef.current = subscribeSharedSoloSession({
+        onParticipantsChange: refreshSharedState,
+        onSessionChange: refreshSharedState,
+        sessionId: sharedSessionId,
+      });
+
+      heartbeat = setInterval(() => {
+        void refreshSharedSnapshot(sharedSessionId).catch(() => {
+          // Shared snapshot refresh is best-effort.
+        });
+        void refreshSharedSoloSessionPresence(sharedSessionId, userId).catch(() => {
+          // Presence heartbeat is best-effort.
+        });
+      }, SHARED_SOLO_PRESENCE_HEARTBEAT_MS);
+
+      void refreshSharedSoloSessionPresence(sharedSessionId, userId).catch(() => {
+        // Presence bootstrap is best-effort.
+      });
+    };
+
+    void bootstrapSharedSession();
+
+    const snapshotInterval = setInterval(() => {
+      refreshSharedState();
+    }, SHARED_SOLO_SNAPSHOT_REFRESH_MS);
+
+    return () => {
+      active = false;
+      clearInterval(snapshotInterval);
+      if (heartbeat) {
+        clearInterval(heartbeat);
+      }
+      if (sharedUnsubscribeRef.current) {
+        sharedUnsubscribeRef.current();
+        sharedUnsubscribeRef.current = null;
+      }
+      void leaveSharedPresence();
+    };
+  }, [leaveSharedPresence, refreshSharedSnapshot, resolveSessionUserId, sharedSessionId]);
+
+  useEffect(() => {
+    return () => {
+      if (sharedJoinNoticeTimeoutRef.current) {
+        clearTimeout(sharedJoinNoticeTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
     if (elapsedMillis < totalMillis) {
       return;
     }
@@ -382,9 +693,37 @@ export function SoloLiveScreen() {
       } catch {
         // Non-blocking metrics recording.
       }
+      if (sharedSessionId && isSharedHost) {
+        try {
+          const userId = await resolveSessionUserId();
+          if (userId) {
+            await endSharedSoloSession(sharedSessionId, userId);
+            setSharedSession((current) =>
+              current
+                ? {
+                    ...current,
+                    endedAt: new Date().toISOString(),
+                    playbackState: 'ended',
+                    status: 'ended',
+                  }
+                : current,
+            );
+          }
+        } catch {
+          // Ending a shared session is best-effort.
+        }
+      }
       await stop();
     })();
-  }, [elapsedMillis, recordSessionIfNeeded, stop, totalMillis]);
+  }, [
+    elapsedMillis,
+    isSharedHost,
+    recordSessionIfNeeded,
+    resolveSessionUserId,
+    sharedSessionId,
+    stop,
+    totalMillis,
+  ]);
 
   useEffect(() => {
     if (reduceMotionEnabled) {
@@ -450,8 +789,244 @@ export function SoloLiveScreen() {
     };
   }, [isRunning, reduceMotionEnabled, scriptFocus]);
 
+  useEffect(() => {
+    if (!sharedSessionId) {
+      return;
+    }
+
+    if (route.params?.sharedSessionId?.trim() === sharedSessionId) {
+      return;
+    }
+
+    navigation.setParams({
+      ...(route.params ?? {}),
+      sharedSessionId,
+    });
+  }, [navigation, route.params, sharedSessionId]);
+
+  const publishSharedHostState = useCallback(
+    async (force = false) => {
+      if (!sharedSessionId || !isSharedHost) {
+        return;
+      }
+      if (sharedSession?.status === 'ended') {
+        return;
+      }
+
+      const userId = await resolveSessionUserId();
+      if (!userId) {
+        return;
+      }
+
+      const nowMs = Date.now();
+      if (!force && nowMs - sharedHostSyncAtRef.current < SHARED_SOLO_HOST_SYNC_INTERVAL_MS) {
+        return;
+      }
+
+      let playbackState: SharedSoloSessionPlaybackState = 'idle';
+      if (elapsedMillis >= totalMillis) {
+        playbackState = 'ended';
+      } else if (isRunning) {
+        playbackState = 'playing';
+      } else if (elapsedMillis > 0) {
+        playbackState = 'paused';
+      }
+
+      let startedAt = sharedStartedAtRef.current;
+      if (!startedAt && (playbackState === 'playing' || playbackState === 'paused')) {
+        startedAt = new Date(nowMs - elapsedMillis).toISOString();
+      }
+
+      const status = playbackState === 'ended' ? 'ended' : 'active';
+      await updateSharedSoloSessionHostState({
+        ...(playbackState === 'ended' ? { endedAt: new Date().toISOString() } : {}),
+        hostUserId: userId,
+        playbackPositionMs: playbackState === 'ended' ? totalMillis : elapsedMillis,
+        playbackState,
+        sessionId: sharedSessionId,
+        ...(startedAt ? { startedAt } : {}),
+        status,
+      });
+
+      sharedHostSyncAtRef.current = nowMs;
+      if (startedAt) {
+        sharedStartedAtRef.current = startedAt;
+      }
+    },
+    [
+      elapsedMillis,
+      isRunning,
+      isSharedHost,
+      resolveSessionUserId,
+      sharedSession?.status,
+      sharedSessionId,
+      totalMillis,
+    ],
+  );
+
+  useEffect(() => {
+    if (!sharedSessionId || !isSharedHost) {
+      return;
+    }
+
+    void publishSharedHostState(true).catch(() => {
+      // Host sync push is best-effort and should not block playback.
+    });
+  }, [isRunning, isSharedHost, publishSharedHostState, sharedSessionId]);
+
+  useEffect(() => {
+    if (!sharedSessionId || !isSharedHost) {
+      return;
+    }
+
+    void publishSharedHostState(false).catch(() => {
+      // Host sync updates are best-effort.
+    });
+  }, [elapsedMillis, isSharedHost, publishSharedHostState, sharedSessionId]);
+
+  useEffect(() => {
+    if (!sharedSessionId) {
+      return;
+    }
+
+    let active = true;
+    const refreshOnResume = async () => {
+      const userId = await resolveSessionUserId();
+      if (!active || !userId) {
+        return;
+      }
+
+      await joinSharedSoloSession({
+        sessionId: sharedSessionId,
+        userId,
+      }).catch(() => {
+        // Resume join is best-effort.
+      });
+      if (!active) {
+        return;
+      }
+
+      await refreshSharedSoloSessionPresence(sharedSessionId, userId).catch(() => {
+        // Presence refresh on resume is best-effort.
+      });
+
+      await refreshSharedSnapshot(sharedSessionId).catch(() => {
+        // Snapshot refresh on resume is best-effort.
+      });
+
+      if (isSharedHost) {
+        await publishSharedHostState(true).catch(() => {
+          // Host state publish on resume is best-effort.
+        });
+      }
+    };
+
+    const appStateSubscription = AppState.addEventListener('change', (state) => {
+      if (state !== 'active') {
+        return;
+      }
+      void refreshOnResume();
+    });
+
+    return () => {
+      active = false;
+      appStateSubscription.remove();
+    };
+  }, [
+    isSharedHost,
+    publishSharedHostState,
+    refreshSharedSnapshot,
+    resolveSessionUserId,
+    sharedSessionId,
+  ]);
+
+  useEffect(() => {
+    if (!isSharedParticipant || !sharedSession) {
+      sharedPlaybackNoticeShownRef.current = false;
+      return;
+    }
+
+    let cancelled = false;
+
+    const syncToHostState = async () => {
+      if (!sharedSession || cancelled) {
+        return;
+      }
+
+      if (sharedSession.status === 'ended' || sharedSession.playbackState === 'ended') {
+        await stop();
+        return;
+      }
+
+      if (!resolvedScriptText.trim()) {
+        return;
+      }
+
+      const hostPosition = Math.max(0, sharedSession.playbackPositionMs);
+      await ensureAudioPlayer();
+
+      if (cancelled) {
+        return;
+      }
+
+      if (Math.abs(elapsedMillis - hostPosition) > SHARED_SOLO_PARTICIPANT_SYNC_THRESHOLD_MS) {
+        await seekTo(hostPosition);
+      }
+
+      if (sharedSession.playbackState === 'playing') {
+        if (!isRunning) {
+          await play();
+        }
+      } else if (isRunning) {
+        pause();
+      }
+
+      if (!sharedPlaybackNoticeShownRef.current) {
+        sharedPlaybackNoticeShownRef.current = true;
+        setSharedJoinNotice('Synced with shared prayer.');
+        if (sharedJoinNoticeTimeoutRef.current) {
+          clearTimeout(sharedJoinNoticeTimeoutRef.current);
+        }
+        sharedJoinNoticeTimeoutRef.current = setTimeout(() => {
+          setSharedJoinNotice(null);
+          sharedJoinNoticeTimeoutRef.current = null;
+        }, SHARED_SOLO_JOIN_NOTICE_MS);
+      }
+    };
+
+    void syncToHostState().catch(() => {
+      // Participant sync is best-effort.
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    elapsedMillis,
+    ensureAudioPlayer,
+    isRunning,
+    isSharedParticipant,
+    pause,
+    play,
+    resolvedScriptText,
+    seekTo,
+    sharedSession,
+    stop,
+  ]);
+
   const onTogglePlayback = useCallback(async () => {
     closeAllSelectors();
+
+    if (isSharedParticipant) {
+      if (!sharedPlaybackNoticeShownRef.current) {
+        sharedPlaybackNoticeShownRef.current = true;
+        Alert.alert(
+          'Shared prayer sync',
+          'Playback is controlled by the host while this shared prayer is active.',
+        );
+      }
+      return;
+    }
 
     if (isRunning) {
       pause();
@@ -466,7 +1041,7 @@ export function SoloLiveScreen() {
         nextError instanceof Error ? nextError.message : 'Failed to generate prayer audio.';
       setError(message);
     }
-  }, [closeAllSelectors, isRunning, pause, play]);
+  }, [closeAllSelectors, isRunning, isSharedParticipant, pause, play]);
 
   const headerIntroStyle = reduceMotionEnabled
     ? styles.noMotion
@@ -548,6 +1123,176 @@ export function SoloLiveScreen() {
           },
         ],
       };
+
+  const ensureSharedSessionForInvite = useCallback(async () => {
+    if (sharedSessionId) {
+      return sharedSessionId;
+    }
+
+    if (pendingSharedSessionPromiseRef.current) {
+      return pendingSharedSessionPromiseRef.current;
+    }
+
+    const createPromise = (async () => {
+      const userId = await resolveSessionUserId();
+      if (!userId) {
+        throw new Error('Sign in to share this prayer session.');
+      }
+
+      const nextScript = resolvedScriptText.trim();
+      if (!nextScript) {
+        throw new Error('Please wait for the prayer script to finish loading before sharing.');
+      }
+
+      const reusableSession = await findReusableSharedSoloSession({
+        durationMinutes: selectedMinutes,
+        hostUserId: userId,
+        intention: activePrayerTitle,
+        ...(prayerLibraryItemId ? { prayerLibraryItemId } : {}),
+        scriptText: nextScript,
+        voiceId: activeVoiceId,
+      });
+
+      if (reusableSession) {
+        await joinSharedSoloSession({
+          sessionId: reusableSession.id,
+          userId,
+        });
+
+        setActiveSharedSessionId(reusableSession.id);
+        setSharedSession(reusableSession);
+        setSharedParticipants([
+          {
+            isActive: true,
+            joinedAt: new Date().toISOString(),
+            lastSeenAt: new Date().toISOString(),
+            role: 'host',
+            sessionId: reusableSession.id,
+            userId,
+          },
+        ]);
+        sharedJoinedCountRef.current = Math.max(sharedJoinedCountRef.current, 1);
+        sharedPresenceJoinedRef.current = true;
+        sharedPresenceLeftRef.current = false;
+        sharedStartedAtRef.current = reusableSession.startedAt;
+        void refreshSharedSnapshot(reusableSession.id).catch(() => {
+          // Shared snapshot refresh is best-effort.
+        });
+        return reusableSession.id;
+      }
+
+      const nextSession = await createSharedSoloSession({
+        durationMinutes: selectedMinutes,
+        hostUserId: userId,
+        intention: activePrayerTitle,
+        ...(prayerLibraryItemId ? { prayerLibraryItemId } : {}),
+        scriptText: nextScript,
+        voiceId: activeVoiceId,
+      });
+
+      setActiveSharedSessionId(nextSession.id);
+      setSharedSession(nextSession);
+      setSharedParticipants([
+        {
+          isActive: true,
+          joinedAt: new Date().toISOString(),
+          lastSeenAt: new Date().toISOString(),
+          role: 'host',
+          sessionId: nextSession.id,
+          userId,
+        },
+      ]);
+      sharedJoinedCountRef.current = 1;
+      sharedPresenceJoinedRef.current = true;
+      sharedPresenceLeftRef.current = false;
+      sharedStartedAtRef.current = nextSession.startedAt;
+
+      return nextSession.id;
+    })();
+
+    pendingSharedSessionPromiseRef.current = createPromise;
+    try {
+      return await createPromise;
+    } finally {
+      pendingSharedSessionPromiseRef.current = null;
+    }
+  }, [
+    activePrayerTitle,
+    activeVoiceId,
+    refreshSharedSnapshot,
+    prayerLibraryItemId,
+    resolveSessionUserId,
+    resolvedScriptText,
+    selectedMinutes,
+    sharedSessionId,
+  ]);
+
+  const resolvePrayerCircleMembers = useCallback(async () => {
+    const cachedMembers = getCachedPrayerCircleMembers();
+    if (cachedMembers) {
+      return cachedMembers;
+    }
+
+    try {
+      return await fetchPrayerCircleMembers();
+    } catch {
+      return [];
+    }
+  }, []);
+
+  const onSelectInviteOption = useCallback(
+    (option: string) => {
+      setIsInviteOpen(false);
+
+      const normalizedOption = option.trim().toLowerCase();
+      void (async () => {
+        try {
+          const inviteSessionId = await ensureSharedSessionForInvite();
+          const inviteContext = {
+            durationMinutes: selectedMinutes,
+            intention: activePrayerTitle,
+            ...(prayerLibraryItemId ? { prayerLibraryItemId } : {}),
+            sharedSessionId: inviteSessionId,
+          };
+
+          if (normalizedOption === 'copy invite link') {
+            await Clipboard.setStringAsync(buildSoloInviteUrl(inviteContext));
+            Alert.alert(
+              'Invite link copied',
+              'The solo prayer invite link is now on your clipboard.',
+            );
+            return;
+          }
+
+          const message =
+            normalizedOption === 'invite your circle'
+              ? buildSoloInviteMessage({
+                  ...inviteContext,
+                  members: await resolvePrayerCircleMembers(),
+                })
+              : buildSoloShareMessage(inviteContext);
+
+          await Share.share({
+            message,
+            title: 'Invite to Solo Prayer',
+          });
+        } catch (nextError) {
+          const detail =
+            nextError instanceof Error
+              ? nextError.message
+              : 'Unable to share the invite right now.';
+          Alert.alert('Invite failed', detail);
+        }
+      })();
+    },
+    [
+      activePrayerTitle,
+      ensureSharedSessionForInvite,
+      prayerLibraryItemId,
+      resolvePrayerCircleMembers,
+      selectedMinutes,
+    ],
+  );
 
   return (
     <Screen
@@ -635,6 +1380,32 @@ export function SoloLiveScreen() {
                 Personal Sanctuary
               </Typography>
             </View>
+            {isSharedSessionActive ? (
+              <View style={styles.sharedSessionRow}>
+                <LiveLogo context={isSharedHost ? 'solo' : 'eventRoom'} size={12} />
+                <Typography
+                  allowFontScaling={false}
+                  color={colors.textSecondary}
+                  style={styles.sharedSessionText}
+                  variant="Caption"
+                  weight="bold"
+                >
+                  {isSharedHost
+                    ? `Shared prayer • ${sharedJoinedCount} joined`
+                    : `Shared with host • ${sharedJoinedCount} joined`}
+                </Typography>
+              </View>
+            ) : null}
+            {sharedJoinNotice ? (
+              <Typography
+                allowFontScaling={false}
+                color={colors.textSecondary}
+                style={styles.sharedJoinNotice}
+                variant="Caption"
+              >
+                {sharedJoinNotice}
+              </Typography>
+            ) : null}
           </View>
 
           <View
@@ -826,10 +1597,10 @@ export function SoloLiveScreen() {
             accessibilityRole="button"
             accessibilityState={{
               busy: loadingAudio,
-              disabled: loadingAudio || !resolvedScriptText.trim(),
+              disabled: loadingAudio || !resolvedScriptText.trim() || isSharedParticipant,
               selected: isRunning,
             }}
-            disabled={loadingAudio || !resolvedScriptText.trim()}
+            disabled={loadingAudio || !resolvedScriptText.trim() || isSharedParticipant}
             onPress={() => {
               void onTogglePlayback();
             }}
@@ -943,9 +1714,16 @@ export function SoloLiveScreen() {
             isRunning={isRunning}
             leftLabel={elapsedLabel}
             onReset={() => {
+              if (isSharedParticipant) {
+                Alert.alert(
+                  'Shared prayer sync',
+                  'Reset is controlled by the host while this shared prayer is active.',
+                );
+                return;
+              }
               void stop();
             }}
-            onSelectInviteOption={() => setIsInviteOpen(false)}
+            onSelectInviteOption={onSelectInviteOption}
             onToggleInvite={() => setIsInviteOpen((current) => !current)}
             onToggleMute={() => setMuted((current) => !current)}
             progress={progress}
@@ -1446,6 +2224,21 @@ const styles = StyleSheet.create({
   selectorRowVeryCompact: {
     gap: spacing.xxs,
     marginTop: spacing.xxs,
+  },
+  sharedJoinNotice: {
+    letterSpacing: 0.2,
+    marginTop: 2,
+    textAlign: 'center',
+  },
+  sharedSessionRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: spacing.xxs,
+    marginTop: 2,
+  },
+  sharedSessionText: {
+    letterSpacing: 0.3,
+    textTransform: 'none',
   },
   soloSubtitle: {
     letterSpacing: 0.6,

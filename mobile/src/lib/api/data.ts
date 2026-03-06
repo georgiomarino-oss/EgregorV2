@@ -27,6 +27,32 @@ interface EventParticipantRow {
   user_id: string;
 }
 
+interface SharedSoloSessionRow {
+  created_at: string;
+  duration_minutes: number;
+  ended_at: string | null;
+  host_user_id: string;
+  id: string;
+  intention: string;
+  playback_position_ms: number;
+  playback_state: SharedSoloSessionPlaybackState;
+  prayer_library_item_id: string | null;
+  script_text: string;
+  started_at: string | null;
+  status: SharedSoloSessionStatus;
+  updated_at: string;
+  voice_id: string;
+}
+
+interface SharedSoloSessionParticipantRow {
+  is_active: boolean;
+  joined_at: string;
+  last_seen_at: string;
+  role: SharedSoloSessionParticipantRole;
+  session_id: string;
+  user_id: string;
+}
+
 interface PrayerLibraryRow {
   body: string;
   category: string | null;
@@ -223,6 +249,43 @@ export interface EventRoomSnapshot {
   joinedCount: number;
 }
 
+export type SharedSoloSessionPlaybackState = 'idle' | 'playing' | 'paused' | 'ended';
+export type SharedSoloSessionStatus = 'active' | 'ended';
+export type SharedSoloSessionParticipantRole = 'host' | 'participant';
+
+export interface SharedSoloSession {
+  createdAt: string;
+  durationMinutes: number;
+  endedAt: string | null;
+  hostUserId: string;
+  id: string;
+  intention: string;
+  playbackPositionMs: number;
+  playbackState: SharedSoloSessionPlaybackState;
+  prayerLibraryItemId: string | null;
+  scriptText: string;
+  startedAt: string | null;
+  status: SharedSoloSessionStatus;
+  updatedAt: string;
+  voiceId: string;
+}
+
+export interface SharedSoloSessionParticipant {
+  isActive: boolean;
+  joinedAt: string;
+  lastSeenAt: string;
+  role: SharedSoloSessionParticipantRole;
+  sessionId: string;
+  userId: string;
+}
+
+export interface SharedSoloSessionSnapshot {
+  isJoined: boolean;
+  joinedCount: number;
+  participants: SharedSoloSessionParticipant[];
+  session: SharedSoloSession;
+}
+
 export interface ActiveEventUserPresence {
   eventId: string;
   lastSeenAt: string;
@@ -262,6 +325,9 @@ const USER_JOURNAL_ENTRIES_CACHE_TTL_MS = 45_000;
 const USER_PREFERENCES_CACHE_TTL_MS = 2 * 60_000;
 const PROFILE_SUMMARY_CACHE_TTL_MS = 45_000;
 const SOLO_STATS_CACHE_TTL_MS = 45_000;
+const SHARED_SOLO_ACTIVE_WINDOW_MS = 90_000;
+const SHARED_SOLO_SESSION_SELECT_FIELDS =
+  'id,host_user_id,intention,prayer_library_item_id,script_text,voice_id,duration_minutes,playback_state,playback_position_ms,status,started_at,ended_at,created_at,updated_at';
 
 let prayerLibraryCache: {
   cachedAt: number;
@@ -720,6 +786,38 @@ function mapEventRow(row: EventRow, participants: number): AppEvent {
     subtitle: row.subtitle,
     title: row.title,
     visibility: row.visibility,
+  };
+}
+
+function mapSharedSoloSessionRow(row: SharedSoloSessionRow): SharedSoloSession {
+  return {
+    createdAt: row.created_at,
+    durationMinutes: row.duration_minutes,
+    endedAt: row.ended_at,
+    hostUserId: row.host_user_id,
+    id: row.id,
+    intention: row.intention,
+    playbackPositionMs: row.playback_position_ms ?? 0,
+    playbackState: row.playback_state,
+    prayerLibraryItemId: row.prayer_library_item_id,
+    scriptText: row.script_text,
+    startedAt: row.started_at,
+    status: row.status,
+    updatedAt: row.updated_at,
+    voiceId: row.voice_id,
+  };
+}
+
+function mapSharedSoloParticipantRow(
+  row: SharedSoloSessionParticipantRow,
+): SharedSoloSessionParticipant {
+  return {
+    isActive: Boolean(row.is_active),
+    joinedAt: row.joined_at,
+    lastSeenAt: row.last_seen_at,
+    role: row.role,
+    sessionId: row.session_id,
+    userId: row.user_id,
   };
 }
 
@@ -2311,4 +2409,384 @@ export async function refreshEventPresence(eventId: string, userId: string) {
   if (eventId.trim()) {
     eventByIdCache.delete(eventId.trim());
   }
+}
+
+export async function createSharedSoloSession(input: {
+  durationMinutes: number;
+  hostUserId: string;
+  intention: string;
+  prayerLibraryItemId?: string;
+  scriptText: string;
+  voiceId: string;
+}): Promise<SharedSoloSession> {
+  const hostUserId = input.hostUserId.trim();
+  const scriptText = input.scriptText.trim();
+  const intention = input.intention.trim() || 'Shared prayer';
+  const voiceId = input.voiceId.trim();
+  const durationMinutes = Math.max(1, Math.round(input.durationMinutes));
+  const prayerLibraryItemId = input.prayerLibraryItemId?.trim() || null;
+
+  if (!hostUserId) {
+    throw new Error('Cannot create a shared session without a host user.');
+  }
+  if (!scriptText) {
+    throw new Error('Cannot create a shared session without a script.');
+  }
+  if (!voiceId) {
+    throw new Error('Cannot create a shared session without a voice.');
+  }
+
+  const nowIso = new Date().toISOString();
+  const { data, error } = await supabase
+    .from('shared_solo_sessions')
+    .insert({
+      duration_minutes: durationMinutes,
+      host_user_id: hostUserId,
+      intention,
+      playback_position_ms: 0,
+      playback_state: 'idle',
+      ...(prayerLibraryItemId ? { prayer_library_item_id: prayerLibraryItemId } : {}),
+      script_text: scriptText,
+      status: 'active',
+      voice_id: voiceId,
+    })
+    .select(SHARED_SOLO_SESSION_SELECT_FIELDS)
+    .single();
+
+  if (error) {
+    throw new Error(toSupabaseErrorMessage(error, 'Failed to create shared solo session.'));
+  }
+
+  const row = data as SharedSoloSessionRow;
+
+  const { error: participantError } = await supabase
+    .from('shared_solo_session_participants')
+    .upsert(
+      {
+        is_active: true,
+        joined_at: nowIso,
+        last_seen_at: nowIso,
+        role: 'host',
+        session_id: row.id,
+        user_id: hostUserId,
+      },
+      {
+        onConflict: 'session_id,user_id',
+      },
+    );
+
+  if (participantError) {
+    throw new Error(
+      toSupabaseErrorMessage(
+        participantError,
+        'Failed to initialize shared solo session participants.',
+      ),
+    );
+  }
+
+  return mapSharedSoloSessionRow(row);
+}
+
+export async function findReusableSharedSoloSession(input: {
+  durationMinutes: number;
+  hostUserId: string;
+  intention: string;
+  prayerLibraryItemId?: string;
+  scriptText: string;
+  voiceId: string;
+}): Promise<SharedSoloSession | null> {
+  const hostUserId = input.hostUserId.trim();
+  const scriptText = input.scriptText.trim();
+  const intention = input.intention.trim() || 'Shared prayer';
+  const voiceId = input.voiceId.trim();
+  const durationMinutes = Math.max(1, Math.round(input.durationMinutes));
+  const prayerLibraryItemId = input.prayerLibraryItemId?.trim() || null;
+
+  if (!hostUserId || !scriptText || !voiceId) {
+    return null;
+  }
+
+  let query = supabase
+    .from('shared_solo_sessions')
+    .select(SHARED_SOLO_SESSION_SELECT_FIELDS)
+    .eq('host_user_id', hostUserId)
+    .eq('status', 'active')
+    .eq('duration_minutes', durationMinutes)
+    .eq('voice_id', voiceId)
+    .eq('intention', intention)
+    .eq('script_text', scriptText)
+    .order('updated_at', { ascending: false })
+    .limit(1);
+
+  query = prayerLibraryItemId
+    ? query.eq('prayer_library_item_id', prayerLibraryItemId)
+    : query.is('prayer_library_item_id', null);
+
+  const { data, error } = await query.maybeSingle();
+  if (error) {
+    throw new Error(
+      toSupabaseErrorMessage(error, 'Failed to check existing shared solo sessions.'),
+    );
+  }
+
+  if (!data) {
+    return null;
+  }
+
+  return mapSharedSoloSessionRow(data as SharedSoloSessionRow);
+}
+
+export async function fetchSharedSoloSessionSnapshot(
+  sessionId: string,
+  userId: string,
+): Promise<SharedSoloSessionSnapshot> {
+  const normalizedSessionId = sessionId.trim();
+  const normalizedUserId = userId.trim();
+  if (!normalizedSessionId) {
+    throw new Error('Shared solo session id is required.');
+  }
+
+  const [sessionResponse, participantsResponse] = await Promise.all([
+    supabase
+      .from('shared_solo_sessions')
+      .select(SHARED_SOLO_SESSION_SELECT_FIELDS)
+      .eq('id', normalizedSessionId)
+      .maybeSingle(),
+    supabase
+      .from('shared_solo_session_participants')
+      .select('session_id,user_id,role,is_active,joined_at,last_seen_at')
+      .eq('session_id', normalizedSessionId)
+      .eq('is_active', true)
+      .gte('last_seen_at', new Date(Date.now() - SHARED_SOLO_ACTIVE_WINDOW_MS).toISOString()),
+  ]);
+
+  if (sessionResponse.error) {
+    throw new Error(
+      toSupabaseErrorMessage(sessionResponse.error, 'Failed to load shared solo session.'),
+    );
+  }
+
+  if (!sessionResponse.data) {
+    throw new Error('Shared solo session not found.');
+  }
+
+  if (participantsResponse.error) {
+    throw new Error(
+      toSupabaseErrorMessage(
+        participantsResponse.error,
+        'Failed to load shared solo session participants.',
+      ),
+    );
+  }
+
+  const participants = (participantsResponse.data ?? [])
+    .map((row) => mapSharedSoloParticipantRow(row as SharedSoloSessionParticipantRow))
+    .sort((left, right) => {
+      if (left.role === right.role) {
+        return left.joinedAt.localeCompare(right.joinedAt);
+      }
+
+      return left.role === 'host' ? -1 : 1;
+    });
+
+  return {
+    isJoined: participants.some((participant) => participant.userId === normalizedUserId),
+    joinedCount: participants.length,
+    participants,
+    session: mapSharedSoloSessionRow(sessionResponse.data as SharedSoloSessionRow),
+  };
+}
+
+export async function joinSharedSoloSession(input: { sessionId: string; userId: string }) {
+  const normalizedSessionId = input.sessionId.trim();
+  const normalizedUserId = input.userId.trim();
+
+  if (!normalizedSessionId || !normalizedUserId) {
+    return;
+  }
+
+  const nowIso = new Date().toISOString();
+  const { error } = await supabase.from('shared_solo_session_participants').upsert(
+    {
+      is_active: true,
+      last_seen_at: nowIso,
+      session_id: normalizedSessionId,
+      user_id: normalizedUserId,
+    },
+    {
+      onConflict: 'session_id,user_id',
+    },
+  );
+
+  if (error) {
+    throw new Error(toSupabaseErrorMessage(error, 'Failed to join shared solo session.'));
+  }
+}
+
+export async function leaveSharedSoloSession(sessionId: string, userId: string) {
+  const normalizedSessionId = sessionId.trim();
+  const normalizedUserId = userId.trim();
+  if (!normalizedSessionId || !normalizedUserId) {
+    return;
+  }
+
+  const { error } = await supabase
+    .from('shared_solo_session_participants')
+    .update({
+      is_active: false,
+      last_seen_at: new Date().toISOString(),
+    })
+    .eq('session_id', normalizedSessionId)
+    .eq('user_id', normalizedUserId);
+
+  if (error) {
+    throw new Error(toSupabaseErrorMessage(error, 'Failed to leave shared solo session.'));
+  }
+}
+
+export async function refreshSharedSoloSessionPresence(sessionId: string, userId: string) {
+  const normalizedSessionId = sessionId.trim();
+  const normalizedUserId = userId.trim();
+  if (!normalizedSessionId || !normalizedUserId) {
+    return;
+  }
+
+  const { error } = await supabase
+    .from('shared_solo_session_participants')
+    .update({
+      is_active: true,
+      last_seen_at: new Date().toISOString(),
+    })
+    .eq('session_id', normalizedSessionId)
+    .eq('user_id', normalizedUserId)
+    .eq('is_active', true);
+
+  if (error) {
+    throw new Error(toSupabaseErrorMessage(error, 'Failed to refresh shared session presence.'));
+  }
+}
+
+export async function updateSharedSoloSessionHostState(input: {
+  endedAt?: string | null;
+  hostUserId: string;
+  playbackPositionMs: number;
+  playbackState: SharedSoloSessionPlaybackState;
+  sessionId: string;
+  startedAt?: string | null;
+  status?: SharedSoloSessionStatus;
+}) {
+  const normalizedSessionId = input.sessionId.trim();
+  const normalizedHostUserId = input.hostUserId.trim();
+  if (!normalizedSessionId || !normalizedHostUserId) {
+    return;
+  }
+
+  const payload: {
+    ended_at?: string | null;
+    playback_position_ms: number;
+    playback_state: SharedSoloSessionPlaybackState;
+    started_at?: string | null;
+    status?: SharedSoloSessionStatus;
+  } = {
+    playback_position_ms: Math.max(0, Math.round(input.playbackPositionMs)),
+    playback_state: input.playbackState,
+  };
+
+  if (input.startedAt !== undefined) {
+    payload.started_at = input.startedAt;
+  }
+  if (input.endedAt !== undefined) {
+    payload.ended_at = input.endedAt;
+  }
+  if (input.status) {
+    payload.status = input.status;
+  }
+
+  const { error } = await supabase
+    .from('shared_solo_sessions')
+    .update(payload)
+    .eq('id', normalizedSessionId)
+    .eq('host_user_id', normalizedHostUserId);
+
+  if (error) {
+    throw new Error(toSupabaseErrorMessage(error, 'Failed to sync shared solo session state.'));
+  }
+}
+
+export async function endSharedSoloSession(sessionId: string, hostUserId: string) {
+  const normalizedSessionId = sessionId.trim();
+  const normalizedHostUserId = hostUserId.trim();
+  if (!normalizedSessionId || !normalizedHostUserId) {
+    return;
+  }
+
+  const nowIso = new Date().toISOString();
+  await updateSharedSoloSessionHostState({
+    endedAt: nowIso,
+    hostUserId: normalizedHostUserId,
+    playbackPositionMs: 0,
+    playbackState: 'ended',
+    sessionId: normalizedSessionId,
+    status: 'ended',
+  });
+
+  const { error } = await supabase
+    .from('shared_solo_session_participants')
+    .update({
+      is_active: false,
+      last_seen_at: nowIso,
+    })
+    .eq('session_id', normalizedSessionId)
+    .eq('is_active', true);
+
+  if (error) {
+    throw new Error(
+      toSupabaseErrorMessage(error, 'Failed to clean up shared solo session participants.'),
+    );
+  }
+}
+
+export function subscribeSharedSoloSession(input: {
+  onParticipantsChange?: () => void;
+  onSessionChange?: () => void;
+  sessionId: string;
+}) {
+  const normalizedSessionId = input.sessionId.trim();
+  if (!normalizedSessionId) {
+    return () => {
+      // No session to unsubscribe from.
+    };
+  }
+
+  const channel = supabase
+    .channel(`shared-solo-session-${normalizedSessionId}-${Date.now()}`)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        filter: `id=eq.${normalizedSessionId}`,
+        schema: 'public',
+        table: 'shared_solo_sessions',
+      },
+      () => {
+        input.onSessionChange?.();
+      },
+    )
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        filter: `session_id=eq.${normalizedSessionId}`,
+        schema: 'public',
+        table: 'shared_solo_session_participants',
+      },
+      () => {
+        input.onParticipantsChange?.();
+      },
+    )
+    .subscribe();
+
+  return () => {
+    void supabase.removeChannel(channel);
+  };
 }

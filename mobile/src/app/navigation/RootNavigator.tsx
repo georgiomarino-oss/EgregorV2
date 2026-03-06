@@ -38,16 +38,18 @@ const sharedStackOptions = {
 
 interface SoloStackNavigatorProps {
   initialRouteName?: keyof SoloStackParamList;
+  soloLiveInitialParams?: SoloStackParamList['SoloLive'];
 }
 
-function SoloStackNavigator({ initialRouteName }: SoloStackNavigatorProps) {
+function SoloStackNavigator({ initialRouteName, soloLiveInitialParams }: SoloStackNavigatorProps) {
   const navigatorProps = initialRouteName ? { initialRouteName } : {};
+  const soloLiveProps = soloLiveInitialParams ? { initialParams: soloLiveInitialParams } : {};
   return (
     <SoloStack.Navigator {...navigatorProps} screenOptions={sharedStackOptions}>
       <SoloStack.Screen name="SoloHome" component={SoloScreen} />
       <SoloStack.Screen name="PrayerLibrary" component={PrayerLibraryScreen} />
       <SoloStack.Screen name="SoloSetup" component={SoloSetupScreen} />
-      <SoloStack.Screen name="SoloLive" component={SoloLiveScreen} />
+      <SoloStack.Screen name="SoloLive" component={SoloLiveScreen} {...soloLiveProps} />
     </SoloStack.Navigator>
   );
 }
@@ -68,16 +70,21 @@ function CommunityStackNavigator({ initialRouteName }: CommunityStackNavigatorPr
 }
 
 interface EventsStackNavigatorProps {
+  eventRoomInitialParams?: EventsStackParamList['EventRoom'];
   initialRouteName?: keyof EventsStackParamList;
 }
 
-function EventsStackNavigator({ initialRouteName }: EventsStackNavigatorProps) {
+function EventsStackNavigator({
+  eventRoomInitialParams,
+  initialRouteName,
+}: EventsStackNavigatorProps) {
   const navigatorProps = initialRouteName ? { initialRouteName } : {};
+  const eventRoomProps = eventRoomInitialParams ? { initialParams: eventRoomInitialParams } : {};
   return (
     <EventsStack.Navigator {...navigatorProps} screenOptions={sharedStackOptions}>
       <EventsStack.Screen name="EventsHome" component={EventsScreen} />
       <EventsStack.Screen name="EventDetails" component={EventDetailsScreen} />
-      <EventsStack.Screen name="EventRoom" component={EventRoomScreen} />
+      <EventsStack.Screen name="EventRoom" component={EventRoomScreen} {...eventRoomProps} />
     </EventsStack.Navigator>
   );
 }
@@ -110,24 +117,17 @@ function MainTabs({ captureTarget }: MainTabsProps) {
       }}
       tabBar={(props) => <BottomTabs {...props} />}
     >
-      <Tab.Screen
-        name="CommunityTab"
-        children={() => (
+      <Tab.Screen name="CommunityTab" options={{ title: 'Community' }}>
+        {() => (
           <CommunityStackNavigator
             {...(captureTarget?.communityRoute
               ? { initialRouteName: captureTarget.communityRoute }
               : {})}
           />
         )}
-        options={{ title: 'Community' }}
-      />
+      </Tab.Screen>
       <Tab.Screen
         name="SoloTab"
-        children={() => (
-          <SoloStackNavigator
-            {...(captureTarget?.soloRoute ? { initialRouteName: captureTarget.soloRoute } : {})}
-          />
-        )}
         options={({ route }) => {
           const nestedRouteName = getFocusedRouteNameFromRoute(route) ?? 'SoloHome';
           const hideTabBar = nestedRouteName === 'SoloLive';
@@ -137,16 +137,18 @@ function MainTabs({ captureTarget }: MainTabsProps) {
             ...(hideTabBar ? { tabBarStyle: { display: 'none' } } : {}),
           };
         }}
-      />
-      <Tab.Screen
-        name="EventsTab"
-        children={() => (
-          <EventsStackNavigator
-            {...(captureTarget?.eventsRoute
-              ? { initialRouteName: captureTarget.eventsRoute }
+      >
+        {() => (
+          <SoloStackNavigator
+            {...(captureTarget?.soloRoute ? { initialRouteName: captureTarget.soloRoute } : {})}
+            {...(captureTarget?.soloParams
+              ? { soloLiveInitialParams: captureTarget.soloParams }
               : {})}
           />
         )}
+      </Tab.Screen>
+      <Tab.Screen
+        name="EventsTab"
         options={({ route }) => {
           const nestedRouteName = getFocusedRouteNameFromRoute(route) ?? 'EventsHome';
           const hideTabBar = nestedRouteName === 'EventRoom';
@@ -156,18 +158,25 @@ function MainTabs({ captureTarget }: MainTabsProps) {
             ...(hideTabBar ? { tabBarStyle: { display: 'none' } } : {}),
           };
         }}
-      />
-      <Tab.Screen
-        name="ProfileTab"
-        children={() => (
+      >
+        {() => (
+          <EventsStackNavigator
+            {...(captureTarget?.eventsRoute ? { initialRouteName: captureTarget.eventsRoute } : {})}
+            {...(captureTarget?.eventRoomParams
+              ? { eventRoomInitialParams: captureTarget.eventRoomParams }
+              : {})}
+          />
+        )}
+      </Tab.Screen>
+      <Tab.Screen name="ProfileTab" options={{ title: 'Profile' }}>
+        {() => (
           <ProfileStackNavigator
             {...(captureTarget?.profileRoute
               ? { initialRouteName: captureTarget.profileRoute }
               : {})}
           />
         )}
-        options={{ title: 'Profile' }}
-      />
+      </Tab.Screen>
     </Tab.Navigator>
   );
 }

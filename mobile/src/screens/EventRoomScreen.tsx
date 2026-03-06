@@ -1,8 +1,18 @@
 import ambientAnimation from '../../assets/lottie/cosmic-ambient.json';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Easing, Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
+import {
+  Alert,
+  Animated,
+  Easing,
+  Pressable,
+  Share,
+  StyleSheet,
+  View,
+  useWindowDimensions,
+} from 'react-native';
 
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import * as Clipboard from 'expo-clipboard';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -15,7 +25,9 @@ import { Typography } from '../components/Typography';
 import {
   fetchEventById,
   fetchEventLibraryItemById,
+  fetchEventsCircleMembers,
   fetchEventRoomSnapshot,
+  getCachedEventsCircleMembers,
   getCachedEventById,
   getCachedEventLibraryItemById,
   joinEventRoom,
@@ -23,6 +35,11 @@ import {
   refreshEventPresence,
 } from '../lib/api/data';
 import { prefetchPrayerAudio } from '../lib/api/functions';
+import {
+  buildEventInviteMessage,
+  buildEventInviteUrl,
+  buildEventShareMessage,
+} from '../lib/invite';
 import { supabase } from '../lib/supabase';
 import { sectionGap } from '../theme/layout';
 import { colors, motion, radii, roomAtmosphere, spacing } from '../theme/tokens';
@@ -125,6 +142,8 @@ export function EventRoomScreen() {
   const hasInitialEventData = Boolean(initialEventScript || cachedTemplate || cachedEvent);
   const allowAudioGeneration = route.params?.allowAudioGeneration === true;
   const eventId = route.params?.eventId?.trim() || '';
+  const routeEventTemplateId = route.params?.eventTemplateId?.trim() || '';
+  const routeOccurrenceKey = route.params?.occurrenceKey?.trim() || '';
 
   const [selectedVoice, setSelectedVoice] = useState<(typeof VOICE_OPTIONS)[number]>('Dominic');
   const [isVoiceMenuOpen, setIsVoiceMenuOpen] = useState(false);
@@ -772,6 +791,76 @@ export function EventRoomScreen() {
         ],
       };
 
+  const resolveEventsCircleMembers = useCallback(async () => {
+    const cachedMembers = getCachedEventsCircleMembers();
+    if (cachedMembers) {
+      return cachedMembers;
+    }
+
+    try {
+      return await fetchEventsCircleMembers();
+    } catch {
+      return [];
+    }
+  }, []);
+
+  const onSelectInviteOption = useCallback(
+    (option: string) => {
+      setIsInviteOpen(false);
+
+      const normalizedOption = option.trim().toLowerCase();
+      void (async () => {
+        try {
+          const inviteContext = {
+            durationMinutes: eventDurationMinutes,
+            eventTitle,
+            scheduledStartAt: eventStartAt,
+            ...(eventId ? { eventId } : {}),
+            ...(routeEventTemplateId ? { eventTemplateId: routeEventTemplateId } : {}),
+            ...(routeOccurrenceKey ? { occurrenceKey: routeOccurrenceKey } : {}),
+          };
+
+          if (normalizedOption === 'copy invite link') {
+            await Clipboard.setStringAsync(buildEventInviteUrl(inviteContext));
+            Alert.alert(
+              'Invite link copied',
+              'The event room invite link is now on your clipboard.',
+            );
+            return;
+          }
+
+          const message =
+            normalizedOption === 'invite your circle'
+              ? buildEventInviteMessage({
+                  ...inviteContext,
+                  members: await resolveEventsCircleMembers(),
+                })
+              : buildEventShareMessage(inviteContext);
+
+          await Share.share({
+            message,
+            title: 'Invite to Live Event',
+          });
+        } catch (nextError) {
+          const detail =
+            nextError instanceof Error
+              ? nextError.message
+              : 'Unable to share the invite right now.';
+          Alert.alert('Invite failed', detail);
+        }
+      })();
+    },
+    [
+      eventDurationMinutes,
+      eventId,
+      eventStartAt,
+      eventTitle,
+      resolveEventsCircleMembers,
+      routeEventTemplateId,
+      routeOccurrenceKey,
+    ],
+  );
+
   return (
     <Screen
       ambientSource={ambientAnimation}
@@ -1158,7 +1247,7 @@ export function EventRoomScreen() {
             onReset={() => {
               void stop();
             }}
-            onSelectInviteOption={() => setIsInviteOpen(false)}
+            onSelectInviteOption={onSelectInviteOption}
             onToggleInvite={() => setIsInviteOpen((current) => !current)}
             onToggleMute={() => setMuted((current) => !current)}
             progress={progress}

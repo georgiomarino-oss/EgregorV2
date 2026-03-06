@@ -1,11 +1,12 @@
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, AppState, StyleSheet, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, AppState, Linking, StyleSheet, View } from 'react-native';
 
 import type { Session } from '@supabase/supabase-js';
 
 import { Typography } from '../../components/Typography';
 import { prefetchCoreAppData, updateAppUserPresence } from '../../lib/api/data';
 import { prefetchEventAndPrayerAudioArtifacts } from '../../lib/artifactPrefetch';
+import { parseInviteCaptureTarget } from '../../lib/invite';
 import { supabase } from '../../lib/supabase';
 import { colors } from '../../theme/tokens';
 import { RootNavigator } from './RootNavigator';
@@ -18,8 +19,59 @@ interface AuthGateProps {
 export function AuthGate({ captureTarget }: AuthGateProps) {
   const [session, setSession] = useState<Session | null>(null);
   const [initializing, setInitializing] = useState(true);
+  const [pendingInviteTarget, setPendingInviteTarget] = useState<CaptureNavigationTarget | null>(
+    null,
+  );
+  const isAuthenticatedRef = useRef(false);
   const forcedAuthState =
     captureTarget?.root === 'auth' ? false : captureTarget?.root === 'main' ? true : null;
+
+  useEffect(() => {
+    isAuthenticatedRef.current = Boolean(session);
+  }, [session]);
+
+  useEffect(() => {
+    if (captureTarget || forcedAuthState !== null) {
+      return;
+    }
+
+    let active = true;
+    const bufferInviteTarget = (urlValue: string | null | undefined) => {
+      if (!urlValue) {
+        return;
+      }
+
+      const parsedTarget = parseInviteCaptureTarget(urlValue);
+      if (!parsedTarget) {
+        return;
+      }
+
+      setPendingInviteTarget((current) => current ?? parsedTarget);
+    };
+
+    void Linking.getInitialURL()
+      .then((urlValue) => {
+        if (!active || isAuthenticatedRef.current) {
+          return;
+        }
+        bufferInviteTarget(urlValue);
+      })
+      .catch(() => {
+        // Non-blocking invite detection.
+      });
+
+    const subscription = Linking.addEventListener('url', ({ url }) => {
+      if (isAuthenticatedRef.current) {
+        return;
+      }
+      bufferInviteTarget(url);
+    });
+
+    return () => {
+      active = false;
+      subscription.remove();
+    };
+  }, [captureTarget, forcedAuthState]);
 
   useEffect(() => {
     if (forcedAuthState !== null) {
@@ -109,6 +161,23 @@ export function AuthGate({ captureTarget }: AuthGateProps) {
     prefetchEventAndPrayerAudioArtifacts(session.user.id);
   }, [forcedAuthState, session?.user?.id]);
 
+  const runtimeCaptureTarget =
+    captureTarget ?? (session ? (pendingInviteTarget ?? undefined) : undefined);
+
+  useEffect(() => {
+    if (!session || !pendingInviteTarget) {
+      return;
+    }
+
+    const cleanupTimer = setTimeout(() => {
+      setPendingInviteTarget(null);
+    }, 0);
+
+    return () => {
+      clearTimeout(cleanupTimer);
+    };
+  }, [pendingInviteTarget, session]);
+
   if (forcedAuthState !== null) {
     return (
       <RootNavigator
@@ -129,7 +198,7 @@ export function AuthGate({ captureTarget }: AuthGateProps) {
 
   return (
     <RootNavigator
-      {...(captureTarget ? { captureTarget } : {})}
+      {...(runtimeCaptureTarget ? { captureTarget: runtimeCaptureTarget } : {})}
       isAuthenticated={Boolean(session)}
     />
   );

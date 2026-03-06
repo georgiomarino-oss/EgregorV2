@@ -19,6 +19,7 @@ export type SoloStackParamList = {
         durationMinutes?: number;
         intention?: string;
         prayerLibraryItemId?: string;
+        sharedSessionId?: string;
         scriptPreset?: string;
       }
     | undefined;
@@ -63,9 +64,11 @@ export type ProfileStackParamList = {
 
 export interface CaptureNavigationTarget {
   communityRoute?: keyof CommunityStackParamList;
+  eventRoomParams?: EventsStackParamList['EventRoom'];
   eventsRoute?: keyof EventsStackParamList;
   root?: 'auth' | 'main';
   profileRoute?: keyof ProfileStackParamList;
+  soloParams?: SoloStackParamList['SoloLive'];
   soloRoute?: keyof SoloStackParamList;
   tab?: keyof MainTabParamList;
 }
