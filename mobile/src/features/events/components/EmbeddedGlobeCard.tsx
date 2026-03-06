@@ -1028,7 +1028,7 @@ export function EmbeddedGlobeCard({
           <View style={styles.globeHeroHeader}>
             <View style={styles.globeHeroTitleWrap}>
               <View style={styles.globeLiveBadge}>
-                <LiveLogo size={20} />
+                <LiveLogo context="events" size={20} />
                 <Typography
                   allowFontScaling={false}
                   color={eventsSurface.hero.accent}

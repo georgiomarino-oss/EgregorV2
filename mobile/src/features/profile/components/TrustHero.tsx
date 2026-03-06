@@ -3,6 +3,7 @@ import { Animated, Easing, StyleSheet, View } from 'react-native';
 
 import { LinearGradient } from 'expo-linear-gradient';
 
+import { LiveLogo } from '../../../components/LiveLogo';
 import { LoadingStateCard } from '../../../components/LoadingStateCard';
 import { Typography } from '../../../components/Typography';
 import { motion, profileSurface, radii, spacing } from '../../../theme/tokens';
@@ -82,6 +83,7 @@ export function TrustHero({
         <View pointerEvents="none" style={styles.glow} />
 
         <View style={styles.badge}>
+          <LiveLogo context="profile" size={14} />
           <Typography
             allowFontScaling={false}
             color={profileSurface.hero.badgeText}
@@ -194,11 +196,14 @@ const styles = StyleSheet.create({
     paddingTop: spacing.xs,
   },
   badge: {
+    alignItems: 'center',
     alignSelf: 'flex-start',
     backgroundColor: profileSurface.hero.badgeBackground,
     borderColor: profileSurface.hero.badgeBorder,
     borderRadius: radii.pill,
     borderWidth: 1,
+    flexDirection: 'row',
+    gap: spacing.xxs,
     paddingHorizontal: spacing.xs,
     paddingVertical: 3,
   },

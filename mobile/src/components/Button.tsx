@@ -152,6 +152,7 @@ const styles = StyleSheet.create({
   },
   goldBorder: {
     borderColor: figmaV2Reference.buttons.gold.border,
+    borderWidth: 0.8,
   },
   gradient: {
     alignItems: 'center',
@@ -181,10 +182,11 @@ const styles = StyleSheet.create({
   },
   secondaryBorder: {
     borderColor: figmaV2Reference.buttons.secondary.border,
-    borderWidth: 1,
+    borderWidth: 0.8,
   },
   skyBorder: {
     borderColor: figmaV2Reference.buttons.sky.border,
+    borderWidth: 0.8,
   },
   stateOverlay: {
     ...StyleSheet.absoluteFillObject,

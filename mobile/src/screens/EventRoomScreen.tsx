@@ -1,13 +1,11 @@
 import ambientAnimation from '../../assets/lottie/cosmic-ambient.json';
-import globeFallbackAnimation from '../../assets/lottie/globe-fallback.json';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Easing, Pressable, StyleSheet, View } from 'react-native';
+import { Animated, Easing, Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
 
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import LottieView from 'lottie-react-native';
 
 import type { EventsStackParamList } from '../app/navigation/types';
 import { InlineErrorCard } from '../components/InlineErrorCard';
@@ -17,8 +15,8 @@ import { SurfaceCard } from '../components/SurfaceCard';
 import { Typography } from '../components/Typography';
 import {
   fetchEventById,
-  fetchEventRoomSnapshot,
   fetchEventLibraryItemById,
+  fetchEventRoomSnapshot,
   getCachedEventById,
   getCachedEventLibraryItemById,
   joinEventRoom,
@@ -27,7 +25,6 @@ import {
 } from '../lib/api/data';
 import { prefetchPrayerAudio } from '../lib/api/functions';
 import { supabase } from '../lib/supabase';
-import { figmaV2Reference } from '../theme/figma-v2-reference';
 import { sectionGap } from '../theme/layout';
 import { colors, motion, radii, roomAtmosphere, spacing } from '../theme/tokens';
 import { RoomScriptPanel } from '../features/room-player/components/RoomScriptPanel';
@@ -80,6 +77,7 @@ function buildFallbackEventScript(description?: string | null, hostNote?: string
 export function EventRoomScreen() {
   const navigation = useNavigation<EventNavigation>();
   const route = useRoute<EventRoomRoute>();
+  const { height: viewportHeight, width: viewportWidth } = useWindowDimensions();
   const routeScript = route.params?.scriptText?.trim() || '';
   const cachedTemplate =
     !routeScript && route.params?.eventTemplateId
@@ -127,7 +125,6 @@ export function EventRoomScreen() {
 
   const [nowTick, setNowTick] = useState(() => Date.now());
 
-  const playPulseRef = useRef<LottieView>(null);
   const hasInitialEventDataRef = useRef(hasInitialEventData);
   const autoStartTriggeredRef = useRef(false);
   const eventPresenceUserIdRef = useRef<string | null>(null);
@@ -196,6 +193,11 @@ export function EventRoomScreen() {
   const elapsedLabel = formatClock(activeElapsedMillis / 1000);
   const remainingLabel = formatClock(remainingEventMillis / 1000);
   const startCountdownLabel = formatClock(remainingUntilStartMillis / 1000);
+  const isVeryCompactHeight = viewportHeight <= 700;
+  const isCompactHeight = viewportHeight <= 780;
+  const isNarrowWidth = viewportWidth <= 360;
+  const useCompactLayout = isCompactHeight || isNarrowWidth;
+  const showCenterStatusHint = !useCompactLayout;
 
   const closeAllSelectors = useCallback(() => {
     setIsVoiceMenuOpen(false);
@@ -474,19 +476,6 @@ export function EventRoomScreen() {
   }, [activeAudioKey, eventStartAt]);
 
   useEffect(() => {
-    if (!playPulseRef.current) {
-      return;
-    }
-
-    if (isRunning) {
-      playPulseRef.current.play();
-      return;
-    }
-
-    playPulseRef.current.reset();
-  }, [isRunning]);
-
-  useEffect(() => {
     if (reduceMotionEnabled) {
       headerIntro.setValue(1);
       metaIntro.setValue(1);
@@ -751,6 +740,23 @@ export function EventRoomScreen() {
         ],
       };
 
+  const centerOrbStyle = reduceMotionEnabled
+    ? styles.noMotion
+    : {
+        opacity: scriptFocus.interpolate({
+          inputRange: [0, 1],
+          outputRange: [0.92, 1],
+        }),
+        transform: [
+          {
+            scale: scriptFocus.interpolate({
+              inputRange: [0, 1],
+              outputRange: [1, 1 + motion.amplitude.pronounced],
+            }),
+          },
+        ],
+      };
+
   return (
     <Screen
       ambientSource={ambientAnimation}
@@ -763,12 +769,28 @@ export function EventRoomScreen() {
         accessible={false}
         importantForAccessibility="no-hide-descendants"
         onPress={closeAllSelectors}
-        style={styles.container}
+        style={[
+          styles.container,
+          useCompactLayout && styles.containerCompact,
+          isVeryCompactHeight && styles.containerVeryCompact,
+        ]}
       >
         <CollectiveEnergyField energyLevel={collectiveEnergyLevel} isLive={isCollectiveRoomLive} />
 
-        <View style={styles.topActionsRow}>
-          <View style={styles.iconSpacer} />
+        <View
+          style={[
+            styles.topActionsRow,
+            useCompactLayout && styles.topActionsRowCompact,
+            isVeryCompactHeight && styles.topActionsRowVeryCompact,
+          ]}
+        >
+          <View
+            style={[
+              styles.iconSpacer,
+              useCompactLayout && styles.iconSpacerCompact,
+              isVeryCompactHeight && styles.iconSpacerVeryCompact,
+            ]}
+          />
 
           <Pressable
             accessibilityHint="Closes this event room."
@@ -778,6 +800,8 @@ export function EventRoomScreen() {
             onPress={onExitSession}
             style={({ pressed }) => [
               styles.iconCircleButton,
+              useCompactLayout && styles.iconCircleButtonCompact,
+              isVeryCompactHeight && styles.iconCircleButtonVeryCompact,
               !reduceMotionEnabled && pressed && styles.iconButtonPressed,
             ]}
           >
@@ -786,7 +810,7 @@ export function EventRoomScreen() {
         </View>
 
         <Animated.View style={headerIntroStyle}>
-          <View style={styles.headerBlock}>
+          <View style={[styles.headerBlock, useCompactLayout && styles.headerBlockCompact]}>
             <Typography
               accessibilityRole="header"
               allowFontScaling={false}
@@ -800,10 +824,18 @@ export function EventRoomScreen() {
         </Animated.View>
 
         <Animated.View style={metaIntroStyle}>
-          <View style={styles.collectiveMetaRow}>
+          <View
+            style={[
+              styles.collectiveMetaRow,
+              useCompactLayout && styles.collectiveMetaRowCompact,
+              isVeryCompactHeight && styles.collectiveMetaRowVeryCompact,
+            ]}
+          >
             <View
               style={[
                 styles.liveChip,
+                useCompactLayout && styles.liveChipCompact,
+                isVeryCompactHeight && styles.liveChipVeryCompact,
                 isCollectiveRoomLive
                   ? styles.liveChipActive
                   : hasEnded
@@ -821,8 +853,14 @@ export function EventRoomScreen() {
               </Typography>
             </View>
 
-            <View style={styles.collectiveStatsChip}>
-              <LiveLogo size={20} />
+            <View
+              style={[
+                styles.collectiveStatsChip,
+                useCompactLayout && styles.collectiveStatsChipCompact,
+                isVeryCompactHeight && styles.collectiveStatsChipVeryCompact,
+              ]}
+            >
+              <LiveLogo context="eventRoom" size={20} />
               <Typography
                 allowFontScaling={false}
                 color={colors.textSecondary}
@@ -836,7 +874,13 @@ export function EventRoomScreen() {
         </Animated.View>
 
         <Animated.View style={headerIntroStyle}>
-          <View style={styles.selectorRow}>
+          <View
+            style={[
+              styles.selectorRow,
+              useCompactLayout && styles.selectorRowCompact,
+              isVeryCompactHeight && styles.selectorRowVeryCompact,
+            ]}
+          >
             <View style={styles.selectorContainer}>
               <Pressable
                 accessibilityHint="Opens voice options for this event room."
@@ -849,10 +893,18 @@ export function EventRoomScreen() {
                 }}
                 style={({ pressed }) => [
                   styles.selectorButton,
+                  useCompactLayout && styles.selectorButtonCompact,
+                  isVeryCompactHeight && styles.selectorButtonVeryCompact,
                   !reduceMotionEnabled && pressed && styles.selectorPressed,
                 ]}
               >
-                <View style={styles.voiceAvatar}>
+                <View
+                  style={[
+                    styles.voiceAvatar,
+                    useCompactLayout && styles.voiceAvatarCompact,
+                    isVeryCompactHeight && styles.voiceAvatarVeryCompact,
+                  ]}
+                >
                   <MaterialCommunityIcons color={colors.textPrimary} name="account" size={13} />
                 </View>
                 <Typography
@@ -860,7 +912,11 @@ export function EventRoomScreen() {
                   allowFontScaling={false}
                   minimumFontScale={0.75}
                   numberOfLines={1}
-                  style={styles.selectorValue}
+                  style={[
+                    styles.selectorValue,
+                    useCompactLayout && styles.selectorValueCompact,
+                    isVeryCompactHeight && styles.selectorValueVeryCompact,
+                  ]}
                   variant="Body"
                   weight="bold"
                 >
@@ -894,7 +950,7 @@ export function EventRoomScreen() {
                     >
                       <Typography
                         allowFontScaling={false}
-                        color={selectedVoice === voice ? colors.textOnSky : colors.textPrimary}
+                        color={colors.textPrimary}
                         variant="Body"
                         weight="bold"
                       >
@@ -907,13 +963,24 @@ export function EventRoomScreen() {
             </View>
 
             <View style={styles.selectorContainer}>
-              <View style={[styles.selectorButton, styles.minutesSelectorButton]}>
+              <View
+                style={[
+                  styles.selectorButton,
+                  styles.minutesSelectorButton,
+                  useCompactLayout && styles.selectorButtonCompact,
+                  isVeryCompactHeight && styles.selectorButtonVeryCompact,
+                ]}
+              >
                 <Typography
                   adjustsFontSizeToFit
                   allowFontScaling={false}
                   minimumFontScale={0.75}
                   numberOfLines={1}
-                  style={styles.selectorValue}
+                  style={[
+                    styles.selectorValue,
+                    useCompactLayout && styles.selectorValueCompact,
+                    isVeryCompactHeight && styles.selectorValueVeryCompact,
+                  ]}
                   variant="Body"
                   weight="bold"
                 >
@@ -929,7 +996,14 @@ export function EventRoomScreen() {
           </View>
         </Animated.View>
 
-        <Animated.View style={[styles.centerBlock, stageIntroStyle]}>
+        <Animated.View
+          style={[
+            styles.centerBlock,
+            useCompactLayout && styles.centerBlockCompact,
+            isVeryCompactHeight && styles.centerBlockVeryCompact,
+            stageIntroStyle,
+          ]}
+        >
           <Pressable
             accessibilityHint="Starts or pauses event room audio."
             accessibilityLabel={isRunning ? 'Pause event audio' : 'Play event audio'}
@@ -948,28 +1022,56 @@ export function EventRoomScreen() {
               !reduceMotionEnabled && pressed && styles.playPressed,
             ]}
           >
-            <View style={styles.playPulseContainer}>
-              <View accessible={false} importantForAccessibility="no-hide-descendants">
-                <LottieView
-                  autoPlay={false}
-                  loop
-                  ref={playPulseRef}
-                  source={globeFallbackAnimation}
-                  style={styles.playPulseLottie}
-                />
-              </View>
-              <View style={styles.playButtonCore}>
+            <Animated.View
+              style={[
+                styles.centerFocalStack,
+                useCompactLayout && styles.centerFocalStackCompact,
+                isVeryCompactHeight && styles.centerFocalStackVeryCompact,
+                centerOrbStyle,
+              ]}
+            >
+              <View
+                accessible={false}
+                importantForAccessibility="no-hide-descendants"
+                style={[
+                  styles.centerHaloOuter,
+                  useCompactLayout && styles.centerHaloOuterCompact,
+                  isVeryCompactHeight && styles.centerHaloOuterVeryCompact,
+                ]}
+              />
+              <View
+                accessible={false}
+                importantForAccessibility="no-hide-descendants"
+                style={[
+                  styles.centerHaloInner,
+                  useCompactLayout && styles.centerHaloInnerCompact,
+                  isVeryCompactHeight && styles.centerHaloInnerVeryCompact,
+                ]}
+              />
+              <View
+                style={[
+                  styles.playButtonCore,
+                  useCompactLayout && styles.playButtonCoreCompact,
+                  isVeryCompactHeight && styles.playButtonCoreVeryCompact,
+                ]}
+              >
                 <MaterialCommunityIcons
-                  color={figmaV2Reference.tabs.activeBorder}
+                  color={roomAtmosphere.collective.transportFill}
                   name={isRunning ? 'pause' : 'play'}
                   size={42}
                 />
               </View>
-            </View>
+            </Animated.View>
           </Pressable>
 
           <Animated.View style={scriptPanelFocusStyle}>
-            <View style={styles.scriptPanelCard}>
+            <View
+              style={[
+                styles.scriptPanelCard,
+                useCompactLayout && styles.scriptPanelCardCompact,
+                isVeryCompactHeight && styles.scriptPanelCardVeryCompact,
+              ]}
+            >
               <RoomScriptPanel
                 activeTimedWordIndex={activeTimedWordIndex}
                 activeTimedWords={activeTimedParagraph?.words}
@@ -978,24 +1080,44 @@ export function EventRoomScreen() {
                 loadingMessage="Loading event details..."
                 maxScriptLines={MAX_SCRIPT_LINES}
                 noScriptMessage="No script available for this event."
-                scriptSyncWrapStyle={styles.scriptSyncWrap}
+                scriptSyncWrapStyle={[
+                  styles.scriptSyncWrap,
+                  useCompactLayout && styles.scriptSyncWrapCompact,
+                  isVeryCompactHeight && styles.scriptSyncWrapVeryCompact,
+                ]}
                 scriptText={eventScript}
-                scriptTextActiveStyle={styles.scriptTextActive}
+                scriptTextActiveStyle={[
+                  styles.scriptTextActive,
+                  useCompactLayout && styles.scriptTextActiveCompact,
+                  isVeryCompactHeight && styles.scriptTextActiveVeryCompact,
+                ]}
                 scriptWordActiveStyle={styles.scriptWordActive}
-                scriptWordFlowStyle={styles.scriptWordFlow}
-                scriptWordStyle={styles.scriptWord}
-                scriptWrapStyle={styles.scriptWrap}
+                scriptWordFlowStyle={[
+                  styles.scriptWordFlow,
+                  useCompactLayout && styles.scriptWordFlowCompact,
+                  isVeryCompactHeight && styles.scriptWordFlowVeryCompact,
+                ]}
+                scriptWordStyle={[
+                  styles.scriptWord,
+                  useCompactLayout && styles.scriptWordCompact,
+                  isVeryCompactHeight && styles.scriptWordVeryCompact,
+                ]}
+                scriptWrapStyle={[
+                  styles.scriptWrap,
+                  useCompactLayout && styles.scriptWrapCompact,
+                  isVeryCompactHeight && styles.scriptWrapVeryCompact,
+                ]}
               />
             </View>
           </Animated.View>
 
-          {!hasStarted ? (
+          {showCenterStatusHint && !hasStarted ? (
             <Typography allowFontScaling={false} color={colors.warning} variant="Caption">
               Event starts in {startCountdownLabel}. Audio will begin automatically.
             </Typography>
           ) : null}
 
-          {hasEnded ? (
+          {showCenterStatusHint && hasEnded ? (
             <Typography allowFontScaling={false} color={colors.success} variant="Caption">
               This event has ended.
             </Typography>
@@ -1025,18 +1147,45 @@ export function EventRoomScreen() {
             progress={progress}
             rightLabel={remainingLabel}
             styles={{
-              bottomActionsRow: styles.bottomActionsRow,
-              bottomBlock: styles.bottomBlock,
-              bottomIconAction: styles.bottomIconAction,
+              bottomActionsRow: [
+                styles.bottomActionsRow,
+                useCompactLayout && styles.bottomActionsRowCompact,
+                isVeryCompactHeight && styles.bottomActionsRowVeryCompact,
+              ],
+              bottomBlock: [
+                styles.bottomBlock,
+                useCompactLayout && styles.bottomBlockCompact,
+                isVeryCompactHeight && styles.bottomBlockVeryCompact,
+              ],
+              bottomIconAction: [
+                styles.bottomIconAction,
+                useCompactLayout && styles.bottomIconActionCompact,
+                isVeryCompactHeight && styles.bottomIconActionVeryCompact,
+              ],
               dropdownOptionPressed: styles.dropdownOptionPressed,
-              inviteButton: styles.inviteButton,
-              inviteIconCircle: styles.inviteIconCircle,
+              inviteButton: [
+                styles.inviteButton,
+                useCompactLayout && styles.inviteButtonCompact,
+                isVeryCompactHeight && styles.inviteButtonVeryCompact,
+              ],
+              inviteIconCircle: [
+                styles.inviteIconCircle,
+                useCompactLayout && styles.inviteIconCircleCompact,
+                isVeryCompactHeight && styles.inviteIconCircleVeryCompact,
+              ],
               inviteMenu: styles.inviteMenu,
               inviteOption: styles.inviteOption,
               inviteText: styles.inviteText,
               progressFill: styles.progressFill,
-              progressLabels: styles.progressLabels,
-              progressTrack: styles.progressTrack,
+              progressLabels: [
+                styles.progressLabels,
+                useCompactLayout && styles.progressLabelsCompact,
+              ],
+              progressTrack: [
+                styles.progressTrack,
+                useCompactLayout && styles.progressTrackCompact,
+                isVeryCompactHeight && styles.progressTrackVeryCompact,
+              ],
               selectorPressed: styles.selectorPressed,
             }}
           />
@@ -1053,9 +1202,23 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginTop: spacing.xs,
   },
+  bottomActionsRowCompact: {
+    marginTop: spacing.xxs,
+  },
+  bottomActionsRowVeryCompact: {
+    marginTop: 2,
+  },
   bottomBlock: {
     gap: spacing.xs,
     marginTop: spacing.xs,
+  },
+  bottomBlockCompact: {
+    gap: spacing.xxs,
+    marginTop: spacing.xxs,
+  },
+  bottomBlockVeryCompact: {
+    gap: 3,
+    marginTop: 2,
   },
   bottomIconAction: {
     alignItems: 'center',
@@ -1067,12 +1230,85 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xs,
     paddingVertical: spacing.xs,
   },
+  bottomIconActionCompact: {
+    minWidth: 68,
+    paddingHorizontal: spacing.xxs,
+    paddingVertical: 6,
+  },
+  bottomIconActionVeryCompact: {
+    minWidth: 62,
+    paddingHorizontal: spacing.xxs,
+    paddingVertical: 4,
+  },
   centerBlock: {
     alignItems: 'center',
     flex: 1,
-    gap: spacing.sm,
-    justifyContent: 'flex-start',
+    gap: spacing.xs,
+    justifyContent: 'center',
     minHeight: 0,
+  },
+  centerBlockCompact: {
+    gap: spacing.xxs,
+    justifyContent: 'flex-start',
+    paddingTop: spacing.xxs,
+  },
+  centerBlockVeryCompact: {
+    gap: spacing.xxs,
+    paddingTop: 0,
+  },
+  centerFocalStack: {
+    alignItems: 'center',
+    borderRadius: radii.pill,
+    height: 168,
+    justifyContent: 'center',
+    position: 'relative',
+    width: 168,
+  },
+  centerFocalStackCompact: {
+    height: 146,
+    width: 146,
+  },
+  centerFocalStackVeryCompact: {
+    height: 130,
+    width: 130,
+  },
+  centerHaloInner: {
+    backgroundColor: roomAtmosphere.collective.auraInner,
+    borderRadius: radii.pill,
+    bottom: 24,
+    left: 24,
+    opacity: 0.42,
+    position: 'absolute',
+    right: 24,
+    top: 24,
+  },
+  centerHaloInnerCompact: {
+    bottom: 20,
+    left: 20,
+    right: 20,
+    top: 20,
+  },
+  centerHaloInnerVeryCompact: {
+    bottom: 17,
+    left: 17,
+    right: 17,
+    top: 17,
+  },
+  centerHaloOuter: {
+    backgroundColor: roomAtmosphere.collective.auraOuter,
+    borderRadius: radii.pill,
+    bottom: 0,
+    left: 0,
+    opacity: 0.58,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+  },
+  centerHaloOuterCompact: {
+    opacity: 0.5,
+  },
+  centerHaloOuterVeryCompact: {
+    opacity: 0.46,
   },
   collectiveMetaRow: {
     alignItems: 'center',
@@ -1080,21 +1316,41 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
     justifyContent: 'center',
   },
+  collectiveMetaRowCompact: {
+    gap: spacing.xxs,
+  },
+  collectiveMetaRowVeryCompact: {
+    gap: 3,
+  },
   collectiveStatsChip: {
     alignItems: 'center',
     backgroundColor: roomAtmosphere.collective.selectorBackground,
     borderColor: roomAtmosphere.collective.selectorBorder,
     borderRadius: radii.pill,
-    borderWidth: 1,
+    borderWidth: 0.8,
     flexDirection: 'row',
     gap: spacing.xs,
     minHeight: 32,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xxs,
   },
+  collectiveStatsChipCompact: {
+    minHeight: 30,
+    paddingHorizontal: spacing.xs,
+  },
+  collectiveStatsChipVeryCompact: {
+    minHeight: 28,
+    paddingHorizontal: spacing.xxs,
+  },
   container: {
     flex: 1,
     gap: sectionGap,
+  },
+  containerCompact: {
+    gap: spacing.sm,
+  },
+  containerVeryCompact: {
+    gap: spacing.xs,
   },
   dropdownMenu: {
     gap: spacing.xxs,
@@ -1108,9 +1364,9 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xxs,
   },
   dropdownOptionActive: {
-    backgroundColor: figmaV2Reference.buttons.sky.from,
-    borderColor: figmaV2Reference.buttons.sky.border,
-    borderWidth: 1,
+    backgroundColor: roomAtmosphere.collective.selectorBackground,
+    borderColor: roomAtmosphere.collective.transportFill,
+    borderWidth: 0.8,
   },
   dropdownOptionPressed: {
     transform: [{ scale: 0.99 }],
@@ -1123,6 +1379,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.xxs,
   },
+  headerBlockCompact: {
+    gap: 2,
+  },
   iconButtonPressed: {
     transform: [{ scale: 0.97 }],
   },
@@ -1131,35 +1390,64 @@ const styles = StyleSheet.create({
     backgroundColor: roomAtmosphere.collective.selectorBackground,
     borderColor: roomAtmosphere.collective.selectorBorder,
     borderRadius: radii.pill,
-    borderWidth: 1,
+    borderWidth: 0.8,
     height: 52,
     justifyContent: 'center',
     width: 52,
   },
+  iconCircleButtonCompact: {
+    height: 46,
+    width: 46,
+  },
+  iconCircleButtonVeryCompact: {
+    height: 42,
+    width: 42,
+  },
   iconSpacer: {
     width: 52,
+  },
+  iconSpacerCompact: {
+    width: 46,
+  },
+  iconSpacerVeryCompact: {
+    width: 42,
   },
   inviteButton: {
     alignItems: 'center',
     backgroundColor: roomAtmosphere.collective.selectorBackground,
     borderColor: roomAtmosphere.collective.selectorBorder,
     borderRadius: radii.pill,
-    borderWidth: 1,
+    borderWidth: 0.8,
     flexDirection: 'row',
     gap: spacing.xs,
     justifyContent: 'center',
     minHeight: 48,
     paddingHorizontal: spacing.sm,
   },
+  inviteButtonCompact: {
+    minHeight: 44,
+    paddingHorizontal: spacing.xs,
+  },
+  inviteButtonVeryCompact: {
+    minHeight: 40,
+  },
   inviteIconCircle: {
     alignItems: 'center',
-    backgroundColor: figmaV2Reference.buttons.secondary.background,
-    borderColor: figmaV2Reference.buttons.secondary.border,
+    backgroundColor: roomAtmosphere.collective.panelBackground,
+    borderColor: roomAtmosphere.collective.selectorBorder,
     borderRadius: radii.pill,
-    borderWidth: 1,
+    borderWidth: 0.8,
     height: 28,
     justifyContent: 'center',
     width: 28,
+  },
+  inviteIconCircleCompact: {
+    height: 26,
+    width: 26,
+  },
+  inviteIconCircleVeryCompact: {
+    height: 24,
+    width: 24,
   },
   inviteMenu: {
     gap: spacing.xxs,
@@ -1176,11 +1464,19 @@ const styles = StyleSheet.create({
   liveChip: {
     alignItems: 'center',
     borderRadius: radii.pill,
-    borderWidth: 1,
+    borderWidth: 0.8,
     minHeight: 32,
     justifyContent: 'center',
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xxs,
+  },
+  liveChipCompact: {
+    minHeight: 30,
+    paddingHorizontal: spacing.xs,
+  },
+  liveChipVeryCompact: {
+    minHeight: 28,
+    paddingHorizontal: spacing.xxs,
   },
   liveChipActive: {
     backgroundColor: roomAtmosphere.collective.liveChipBackground,
@@ -1202,24 +1498,21 @@ const styles = StyleSheet.create({
   },
   playButtonCore: {
     alignItems: 'center',
-    backgroundColor: 'transparent',
+    backgroundColor: roomAtmosphere.collective.selectorBackground,
+    borderColor: roomAtmosphere.collective.selectorBorder,
     borderRadius: radii.pill,
-    borderWidth: 0,
-    height: 104,
+    borderWidth: 0.8,
+    height: 96,
     justifyContent: 'center',
-    width: 104,
+    width: 96,
   },
-  playPulseContainer: {
-    alignItems: 'center',
-    borderRadius: radii.pill,
-    justifyContent: 'center',
-    height: 140,
-    width: 140,
+  playButtonCoreCompact: {
+    height: 86,
+    width: 86,
   },
-  playPulseLottie: {
-    height: 156,
-    position: 'absolute',
-    width: 156,
+  playButtonCoreVeryCompact: {
+    height: 76,
+    width: 76,
   },
   playPulseTap: {
     alignItems: 'center',
@@ -1235,20 +1528,29 @@ const styles = StyleSheet.create({
     backgroundColor: roomAtmosphere.collective.transportFill,
     borderColor: roomAtmosphere.collective.selectorBorder,
     borderRadius: radii.pill,
-    borderWidth: 1,
+    borderWidth: 0.8,
     height: '100%',
   },
   progressLabels: {
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
+  progressLabelsCompact: {
+    marginTop: 1,
+  },
   progressTrack: {
     backgroundColor: roomAtmosphere.collective.transportTrack,
     borderColor: roomAtmosphere.collective.selectorBorder,
     borderRadius: radii.pill,
-    borderWidth: 1,
+    borderWidth: 0.8,
     height: 16,
     overflow: 'hidden',
+  },
+  progressTrackCompact: {
+    height: 14,
+  },
+  progressTrackVeryCompact: {
+    height: 12,
   },
   screenContent: {
     flex: 1,
@@ -1257,32 +1559,60 @@ const styles = StyleSheet.create({
     backgroundColor: roomAtmosphere.collective.panelBackground,
     borderColor: roomAtmosphere.collective.panelBorder,
     borderRadius: radii.xl,
-    borderWidth: 1,
-    minHeight: 198,
+    borderWidth: 0.8,
+    minHeight: 188,
     overflow: 'hidden',
     width: '100%',
+  },
+  scriptPanelCardCompact: {
+    minHeight: 160,
+  },
+  scriptPanelCardVeryCompact: {
+    minHeight: 142,
   },
   scriptSyncWrap: {
     alignItems: 'center',
     gap: spacing.xxs,
     justifyContent: 'flex-start',
-    maxHeight: 156,
+    maxHeight: 150,
     minHeight: 0,
     overflow: 'hidden',
     width: '100%',
   },
+  scriptSyncWrapCompact: {
+    maxHeight: 126,
+  },
+  scriptSyncWrapVeryCompact: {
+    maxHeight: 108,
+  },
   scriptTextActive: {
-    fontSize: 20,
-    lineHeight: 29,
+    fontSize: 19,
+    lineHeight: 28,
     maxWidth: '98%',
     textAlign: 'center',
   },
+  scriptTextActiveCompact: {
+    fontSize: 17,
+    lineHeight: 25,
+  },
+  scriptTextActiveVeryCompact: {
+    fontSize: 15,
+    lineHeight: 22,
+  },
   scriptWord: {
     color: roomAtmosphere.collective.scriptWord,
-    fontSize: 20,
+    fontSize: 19,
     letterSpacing: 0.1,
-    lineHeight: 29,
+    lineHeight: 28,
     marginRight: 2,
+  },
+  scriptWordCompact: {
+    fontSize: 17,
+    lineHeight: 25,
+  },
+  scriptWordVeryCompact: {
+    fontSize: 15,
+    lineHeight: 22,
   },
   scriptWordActive: {
     color: colors.textPrimary,
@@ -1301,6 +1631,12 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     paddingHorizontal: spacing.xs,
   },
+  scriptWordFlowCompact: {
+    maxHeight: 132,
+  },
+  scriptWordFlowVeryCompact: {
+    maxHeight: 114,
+  },
   scriptWrap: {
     alignItems: 'center',
     flex: 1,
@@ -1308,20 +1644,36 @@ const styles = StyleSheet.create({
     minHeight: 0,
     overflow: 'hidden',
     paddingHorizontal: spacing.xs,
-    paddingTop: spacing.xs,
-    paddingBottom: spacing.xs,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.sm,
     width: '100%',
+  },
+  scriptWrapCompact: {
+    paddingBottom: spacing.xxs,
+    paddingTop: spacing.xxs,
+  },
+  scriptWrapVeryCompact: {
+    paddingBottom: 2,
+    paddingTop: 2,
   },
   selectorButton: {
     alignItems: 'center',
     backgroundColor: roomAtmosphere.collective.selectorBackground,
     borderColor: roomAtmosphere.collective.selectorBorder,
     borderRadius: radii.pill,
-    borderWidth: 1,
+    borderWidth: 0.8,
     flexDirection: 'row',
     gap: spacing.xs,
     minHeight: 46,
     paddingHorizontal: spacing.sm,
+  },
+  selectorButtonCompact: {
+    minHeight: 42,
+    paddingHorizontal: spacing.xs,
+  },
+  selectorButtonVeryCompact: {
+    minHeight: 38,
+    paddingHorizontal: spacing.xxs,
   },
   selectorContainer: {
     flex: 1,
@@ -1333,6 +1685,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: spacing.sm,
   },
+  selectorRowCompact: {
+    gap: spacing.xs,
+  },
+  selectorRowVeryCompact: {
+    gap: spacing.xxs,
+  },
   selectorValue: {
     flex: 1,
     flexShrink: 1,
@@ -1340,18 +1698,40 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     textTransform: 'none',
   },
+  selectorValueCompact: {
+    fontSize: 15,
+    lineHeight: 17,
+  },
+  selectorValueVeryCompact: {
+    fontSize: 14,
+    lineHeight: 16,
+  },
   topActionsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
+  topActionsRowCompact: {
+    marginBottom: spacing.xxs,
+  },
+  topActionsRowVeryCompact: {
+    marginBottom: 1,
+  },
   voiceAvatar: {
     alignItems: 'center',
-    backgroundColor: figmaV2Reference.buttons.secondary.background,
-    borderColor: figmaV2Reference.buttons.secondary.border,
+    backgroundColor: roomAtmosphere.collective.panelBackground,
+    borderColor: roomAtmosphere.collective.selectorBorder,
     borderRadius: radii.pill,
-    borderWidth: 1,
+    borderWidth: 0.8,
     height: 26,
     justifyContent: 'center',
     width: 26,
+  },
+  voiceAvatarCompact: {
+    height: 24,
+    width: 24,
+  },
+  voiceAvatarVeryCompact: {
+    height: 22,
+    width: 22,
   },
 });

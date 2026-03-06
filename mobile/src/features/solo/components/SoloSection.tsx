@@ -1,8 +1,7 @@
 import type { ReactNode } from 'react';
-import { StyleSheet } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { SectionHeader } from '../../../components/SectionHeader';
-import { SurfaceCard } from '../../../components/SurfaceCard';
 import { Typography } from '../../../components/Typography';
 import { radii, soloSurface, spacing } from '../../../theme/tokens';
 
@@ -15,7 +14,7 @@ interface SoloSectionProps {
 
 export function SoloSection({ children, countLabel, subtitle, title }: SoloSectionProps) {
   return (
-    <SurfaceCard contentPadding={spacing.sm} radius="xl" style={styles.panel}>
+    <View style={styles.panel}>
       <SectionHeader
         subtitle={subtitle}
         subtitleColor={soloSurface.section.subtitle}
@@ -33,7 +32,7 @@ export function SoloSection({ children, countLabel, subtitle, title }: SoloSecti
         }
       />
       {children}
-    </SurfaceCard>
+    </View>
   );
 }
 

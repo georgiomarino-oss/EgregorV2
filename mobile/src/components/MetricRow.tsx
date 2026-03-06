@@ -1,13 +1,12 @@
 import { StyleSheet, View } from 'react-native';
 
-import { figmaV2Reference } from '../theme/figma-v2-reference';
 import {
   PROFILE_ROW_HEIGHT,
   PROFILE_ROW_PAD_BOTTOM,
   PROFILE_ROW_PAD_TOP,
   PROFILE_ROW_PAD_X,
 } from '../theme/layout';
-import { SurfaceCard } from './SurfaceCard';
+import { profileSurface, radii } from '../theme/tokens';
 import { Typography } from './Typography';
 
 interface MetricRowProps {
@@ -17,10 +16,10 @@ interface MetricRowProps {
 
 export function MetricRow({ label, value }: MetricRowProps) {
   return (
-    <SurfaceCard contentPadding={0} radius="sm" style={styles.card} variant="profileRow">
+    <View style={styles.card}>
       <View style={styles.row}>
         <Typography
-          color={figmaV2Reference.text.heading}
+          color={profileSurface.metrics.sectionLabel}
           ellipsizeMode="tail"
           numberOfLines={1}
           style={styles.label}
@@ -29,7 +28,7 @@ export function MetricRow({ label, value }: MetricRowProps) {
           {label}
         </Typography>
         <Typography
-          color={figmaV2Reference.text.heading}
+          color={profileSurface.hero.metricValue}
           numberOfLines={1}
           style={styles.value}
           variant="Body"
@@ -38,15 +37,18 @@ export function MetricRow({ label, value }: MetricRowProps) {
           {value}
         </Typography>
       </View>
-    </SurfaceCard>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 12,
+    backgroundColor: profileSurface.metrics.calloutBackground,
+    borderColor: profileSurface.metrics.calloutBorder,
+    borderRadius: radii.md,
     borderWidth: 0.8,
     height: PROFILE_ROW_HEIGHT,
+    overflow: 'hidden',
   },
   label: {
     flex: 1,

@@ -3,6 +3,7 @@ import { Animated, Easing, Pressable, StyleSheet, View } from 'react-native';
 
 import { LinearGradient } from 'expo-linear-gradient';
 
+import { LiveLogo } from '../../../components/LiveLogo';
 import { Typography } from '../../../components/Typography';
 import { interaction, motion, radii, soloSurface, spacing } from '../../../theme/tokens';
 import { useReducedMotion } from '../../rooms/hooks/useReducedMotion';
@@ -96,6 +97,7 @@ export function SoloHero({
         <View pointerEvents="none" style={styles.glow} />
 
         <View style={styles.badge}>
+          <LiveLogo context="solo" size={14} />
           <Typography
             allowFontScaling={false}
             color={soloSurface.hero.badgeText}
@@ -170,11 +172,14 @@ const styles = StyleSheet.create({
     transform: [{ scale: interaction.chip.pressedScale }],
   },
   badge: {
+    alignItems: 'center',
     alignSelf: 'flex-start',
     backgroundColor: soloSurface.hero.badgeBackground,
     borderColor: soloSurface.hero.badgeBorder,
     borderRadius: radii.pill,
     borderWidth: 1,
+    flexDirection: 'row',
+    gap: spacing.xxs,
     paddingHorizontal: spacing.xs,
     paddingVertical: 3,
   },

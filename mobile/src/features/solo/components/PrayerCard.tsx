@@ -3,7 +3,6 @@ import { Animated, Easing, Pressable, StyleSheet, View } from 'react-native';
 
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
-import { SurfaceCard } from '../../../components/SurfaceCard';
 import { Typography } from '../../../components/Typography';
 import type { PrayerLibraryItem } from '../../../lib/api/data';
 import { interaction, motion, radii, soloSurface, spacing } from '../../../theme/tokens';
@@ -82,12 +81,7 @@ export function PrayerCard({
         onPress={onStartPrayer}
         style={({ pressed }) => [!reduceMotionEnabled && pressed && styles.cardPressed]}
       >
-        <SurfaceCard
-          contentPadding={spacing.sm}
-          radius="md"
-          style={[styles.card, { width }, featured ? styles.cardFeatured : styles.cardRegular]}
-          variant="default"
-        >
+        <View style={[styles.card, { width }, featured ? styles.cardFeatured : styles.cardRegular]}>
           <View style={styles.header}>
             <Typography
               allowFontScaling={false}
@@ -151,7 +145,7 @@ export function PrayerCard({
             </Typography>
             <MaterialCommunityIcons color={soloSurface.card.ctaText} name="arrow-right" size={16} />
           </View>
-        </SurfaceCard>
+        </View>
       </Pressable>
     </Animated.View>
   );
@@ -164,6 +158,10 @@ const styles = StyleSheet.create({
   card: {
     gap: spacing.xs,
     minHeight: 216,
+    overflow: 'hidden',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm,
+    borderRadius: radii.md,
   },
   cardFeatured: {
     backgroundColor: soloSurface.card.featuredBackground,

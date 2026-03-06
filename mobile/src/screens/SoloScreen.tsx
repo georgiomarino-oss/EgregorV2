@@ -315,7 +315,7 @@ const styles = StyleSheet.create({
   },
   dot: {
     borderRadius: radii.pill,
-    borderWidth: 1,
+    borderWidth: 0.8,
     height: 8,
     width: 8,
   },

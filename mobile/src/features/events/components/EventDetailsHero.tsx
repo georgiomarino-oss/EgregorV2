@@ -119,7 +119,7 @@ export function EventDetailsHero({
               },
             ]}
           >
-            {statusTone === 'live' ? <LiveLogo size={14} /> : null}
+            {statusTone === 'live' ? <LiveLogo context="events" size={14} /> : null}
             <Typography
               allowFontScaling={false}
               color={palette.hero.badgeText}

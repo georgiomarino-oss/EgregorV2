@@ -1,28 +1,26 @@
 import ambientAnimation from '../../assets/lottie/cosmic-ambient.json';
-import globeFallbackAnimation from '../../assets/lottie/globe-fallback.json';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Easing, Pressable, StyleSheet, View } from 'react-native';
+import { Animated, Easing, Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
 
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
-import LottieView from 'lottie-react-native';
 
 import type { SoloStackParamList } from '../app/navigation/types';
 import { InlineErrorCard } from '../components/InlineErrorCard';
+import { LiveLogo } from '../components/LiveLogo';
 import { Screen } from '../components/Screen';
 import { SurfaceCard } from '../components/SurfaceCard';
 import { Typography } from '../components/Typography';
 import {
   fetchPrayerScriptVariantByTitle,
-  recordSoloSession,
   fetchUserPreferences,
   prefetchPrayerScriptVariantByTitle,
+  recordSoloSession,
 } from '../lib/api/data';
 import { prefetchPrayerAudio } from '../lib/api/functions';
 import { supabase } from '../lib/supabase';
-import { figmaV2Reference } from '../theme/figma-v2-reference';
 import { sectionGap } from '../theme/layout';
 import { colors, motion, radii, roomAtmosphere, spacing } from '../theme/tokens';
 import { RoomScriptPanel } from '../features/room-player/components/RoomScriptPanel';
@@ -91,10 +89,10 @@ export function SoloLiveScreen() {
   const [scriptText, setScriptText] = useState(route.params?.scriptPreset ?? '');
   const [loadingScript, setLoadingScript] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const playPulseRef = useRef<LottieView>(null);
   const scriptTextRef = useRef(scriptText);
   const sessionUserIdRef = useRef<string | null>(null);
   const recordedSessionAudioKeyRef = useRef<string | null>(null);
+  const { height: viewportHeight, width: viewportWidth } = useWindowDimensions();
   const reduceMotionEnabled = useReducedMotion();
   const headerIntro = useMemo(() => new Animated.Value(0), []);
   const stageIntro = useMemo(() => new Animated.Value(0), []);
@@ -114,6 +112,10 @@ export function SoloLiveScreen() {
     () => `${activeVoiceId}|${selectedMinutes}|${resolvedScriptText.trim()}`,
     [activeVoiceId, resolvedScriptText, selectedMinutes],
   );
+  const isVeryCompactHeight = viewportHeight <= 700;
+  const isCompactHeight = viewportHeight <= 780;
+  const isNarrowWidth = viewportWidth <= 360;
+  const useCompactLayout = isCompactHeight || isNarrowWidth;
 
   const {
     isMuted,
@@ -386,19 +388,6 @@ export function SoloLiveScreen() {
   }, [elapsedMillis, recordSessionIfNeeded, stop, totalMillis]);
 
   useEffect(() => {
-    if (!playPulseRef.current) {
-      return;
-    }
-
-    if (isRunning) {
-      playPulseRef.current.play();
-      return;
-    }
-
-    playPulseRef.current.reset();
-  }, [isRunning]);
-
-  useEffect(() => {
     if (reduceMotionEnabled) {
       headerIntro.setValue(1);
       stageIntro.setValue(1);
@@ -544,6 +533,23 @@ export function SoloLiveScreen() {
         ],
       };
 
+  const centerOrbStyle = reduceMotionEnabled
+    ? styles.noMotion
+    : {
+        opacity: scriptFocus.interpolate({
+          inputRange: [0, 1],
+          outputRange: [0.94, 1],
+        }),
+        transform: [
+          {
+            scale: scriptFocus.interpolate({
+              inputRange: [0, 1],
+              outputRange: [1, 1 + motion.amplitude.medium],
+            }),
+          },
+        ],
+      };
+
   return (
     <Screen
       ambientSource={ambientAnimation}
@@ -556,11 +562,21 @@ export function SoloLiveScreen() {
         accessible={false}
         importantForAccessibility="no-hide-descendants"
         onPress={closeAllSelectors}
-        style={styles.container}
+        style={[
+          styles.container,
+          useCompactLayout && styles.containerCompact,
+          isVeryCompactHeight && styles.containerVeryCompact,
+        ]}
       >
         <SoloAuraField active />
 
-        <View style={styles.topActionsRow}>
+        <View
+          style={[
+            styles.topActionsRow,
+            useCompactLayout && styles.topActionsRowCompact,
+            isVeryCompactHeight && styles.topActionsRowVeryCompact,
+          ]}
+        >
           <Pressable
             accessibilityLabel={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
             accessibilityRole="button"
@@ -569,6 +585,8 @@ export function SoloLiveScreen() {
             onPress={() => setIsFavorite((current) => !current)}
             style={({ pressed }) => [
               styles.iconCircleButton,
+              useCompactLayout && styles.iconCircleButtonCompact,
+              isVeryCompactHeight && styles.iconCircleButtonVeryCompact,
               !reduceMotionEnabled && pressed && styles.iconButtonPressed,
             ]}
           >
@@ -587,6 +605,8 @@ export function SoloLiveScreen() {
             onPress={onExitSession}
             style={({ pressed }) => [
               styles.iconCircleButton,
+              useCompactLayout && styles.iconCircleButtonCompact,
+              isVeryCompactHeight && styles.iconCircleButtonVeryCompact,
               !reduceMotionEnabled && pressed && styles.iconButtonPressed,
             ]}
           >
@@ -595,7 +615,7 @@ export function SoloLiveScreen() {
         </View>
 
         <Animated.View style={headerIntroStyle}>
-          <View style={styles.headerBlock}>
+          <View style={[styles.headerBlock, useCompactLayout && styles.headerBlockCompact]}>
             <Typography
               accessibilityRole="header"
               allowFontScaling={false}
@@ -605,17 +625,26 @@ export function SoloLiveScreen() {
             >
               {activePrayerTitle}
             </Typography>
-            <Typography
-              allowFontScaling={false}
-              color={colors.textSecondary}
-              style={styles.soloSubtitle}
-              variant="Caption"
-            >
-              Personal Sanctuary
-            </Typography>
+            <View style={styles.soloSubtitleRow}>
+              <LiveLogo context="solo" size={14} />
+              <Typography
+                allowFontScaling={false}
+                color={colors.textSecondary}
+                style={styles.soloSubtitle}
+                variant="Caption"
+              >
+                Personal Sanctuary
+              </Typography>
+            </View>
           </View>
 
-          <View style={styles.selectorRow}>
+          <View
+            style={[
+              styles.selectorRow,
+              useCompactLayout && styles.selectorRowCompact,
+              isVeryCompactHeight && styles.selectorRowVeryCompact,
+            ]}
+          >
             <View style={styles.selectorContainer}>
               <Pressable
                 accessibilityHint="Opens voice options for this prayer."
@@ -629,10 +658,18 @@ export function SoloLiveScreen() {
                 }}
                 style={({ pressed }) => [
                   styles.selectorButton,
+                  useCompactLayout && styles.selectorButtonCompact,
+                  isVeryCompactHeight && styles.selectorButtonVeryCompact,
                   !reduceMotionEnabled && pressed && styles.selectorPressed,
                 ]}
               >
-                <View style={styles.voiceAvatar}>
+                <View
+                  style={[
+                    styles.voiceAvatar,
+                    useCompactLayout && styles.voiceAvatarCompact,
+                    isVeryCompactHeight && styles.voiceAvatarVeryCompact,
+                  ]}
+                >
                   <MaterialCommunityIcons color={colors.textPrimary} name="account" size={13} />
                 </View>
                 <Typography
@@ -640,7 +677,11 @@ export function SoloLiveScreen() {
                   allowFontScaling={false}
                   minimumFontScale={0.75}
                   numberOfLines={1}
-                  style={styles.selectorValue}
+                  style={[
+                    styles.selectorValue,
+                    useCompactLayout && styles.selectorValueCompact,
+                    isVeryCompactHeight && styles.selectorValueVeryCompact,
+                  ]}
                   variant="Body"
                   weight="bold"
                 >
@@ -674,7 +715,7 @@ export function SoloLiveScreen() {
                     >
                       <Typography
                         allowFontScaling={false}
-                        color={selectedVoice === voice ? colors.textOnSky : colors.textPrimary}
+                        color={colors.textPrimary}
                         variant="Body"
                         weight="bold"
                       >
@@ -700,6 +741,8 @@ export function SoloLiveScreen() {
                 style={({ pressed }) => [
                   styles.selectorButton,
                   styles.minutesSelectorButton,
+                  useCompactLayout && styles.selectorButtonCompact,
+                  isVeryCompactHeight && styles.selectorButtonVeryCompact,
                   !reduceMotionEnabled && pressed && styles.selectorPressed,
                 ]}
               >
@@ -708,7 +751,11 @@ export function SoloLiveScreen() {
                   allowFontScaling={false}
                   minimumFontScale={0.75}
                   numberOfLines={1}
-                  style={styles.selectorValue}
+                  style={[
+                    styles.selectorValue,
+                    useCompactLayout && styles.selectorValueCompact,
+                    isVeryCompactHeight && styles.selectorValueVeryCompact,
+                  ]}
                   variant="Body"
                   weight="bold"
                 >
@@ -742,7 +789,7 @@ export function SoloLiveScreen() {
                     >
                       <Typography
                         allowFontScaling={false}
-                        color={selectedMinutes === minutes ? colors.textOnSky : colors.textPrimary}
+                        color={colors.textPrimary}
                         variant="Body"
                         weight="bold"
                       >
@@ -756,7 +803,14 @@ export function SoloLiveScreen() {
           </View>
         </Animated.View>
 
-        <Animated.View style={[styles.centerBlock, stageIntroStyle]}>
+        <Animated.View
+          style={[
+            styles.centerBlock,
+            useCompactLayout && styles.centerBlockCompact,
+            isVeryCompactHeight && styles.centerBlockVeryCompact,
+            stageIntroStyle,
+          ]}
+        >
           <Pressable
             accessibilityHint="Starts or pauses guided prayer audio."
             accessibilityLabel={isRunning ? 'Pause prayer audio' : 'Play prayer audio'}
@@ -775,28 +829,56 @@ export function SoloLiveScreen() {
               !reduceMotionEnabled && pressed && styles.playPressed,
             ]}
           >
-            <View style={styles.playPulseContainer}>
-              <View accessible={false} importantForAccessibility="no-hide-descendants">
-                <LottieView
-                  autoPlay={false}
-                  loop
-                  ref={playPulseRef}
-                  source={globeFallbackAnimation}
-                  style={styles.playPulseLottie}
-                />
-              </View>
-              <View style={styles.playButtonCore}>
+            <Animated.View
+              style={[
+                styles.centerFocalStack,
+                useCompactLayout && styles.centerFocalStackCompact,
+                isVeryCompactHeight && styles.centerFocalStackVeryCompact,
+                centerOrbStyle,
+              ]}
+            >
+              <View
+                accessible={false}
+                importantForAccessibility="no-hide-descendants"
+                style={[
+                  styles.centerHaloOuter,
+                  useCompactLayout && styles.centerHaloOuterCompact,
+                  isVeryCompactHeight && styles.centerHaloOuterVeryCompact,
+                ]}
+              />
+              <View
+                accessible={false}
+                importantForAccessibility="no-hide-descendants"
+                style={[
+                  styles.centerHaloInner,
+                  useCompactLayout && styles.centerHaloInnerCompact,
+                  isVeryCompactHeight && styles.centerHaloInnerVeryCompact,
+                ]}
+              />
+              <View
+                style={[
+                  styles.playButtonCore,
+                  useCompactLayout && styles.playButtonCoreCompact,
+                  isVeryCompactHeight && styles.playButtonCoreVeryCompact,
+                ]}
+              >
                 <MaterialCommunityIcons
-                  color={figmaV2Reference.tabs.activeBorder}
+                  color={roomAtmosphere.solo.transportFill}
                   name={isRunning ? 'pause' : 'play'}
                   size={42}
                 />
               </View>
-            </View>
+            </Animated.View>
           </Pressable>
 
           <Animated.View style={scriptPanelFocusStyle}>
-            <View style={styles.scriptPanelCard}>
+            <View
+              style={[
+                styles.scriptPanelCard,
+                useCompactLayout && styles.scriptPanelCardCompact,
+                isVeryCompactHeight && styles.scriptPanelCardVeryCompact,
+              ]}
+            >
               <RoomScriptPanel
                 activeTimedWordIndex={activeTimedWordIndex}
                 activeTimedWords={activeTimedParagraph?.words}
@@ -805,13 +887,33 @@ export function SoloLiveScreen() {
                 loadingMessage="Loading prayer script..."
                 maxScriptLines={MAX_SCRIPT_LINES}
                 noScriptMessage="No script available for this prayer yet."
-                scriptSyncWrapStyle={styles.scriptSyncWrap}
+                scriptSyncWrapStyle={[
+                  styles.scriptSyncWrap,
+                  useCompactLayout && styles.scriptSyncWrapCompact,
+                  isVeryCompactHeight && styles.scriptSyncWrapVeryCompact,
+                ]}
                 scriptText={resolvedScriptText}
-                scriptTextActiveStyle={styles.scriptTextActive}
+                scriptTextActiveStyle={[
+                  styles.scriptTextActive,
+                  useCompactLayout && styles.scriptTextActiveCompact,
+                  isVeryCompactHeight && styles.scriptTextActiveVeryCompact,
+                ]}
                 scriptWordActiveStyle={styles.scriptWordActive}
-                scriptWordFlowStyle={styles.scriptWordFlow}
-                scriptWordStyle={styles.scriptWord}
-                scriptWrapStyle={styles.scriptWrap}
+                scriptWordFlowStyle={[
+                  styles.scriptWordFlow,
+                  useCompactLayout && styles.scriptWordFlowCompact,
+                  isVeryCompactHeight && styles.scriptWordFlowVeryCompact,
+                ]}
+                scriptWordStyle={[
+                  styles.scriptWord,
+                  useCompactLayout && styles.scriptWordCompact,
+                  isVeryCompactHeight && styles.scriptWordVeryCompact,
+                ]}
+                scriptWrapStyle={[
+                  styles.scriptWrap,
+                  useCompactLayout && styles.scriptWrapCompact,
+                  isVeryCompactHeight && styles.scriptWrapVeryCompact,
+                ]}
               />
             </View>
           </Animated.View>
@@ -840,18 +942,45 @@ export function SoloLiveScreen() {
             progress={progress}
             rightLabel={totalLabel}
             styles={{
-              bottomActionsRow: styles.bottomActionsRow,
-              bottomBlock: styles.bottomBlock,
-              bottomIconAction: styles.bottomIconAction,
+              bottomActionsRow: [
+                styles.bottomActionsRow,
+                useCompactLayout && styles.bottomActionsRowCompact,
+                isVeryCompactHeight && styles.bottomActionsRowVeryCompact,
+              ],
+              bottomBlock: [
+                styles.bottomBlock,
+                useCompactLayout && styles.bottomBlockCompact,
+                isVeryCompactHeight && styles.bottomBlockVeryCompact,
+              ],
+              bottomIconAction: [
+                styles.bottomIconAction,
+                useCompactLayout && styles.bottomIconActionCompact,
+                isVeryCompactHeight && styles.bottomIconActionVeryCompact,
+              ],
               dropdownOptionPressed: styles.dropdownOptionPressed,
-              inviteButton: styles.inviteButton,
-              inviteIconCircle: styles.inviteIconCircle,
+              inviteButton: [
+                styles.inviteButton,
+                useCompactLayout && styles.inviteButtonCompact,
+                isVeryCompactHeight && styles.inviteButtonVeryCompact,
+              ],
+              inviteIconCircle: [
+                styles.inviteIconCircle,
+                useCompactLayout && styles.inviteIconCircleCompact,
+                isVeryCompactHeight && styles.inviteIconCircleVeryCompact,
+              ],
               inviteMenu: styles.inviteMenu,
               inviteOption: styles.inviteOption,
               inviteText: styles.inviteText,
               progressFill: styles.progressFill,
-              progressLabels: styles.progressLabels,
-              progressTrack: styles.progressTrack,
+              progressLabels: [
+                styles.progressLabels,
+                useCompactLayout && styles.progressLabelsCompact,
+              ],
+              progressTrack: [
+                styles.progressTrack,
+                useCompactLayout && styles.progressTrackCompact,
+                isVeryCompactHeight && styles.progressTrackVeryCompact,
+              ],
               selectorPressed: styles.selectorPressed,
             }}
           />
@@ -868,9 +997,23 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginTop: spacing.xs,
   },
+  bottomActionsRowCompact: {
+    marginTop: spacing.xxs,
+  },
+  bottomActionsRowVeryCompact: {
+    marginTop: 2,
+  },
   bottomBlock: {
     gap: spacing.xs,
     marginTop: spacing.xs,
+  },
+  bottomBlockCompact: {
+    gap: spacing.xxs,
+    marginTop: spacing.xxs,
+  },
+  bottomBlockVeryCompact: {
+    gap: 3,
+    marginTop: 2,
   },
   bottomIconAction: {
     alignItems: 'center',
@@ -882,16 +1025,95 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xs,
     paddingVertical: spacing.xs,
   },
+  bottomIconActionCompact: {
+    minWidth: 68,
+    paddingHorizontal: spacing.xxs,
+    paddingVertical: 6,
+  },
+  bottomIconActionVeryCompact: {
+    minWidth: 62,
+    paddingHorizontal: spacing.xxs,
+    paddingVertical: 4,
+  },
   centerBlock: {
     alignItems: 'center',
     flex: 1,
     gap: spacing.sm,
-    justifyContent: 'flex-start',
+    justifyContent: 'center',
     minHeight: 0,
+  },
+  centerBlockCompact: {
+    gap: spacing.xs,
+    justifyContent: 'flex-start',
+    paddingTop: spacing.xxs,
+  },
+  centerBlockVeryCompact: {
+    gap: spacing.xxs,
+    paddingTop: 0,
+  },
+  centerFocalStack: {
+    alignItems: 'center',
+    borderRadius: radii.pill,
+    height: 162,
+    justifyContent: 'center',
+    position: 'relative',
+    width: 162,
+  },
+  centerFocalStackCompact: {
+    height: 142,
+    width: 142,
+  },
+  centerFocalStackVeryCompact: {
+    height: 126,
+    width: 126,
+  },
+  centerHaloInner: {
+    backgroundColor: roomAtmosphere.solo.auraInner,
+    borderRadius: radii.pill,
+    bottom: 22,
+    left: 22,
+    opacity: 0.44,
+    position: 'absolute',
+    right: 22,
+    top: 22,
+  },
+  centerHaloInnerCompact: {
+    bottom: 20,
+    left: 20,
+    right: 20,
+    top: 20,
+  },
+  centerHaloInnerVeryCompact: {
+    bottom: 17,
+    left: 17,
+    right: 17,
+    top: 17,
+  },
+  centerHaloOuter: {
+    backgroundColor: roomAtmosphere.solo.auraOuter,
+    borderRadius: radii.pill,
+    bottom: 0,
+    left: 0,
+    opacity: 0.5,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+  },
+  centerHaloOuterCompact: {
+    opacity: 0.44,
+  },
+  centerHaloOuterVeryCompact: {
+    opacity: 0.4,
   },
   container: {
     flex: 1,
     gap: sectionGap,
+  },
+  containerCompact: {
+    gap: spacing.sm,
+  },
+  containerVeryCompact: {
+    gap: spacing.xs,
   },
   dropdownMenu: {
     gap: spacing.xxs,
@@ -905,9 +1127,9 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xxs,
   },
   dropdownOptionActive: {
-    backgroundColor: figmaV2Reference.buttons.sky.from,
-    borderColor: figmaV2Reference.buttons.sky.border,
-    borderWidth: 1,
+    backgroundColor: roomAtmosphere.solo.selectorBackground,
+    borderColor: roomAtmosphere.solo.transportFill,
+    borderWidth: 0.8,
   },
   dropdownOptionPressed: {
     transform: [{ scale: 0.99 }],
@@ -920,6 +1142,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.xxs,
   },
+  headerBlockCompact: {
+    gap: 2,
+  },
   iconButtonPressed: {
     transform: [{ scale: 0.97 }],
   },
@@ -928,32 +1153,55 @@ const styles = StyleSheet.create({
     backgroundColor: roomAtmosphere.solo.selectorBackground,
     borderColor: roomAtmosphere.solo.selectorBorder,
     borderRadius: radii.pill,
-    borderWidth: 1,
+    borderWidth: 0.8,
     height: 52,
     justifyContent: 'center',
     width: 52,
+  },
+  iconCircleButtonCompact: {
+    height: 46,
+    width: 46,
+  },
+  iconCircleButtonVeryCompact: {
+    height: 42,
+    width: 42,
   },
   inviteButton: {
     alignItems: 'center',
     backgroundColor: roomAtmosphere.solo.selectorBackground,
     borderColor: roomAtmosphere.solo.selectorBorder,
     borderRadius: radii.pill,
-    borderWidth: 1,
+    borderWidth: 0.8,
     flexDirection: 'row',
     gap: spacing.xs,
     justifyContent: 'center',
     minHeight: 48,
     paddingHorizontal: spacing.sm,
   },
+  inviteButtonCompact: {
+    minHeight: 44,
+    paddingHorizontal: spacing.xs,
+  },
+  inviteButtonVeryCompact: {
+    minHeight: 40,
+  },
   inviteIconCircle: {
     alignItems: 'center',
-    backgroundColor: figmaV2Reference.buttons.secondary.background,
-    borderColor: figmaV2Reference.buttons.secondary.border,
+    backgroundColor: roomAtmosphere.solo.panelBackground,
+    borderColor: roomAtmosphere.solo.selectorBorder,
     borderRadius: radii.pill,
-    borderWidth: 1,
+    borderWidth: 0.8,
     height: 28,
     justifyContent: 'center',
     width: 28,
+  },
+  inviteIconCircleCompact: {
+    height: 26,
+    width: 26,
+  },
+  inviteIconCircleVeryCompact: {
+    height: 24,
+    width: 24,
   },
   inviteMenu: {
     gap: spacing.xxs,
@@ -975,24 +1223,21 @@ const styles = StyleSheet.create({
   },
   playButtonCore: {
     alignItems: 'center',
-    backgroundColor: 'transparent',
+    backgroundColor: roomAtmosphere.solo.selectorBackground,
+    borderColor: roomAtmosphere.solo.selectorBorder,
     borderRadius: radii.pill,
-    borderWidth: 0,
-    height: 104,
+    borderWidth: 0.8,
+    height: 96,
     justifyContent: 'center',
-    width: 104,
+    width: 96,
   },
-  playPulseContainer: {
-    alignItems: 'center',
-    borderRadius: radii.pill,
-    justifyContent: 'center',
-    height: 140,
-    width: 140,
+  playButtonCoreCompact: {
+    height: 86,
+    width: 86,
   },
-  playPulseLottie: {
-    height: 156,
-    position: 'absolute',
-    width: 156,
+  playButtonCoreVeryCompact: {
+    height: 76,
+    width: 76,
   },
   playPulseTap: {
     alignItems: 'center',
@@ -1008,20 +1253,29 @@ const styles = StyleSheet.create({
     backgroundColor: roomAtmosphere.solo.transportFill,
     borderColor: roomAtmosphere.solo.selectorBorder,
     borderRadius: radii.pill,
-    borderWidth: 1,
+    borderWidth: 0.8,
     height: '100%',
   },
   progressLabels: {
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
+  progressLabelsCompact: {
+    marginTop: 1,
+  },
   progressTrack: {
     backgroundColor: roomAtmosphere.solo.transportTrack,
     borderColor: roomAtmosphere.solo.selectorBorder,
     borderRadius: radii.pill,
-    borderWidth: 1,
+    borderWidth: 0.8,
     height: 16,
     overflow: 'hidden',
+  },
+  progressTrackCompact: {
+    height: 14,
+  },
+  progressTrackVeryCompact: {
+    height: 12,
   },
   screenContent: {
     flex: 1,
@@ -1030,32 +1284,60 @@ const styles = StyleSheet.create({
     backgroundColor: roomAtmosphere.solo.panelBackground,
     borderColor: roomAtmosphere.solo.panelBorder,
     borderRadius: radii.xl,
-    borderWidth: 1,
-    minHeight: 198,
+    borderWidth: 0.8,
+    minHeight: 190,
     overflow: 'hidden',
     width: '100%',
+  },
+  scriptPanelCardCompact: {
+    minHeight: 162,
+  },
+  scriptPanelCardVeryCompact: {
+    minHeight: 144,
   },
   scriptSyncWrap: {
     alignItems: 'center',
     gap: spacing.xxs,
     justifyContent: 'flex-start',
-    maxHeight: 156,
+    maxHeight: 150,
     minHeight: 0,
     overflow: 'hidden',
     width: '100%',
   },
+  scriptSyncWrapCompact: {
+    maxHeight: 126,
+  },
+  scriptSyncWrapVeryCompact: {
+    maxHeight: 108,
+  },
   scriptTextActive: {
-    fontSize: 20,
-    lineHeight: 29,
+    fontSize: 19,
+    lineHeight: 28,
     maxWidth: '98%',
     textAlign: 'center',
   },
+  scriptTextActiveCompact: {
+    fontSize: 17,
+    lineHeight: 25,
+  },
+  scriptTextActiveVeryCompact: {
+    fontSize: 15,
+    lineHeight: 22,
+  },
   scriptWord: {
     color: roomAtmosphere.solo.scriptWord,
-    fontSize: 20,
+    fontSize: 19,
     letterSpacing: 0.1,
-    lineHeight: 29,
+    lineHeight: 28,
     marginRight: 2,
+  },
+  scriptWordCompact: {
+    fontSize: 17,
+    lineHeight: 25,
+  },
+  scriptWordVeryCompact: {
+    fontSize: 15,
+    lineHeight: 22,
   },
   scriptWordActive: {
     color: colors.textPrimary,
@@ -1074,6 +1356,12 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     paddingHorizontal: spacing.xs,
   },
+  scriptWordFlowCompact: {
+    maxHeight: 132,
+  },
+  scriptWordFlowVeryCompact: {
+    maxHeight: 114,
+  },
   scriptWrap: {
     alignItems: 'center',
     flex: 1,
@@ -1081,20 +1369,36 @@ const styles = StyleSheet.create({
     minHeight: 0,
     overflow: 'hidden',
     paddingHorizontal: spacing.xs,
-    paddingTop: spacing.xs,
-    paddingBottom: spacing.xs,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.sm,
     width: '100%',
+  },
+  scriptWrapCompact: {
+    paddingBottom: spacing.xxs,
+    paddingTop: spacing.xxs,
+  },
+  scriptWrapVeryCompact: {
+    paddingBottom: 2,
+    paddingTop: 2,
   },
   selectorButton: {
     alignItems: 'center',
     backgroundColor: roomAtmosphere.solo.selectorBackground,
     borderColor: roomAtmosphere.solo.selectorBorder,
     borderRadius: radii.pill,
-    borderWidth: 1,
+    borderWidth: 0.8,
     flexDirection: 'row',
     gap: spacing.xs,
     minHeight: 46,
     paddingHorizontal: spacing.sm,
+  },
+  selectorButtonCompact: {
+    minHeight: 42,
+    paddingHorizontal: spacing.xs,
+  },
+  selectorButtonVeryCompact: {
+    minHeight: 38,
+    paddingHorizontal: spacing.xxs,
   },
   selectorContainer: {
     flex: 1,
@@ -1106,9 +1410,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: spacing.sm,
   },
+  selectorRowCompact: {
+    gap: spacing.xs,
+  },
+  selectorRowVeryCompact: {
+    gap: spacing.xxs,
+  },
   soloSubtitle: {
     letterSpacing: 0.6,
     textTransform: 'uppercase',
+  },
+  soloSubtitleRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: spacing.xxs,
   },
   selectorValue: {
     flex: 1,
@@ -1117,18 +1432,40 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     textTransform: 'none',
   },
+  selectorValueCompact: {
+    fontSize: 15,
+    lineHeight: 17,
+  },
+  selectorValueVeryCompact: {
+    fontSize: 14,
+    lineHeight: 16,
+  },
   topActionsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
+  topActionsRowCompact: {
+    marginBottom: spacing.xxs,
+  },
+  topActionsRowVeryCompact: {
+    marginBottom: 1,
+  },
   voiceAvatar: {
     alignItems: 'center',
-    backgroundColor: figmaV2Reference.buttons.secondary.background,
-    borderColor: figmaV2Reference.buttons.secondary.border,
+    backgroundColor: roomAtmosphere.solo.panelBackground,
+    borderColor: roomAtmosphere.solo.selectorBorder,
     borderRadius: radii.pill,
-    borderWidth: 1,
+    borderWidth: 0.8,
     height: 26,
     justifyContent: 'center',
     width: 26,
+  },
+  voiceAvatarCompact: {
+    height: 24,
+    width: 24,
+  },
+  voiceAvatarVeryCompact: {
+    height: 22,
+    width: 22,
   },
 });

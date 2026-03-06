@@ -167,11 +167,23 @@ export function RoomTransportControls({
         </View>
       </Animated.View>
 
-      <View style={styles?.progressLabels}>
-        <Typography allowFontScaling={false} variant="H2" weight="bold">
+      <View style={[styles?.progressLabels, localStyles.progressLabelsRow]}>
+        <Typography
+          allowFontScaling={false}
+          numberOfLines={1}
+          style={localStyles.progressLabelLeft}
+          variant="H2"
+          weight="bold"
+        >
           {leftLabel}
         </Typography>
-        <Typography allowFontScaling={false} variant="H2" weight="bold">
+        <Typography
+          allowFontScaling={false}
+          numberOfLines={1}
+          style={localStyles.progressLabelRight}
+          variant="H2"
+          weight="bold"
+        >
           {rightLabel}
         </Typography>
       </View>
@@ -216,7 +228,7 @@ export function RoomTransportControls({
           <MaterialCommunityIcons
             color={colors.textPrimary}
             name={isMuted ? 'volume-off' : 'volume-high'}
-            size={30}
+            size={28}
           />
           <Typography
             allowFontScaling={false}
@@ -239,7 +251,7 @@ export function RoomTransportControls({
             !reduceMotionEnabled && pressed && localStyles.pressedFeedback,
           ]}
         >
-          <MaterialCommunityIcons color={colors.textPrimary} name="restore" size={30} />
+          <MaterialCommunityIcons color={colors.textPrimary} name="restore" size={28} />
           <Typography
             allowFontScaling={false}
             color={colors.textSecondary}
@@ -266,7 +278,7 @@ export function RoomTransportControls({
           ]}
         >
           <View style={styles?.inviteIconCircle}>
-            <MaterialCommunityIcons color={colors.textPrimary} name="account-group" size={16} />
+            <MaterialCommunityIcons color={colors.textPrimary} name="account-group" size={15} />
           </View>
           <Typography
             allowFontScaling={false}
@@ -290,6 +302,22 @@ export function RoomTransportControls({
 const localStyles = StyleSheet.create({
   noMotion: {
     opacity: 1,
+  },
+  progressLabelLeft: {
+    flex: 1,
+    fontSize: 18,
+    lineHeight: 22,
+    textAlign: 'left',
+  },
+  progressLabelRight: {
+    flex: 1,
+    fontSize: 18,
+    lineHeight: 22,
+    textAlign: 'right',
+  },
+  progressLabelsRow: {
+    alignItems: 'center',
+    columnGap: 10,
   },
   pressedFeedback: {
     opacity: interaction.subtlePressOpacity,

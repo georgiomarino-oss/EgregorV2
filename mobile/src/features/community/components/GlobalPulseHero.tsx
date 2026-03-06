@@ -67,7 +67,7 @@ export function GlobalPulseHero({ liveEvents, strongestLiveEventTitle }: GlobalP
 
         <View style={styles.topRow}>
           <View style={styles.liveBadge}>
-            <LiveLogo size={18} />
+            <LiveLogo context="community" size={18} />
             <Typography
               allowFontScaling={false}
               color={communitySurface.hero.badgeText}

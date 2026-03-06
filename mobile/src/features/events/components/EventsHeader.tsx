@@ -89,7 +89,7 @@ export function EventsHeader({
       <View style={styles.heroPanel}>
         <View style={styles.headerTopRow}>
           <View style={styles.liveBadge}>
-            <LiveLogo size={18} />
+            <LiveLogo context="events" size={18} />
             <Typography
               allowFontScaling={false}
               color={eventsSurface.hero.accent}

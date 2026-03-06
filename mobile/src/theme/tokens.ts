@@ -193,6 +193,7 @@ export const handoffSurface = {
 export const crossApp = figmaV2Reference.crossApp;
 export const feedbackSurface = figmaV2Reference.crossApp.feedback;
 export const interaction = figmaV2Reference.crossApp.interaction;
+export const liveLogoPalette = figmaV2Reference.liveLogo;
 
 export const statusChipPalette = {
   danger: {
@@ -286,3 +287,4 @@ export const motion = {
 } as const;
 
 export type CollectiveEnergyLevel = keyof typeof roomAtmosphere.collective.energy;
+export type LiveLogoContext = keyof typeof liveLogoPalette;

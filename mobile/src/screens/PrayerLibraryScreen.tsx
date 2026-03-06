@@ -11,7 +11,6 @@ import { EmptyStateCard } from '../components/EmptyStateCard';
 import { InlineErrorCard } from '../components/InlineErrorCard';
 import { LoadingStateCard } from '../components/LoadingStateCard';
 import { Screen } from '../components/Screen';
-import { SurfaceCard } from '../components/SurfaceCard';
 import { Typography } from '../components/Typography';
 import { SoloHero } from '../features/solo/components/SoloHero';
 import { useReducedMotion } from '../features/rooms/hooks/useReducedMotion';
@@ -159,7 +158,7 @@ export function PrayerLibraryScreen() {
           titleColor={soloSurface.section.title}
         />
       ) : (
-        <SurfaceCard contentPadding={spacing.sm} radius="xl" style={styles.librarySectionCard}>
+        <View style={styles.librarySectionCard}>
           <View style={styles.sectionHeader}>
             <Typography
               accessibilityRole="header"
@@ -204,11 +203,7 @@ export function PrayerLibraryScreen() {
                     !reduceMotionEnabled && pressed && styles.cardPressed,
                   ]}
                 >
-                  <SurfaceCard
-                    contentPadding={spacing.sm}
-                    radius="md"
-                    style={[styles.libraryCard, selected && styles.libraryCardActive]}
-                  >
+                  <View style={[styles.libraryCard, selected && styles.libraryCardActive]}>
                     <Typography
                       allowFontScaling={false}
                       color={soloSurface.card.title}
@@ -224,15 +219,15 @@ export function PrayerLibraryScreen() {
                     >
                       {item.subtitle}
                     </Typography>
-                  </SurfaceCard>
+                  </View>
                 </Pressable>
               );
             })}
           </View>
-        </SurfaceCard>
+        </View>
       )}
 
-      <SurfaceCard contentPadding={spacing.sm} radius="xl" style={styles.actionPanel}>
+      <View style={styles.actionPanel}>
         <Typography allowFontScaling={false} color={soloSurface.section.subtitle} variant="Caption">
           {selectedItem
             ? `Ready to start: ${selectedItem.title}`
@@ -245,7 +240,7 @@ export function PrayerLibraryScreen() {
           title="Start selected prayer"
           variant="gold"
         />
-      </SurfaceCard>
+      </View>
     </Screen>
   );
 }
@@ -257,6 +252,8 @@ const styles = StyleSheet.create({
     borderRadius: radii.xl,
     borderWidth: 1,
     gap: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm,
   },
   cardPressed: {
     transform: [{ scale: 0.995 }],
@@ -273,6 +270,8 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
     borderWidth: 1,
     gap: profileRowGap,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm,
   },
   libraryCardActive: {
     backgroundColor: soloSurface.library.itemActiveBackground,
@@ -284,6 +283,8 @@ const styles = StyleSheet.create({
     borderRadius: radii.xl,
     borderWidth: 1,
     gap: profileRowGap,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm,
   },
   pressable: {
     borderRadius: radii.md,

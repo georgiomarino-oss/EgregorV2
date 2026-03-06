@@ -54,6 +54,7 @@ const surfaceRecipeMap = {
   profileRow: figmaV2Reference.surfaces.profileRow,
   welcomeMain: figmaV2Reference.surfaces.welcomeMainCard,
 } as const;
+const SURFACE_BORDER_SOFTEN_FACTOR = 0.9;
 
 type SurfaceRecipe = (typeof surfaceRecipeMap)[keyof typeof surfaceRecipeMap];
 
@@ -276,7 +277,7 @@ export function SurfaceCard({
         {
           borderColor: recipe.borderColor,
           borderRadius: radiusMap[radius],
-          borderWidth: recipe.borderWidth ?? 0.8,
+          borderWidth: (recipe.borderWidth ?? 0.8) * SURFACE_BORDER_SOFTEN_FACTOR,
           ...recipeSize,
           ...resolvedPadding,
         },
