@@ -11,7 +11,6 @@ import type { EventsStackParamList } from '../app/navigation/types';
 import { InlineErrorCard } from '../components/InlineErrorCard';
 import { LiveLogo } from '../components/LiveLogo';
 import { Screen } from '../components/Screen';
-import { SurfaceCard } from '../components/SurfaceCard';
 import { Typography } from '../components/Typography';
 import {
   fetchEventById,
@@ -953,35 +952,42 @@ export function EventRoomScreen() {
               </Pressable>
 
               {isVoiceMenuOpen ? (
-                <SurfaceCard radius="md" style={styles.dropdownMenu}>
-                  {VOICE_OPTIONS.map((voice) => (
-                    <Pressable
-                      accessibilityLabel={voice}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected: selectedVoice === voice }}
-                      key={voice}
-                      onPress={(event) => {
-                        event.stopPropagation();
-                        setSelectedVoice(voice);
-                        setIsVoiceMenuOpen(false);
-                      }}
-                      style={({ pressed }) => [
-                        styles.dropdownOption,
-                        selectedVoice === voice && styles.dropdownOptionActive,
-                        !reduceMotionEnabled && pressed && styles.dropdownOptionPressed,
-                      ]}
-                    >
-                      <Typography
-                        allowFontScaling={false}
-                        color={colors.textPrimary}
-                        variant="Body"
-                        weight="bold"
+                <View style={styles.dropdownMenu}>
+                  {VOICE_OPTIONS.map((voice) => {
+                    const isSelected = selectedVoice === voice;
+                    return (
+                      <Pressable
+                        accessibilityLabel={voice}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: isSelected }}
+                        key={voice}
+                        onPress={(event) => {
+                          event.stopPropagation();
+                          setSelectedVoice(voice);
+                          setIsVoiceMenuOpen(false);
+                        }}
+                        style={({ pressed }) => [
+                          styles.dropdownOption,
+                          isSelected && styles.dropdownOptionActive,
+                          !reduceMotionEnabled && pressed && styles.dropdownOptionPressed,
+                        ]}
                       >
-                        {voice}
-                      </Typography>
-                    </Pressable>
-                  ))}
-                </SurfaceCard>
+                        <Typography
+                          allowFontScaling={false}
+                          color={
+                            isSelected
+                              ? roomAtmosphere.collective.transportFill
+                              : colors.textPrimary
+                          }
+                          variant="Body"
+                          weight="bold"
+                        >
+                          {voice}
+                        </Typography>
+                      </Pressable>
+                    );
+                  })}
+                </View>
               ) : null}
             </View>
 
@@ -1286,40 +1292,44 @@ const styles = StyleSheet.create({
   centerHaloInner: {
     backgroundColor: roomAtmosphere.collective.auraInner,
     borderRadius: radii.pill,
-    bottom: 20,
-    left: 20,
-    opacity: 0.42,
+    height: '72%',
+    left: '6%',
+    opacity: 0.3,
     position: 'absolute',
-    right: 20,
-    top: 20,
+    top: '18%',
+    transform: [{ scaleX: 1.16 }, { scaleY: 0.82 }, { translateY: 3 }],
+    width: '88%',
   },
   centerHaloInnerCompact: {
-    bottom: 16,
-    left: 16,
-    right: 16,
-    top: 16,
+    height: '68%',
+    left: '7%',
+    opacity: 0.28,
+    top: '20%',
+    width: '86%',
   },
   centerHaloInnerVeryCompact: {
-    bottom: 14,
-    left: 14,
-    right: 14,
-    top: 14,
+    height: '64%',
+    left: '8%',
+    opacity: 0.26,
+    top: '22%',
+    width: '84%',
   },
   centerHaloOuter: {
     backgroundColor: roomAtmosphere.collective.auraOuter,
     borderRadius: radii.pill,
-    bottom: 0,
-    left: 0,
-    opacity: 0.58,
+    height: '112%',
+    left: '-13%',
+    opacity: 0.34,
     position: 'absolute',
-    right: 0,
-    top: 0,
+    top: '-8%',
+    transform: [{ scaleX: 1.08 }, { scaleY: 0.88 }],
+    width: '126%',
   },
   centerHaloOuterCompact: {
-    opacity: 0.5,
+    opacity: 0.3,
   },
   centerHaloOuterVeryCompact: {
-    opacity: 0.46,
+    opacity: 0.28,
   },
   collectiveMetaRow: {
     alignItems: 'center',
@@ -1367,12 +1377,19 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   dropdownMenu: {
+    backgroundColor: roomAtmosphere.collective.panelBackground,
+    borderColor: roomAtmosphere.collective.selectorBorder,
+    borderRadius: radii.md,
+    borderWidth: 0.8,
     gap: spacing.xxs,
     marginTop: spacing.xs,
+    paddingHorizontal: spacing.xxs,
     paddingVertical: spacing.xxs / 2,
   },
   dropdownOption: {
+    borderColor: 'transparent',
     borderRadius: radii.sm,
+    borderWidth: 0.7,
     minHeight: 30,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xxs,
@@ -1466,10 +1483,18 @@ const styles = StyleSheet.create({
     width: 20,
   },
   inviteMenu: {
+    backgroundColor: roomAtmosphere.collective.panelBackground,
+    borderColor: roomAtmosphere.collective.selectorBorder,
+    borderRadius: radii.md,
+    borderWidth: 0.8,
     gap: spacing.xxs,
+    paddingHorizontal: spacing.xxs,
+    paddingVertical: spacing.xxs / 2,
   },
   inviteOption: {
+    borderColor: 'transparent',
     borderRadius: radii.sm,
+    borderWidth: 0.7,
     minHeight: 30,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xxs,
@@ -1516,8 +1541,8 @@ const styles = StyleSheet.create({
   },
   playButtonCore: {
     alignItems: 'center',
-    backgroundColor: roomAtmosphere.collective.selectorBackground,
-    borderColor: roomAtmosphere.collective.selectorBorder,
+    backgroundColor: roomAtmosphere.collective.panelBackground,
+    borderColor: roomAtmosphere.collective.panelBorder,
     borderRadius: radii.pill,
     borderWidth: 0.7,
     height: 84,

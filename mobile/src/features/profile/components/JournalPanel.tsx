@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 
 import { SectionHeader } from '../../../components/SectionHeader';
 import { Typography } from '../../../components/Typography';
@@ -190,6 +191,12 @@ export function JournalPanel({
 
   return (
     <Animated.View style={[styles.shell, settleStyle]}>
+      <LinearGradient
+        colors={[profileSurface.journal.shellGradientFrom, profileSurface.journal.shellGradientTo]}
+        end={{ x: 1, y: 1 }}
+        start={{ x: 0, y: 0 }}
+        style={StyleSheet.absoluteFill}
+      />
       <View pointerEvents="none" style={styles.shellGlow} />
 
       <SectionHeader
@@ -319,6 +326,20 @@ export function JournalPanel({
         style={[styles.page, { transform: [{ translateX: pageTurnOffset }] }]}
         {...pagePanHandlers}
       >
+        <LinearGradient
+          colors={[profileSurface.journal.pageGradientFrom, profileSurface.journal.pageGradientTo]}
+          end={{ x: 1, y: 1 }}
+          start={{ x: 0, y: 0 }}
+          style={StyleSheet.absoluteFill}
+        />
+        <View
+          accessible={false}
+          importantForAccessibility="no-hide-descendants"
+          pointerEvents="none"
+          style={styles.pageGutter}
+        >
+          <View style={styles.pageGutterEdge} />
+        </View>
         <View
           accessible={false}
           importantForAccessibility="no-hide-descendants"
@@ -420,7 +441,7 @@ const styles = StyleSheet.create({
   },
   historyCard: {
     borderRadius: radii.md,
-    borderWidth: 1,
+    borderWidth: 0.8,
     gap: spacing.xxs,
     minHeight: 72,
     paddingHorizontal: spacing.sm,
@@ -454,18 +475,19 @@ const styles = StyleSheet.create({
     backgroundColor: profileSurface.journal.historyShellBackground,
     borderColor: profileSurface.journal.historyShellBorder,
     borderRadius: radii.md,
-    borderWidth: 1,
+    borderWidth: 0.8,
     paddingHorizontal: spacing.xs,
     paddingVertical: spacing.xs,
   },
   input: {
-    color: profileSurface.journal.title,
+    color: profileSurface.journal.pageText,
     flex: 1,
-    fontSize: 14,
-    lineHeight: 21,
-    paddingBottom: spacing.sm,
-    paddingHorizontal: spacing.sm,
-    paddingTop: spacing.sm,
+    fontSize: 15,
+    lineHeight: 24,
+    paddingBottom: spacing.md,
+    paddingLeft: spacing.lg,
+    paddingRight: spacing.md,
+    paddingTop: spacing.md,
   },
   navButton: {
     alignItems: 'center',
@@ -509,8 +531,8 @@ const styles = StyleSheet.create({
     backgroundColor: profileSurface.journal.pageBackground,
     borderColor: profileSurface.journal.pageBorder,
     borderRadius: radii.md,
-    borderWidth: 1,
-    minHeight: 208,
+    borderWidth: 0.8,
+    minHeight: 224,
     overflow: 'hidden',
     position: 'relative',
   },
@@ -518,25 +540,44 @@ const styles = StyleSheet.create({
     backgroundColor: profileSurface.journal.pageCurlBackground,
     borderBottomLeftRadius: radii.md,
     borderColor: profileSurface.journal.pageCurlBorder,
-    borderLeftWidth: 1,
-    borderTopWidth: 1,
+    borderLeftWidth: 0.8,
+    borderTopWidth: 0.8,
     height: 24,
     position: 'absolute',
     right: 0,
     top: 0,
     width: 24,
   },
+  pageGutter: {
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+    left: 0,
+    paddingVertical: spacing.md,
+    position: 'absolute',
+    top: 0,
+    width: 24,
+    bottom: 0,
+  },
+  pageGutterEdge: {
+    backgroundColor: profileSurface.journal.pageGutterBackground,
+    borderColor: profileSurface.journal.pageGutterBorder,
+    borderRadius: radii.pill,
+    borderWidth: 0.8,
+    height: '100%',
+    marginLeft: spacing.xxs,
+    width: 6,
+  },
   pageLine: {
     borderBottomColor: profileSurface.journal.pageLine,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    height: 28,
+    height: 30,
   },
   pageLinesOverlay: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'space-evenly',
-    opacity: 0.4,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.sm,
+    opacity: 0.28,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
   },
   saveStatePill: {
     alignSelf: 'flex-start',
@@ -569,7 +610,7 @@ const styles = StyleSheet.create({
     backgroundColor: profileSurface.journal.shellBackground,
     borderColor: profileSurface.journal.shellBorder,
     borderRadius: radii.xl,
-    borderWidth: 1,
+    borderWidth: 0.8,
     gap: spacing.sm,
     overflow: 'hidden',
     paddingHorizontal: spacing.sm,

@@ -23,7 +23,7 @@ export function CollectiveEnergyField({ energyLevel, isLive }: CollectiveEnergyF
   const preset = roomAtmosphere.collective.energy[energyLevel];
   const liveIntensity =
     energyLevel === 'high' ? motion.amplitude.pronounced : motion.amplitude.medium;
-  const mistOpacity = isLive ? 1 : 0.36;
+  const mistOpacity = isLive ? 0.92 : 0.2;
 
   useEffect(() => {
     if (!isLive || reduceMotionEnabled) {
@@ -102,7 +102,7 @@ export function CollectiveEnergyField({ energyLevel, isLive }: CollectiveEnergyF
   }, [depthShift, isLive, preset, primaryPulse, reduceMotionEnabled, secondaryPulse]);
 
   const primaryOpacity = !isLive
-    ? preset.fieldOpacity * 0.14
+    ? preset.fieldOpacity * 0.09
     : reduceMotionEnabled
       ? preset.fieldOpacity * 0.7
       : primaryPulse.interpolate({
@@ -120,7 +120,7 @@ export function CollectiveEnergyField({ energyLevel, isLive }: CollectiveEnergyF
         });
 
   const secondaryOpacity = !isLive
-    ? preset.fieldOpacity * 0.1
+    ? preset.fieldOpacity * 0.06
     : reduceMotionEnabled
       ? preset.fieldOpacity * 0.48
       : secondaryPulse.interpolate({
@@ -138,7 +138,7 @@ export function CollectiveEnergyField({ energyLevel, isLive }: CollectiveEnergyF
         });
 
   const depthOpacity = !isLive
-    ? preset.fieldOpacity * 0.08
+    ? preset.fieldOpacity * 0.05
     : reduceMotionEnabled
       ? preset.fieldOpacity * 0.34
       : depthShift.interpolate({
@@ -181,7 +181,7 @@ export function CollectiveEnergyField({ energyLevel, isLive }: CollectiveEnergyF
             <RadialGradient
               cx="0"
               cy="0"
-              gradientTransform="translate(500 500) rotate(90) scale(325)"
+              gradientTransform="translate(488 512) rotate(90) scale(352)"
               gradientUnits="userSpaceOnUse"
               id="collective-energy-core"
               r="1"
@@ -221,7 +221,7 @@ export function CollectiveEnergyField({ energyLevel, isLive }: CollectiveEnergyF
             <RadialGradient
               cx="0"
               cy="0"
-              gradientTransform="translate(500 500) rotate(90) scale(410)"
+              gradientTransform="translate(518 488) rotate(90) scale(446)"
               gradientUnits="userSpaceOnUse"
               id="collective-energy-halo"
               r="1"
@@ -252,7 +252,7 @@ export function CollectiveEnergyField({ energyLevel, isLive }: CollectiveEnergyF
             <RadialGradient
               cx="0"
               cy="0"
-              gradientTransform="translate(500 500) rotate(90) scale(460)"
+              gradientTransform="translate(496 504) rotate(90) scale(520)"
               gradientUnits="userSpaceOnUse"
               id="collective-energy-depth"
               r="1"

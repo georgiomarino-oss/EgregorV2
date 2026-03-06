@@ -11,7 +11,6 @@ import type { SoloStackParamList } from '../app/navigation/types';
 import { InlineErrorCard } from '../components/InlineErrorCard';
 import { LiveLogo } from '../components/LiveLogo';
 import { Screen } from '../components/Screen';
-import { SurfaceCard } from '../components/SurfaceCard';
 import { Typography } from '../components/Typography';
 import {
   fetchPrayerScriptVariantByTitle,
@@ -695,35 +694,40 @@ export function SoloLiveScreen() {
               </Pressable>
 
               {isVoiceMenuOpen ? (
-                <SurfaceCard radius="md" style={styles.dropdownMenu}>
-                  {VOICE_OPTIONS.map((voice) => (
-                    <Pressable
-                      accessibilityLabel={voice}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected: selectedVoice === voice }}
-                      key={voice}
-                      onPress={(event) => {
-                        event.stopPropagation();
-                        setSelectedVoice(voice);
-                        setIsVoiceMenuOpen(false);
-                      }}
-                      style={({ pressed }) => [
-                        styles.dropdownOption,
-                        selectedVoice === voice && styles.dropdownOptionActive,
-                        !reduceMotionEnabled && pressed && styles.dropdownOptionPressed,
-                      ]}
-                    >
-                      <Typography
-                        allowFontScaling={false}
-                        color={colors.textPrimary}
-                        variant="Body"
-                        weight="bold"
+                <View style={styles.dropdownMenu}>
+                  {VOICE_OPTIONS.map((voice) => {
+                    const isSelected = selectedVoice === voice;
+                    return (
+                      <Pressable
+                        accessibilityLabel={voice}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: isSelected }}
+                        key={voice}
+                        onPress={(event) => {
+                          event.stopPropagation();
+                          setSelectedVoice(voice);
+                          setIsVoiceMenuOpen(false);
+                        }}
+                        style={({ pressed }) => [
+                          styles.dropdownOption,
+                          isSelected && styles.dropdownOptionActive,
+                          !reduceMotionEnabled && pressed && styles.dropdownOptionPressed,
+                        ]}
                       >
-                        {voice}
-                      </Typography>
-                    </Pressable>
-                  ))}
-                </SurfaceCard>
+                        <Typography
+                          allowFontScaling={false}
+                          color={
+                            isSelected ? roomAtmosphere.solo.transportFill : colors.textPrimary
+                          }
+                          variant="Body"
+                          weight="bold"
+                        >
+                          {voice}
+                        </Typography>
+                      </Pressable>
+                    );
+                  })}
+                </View>
               ) : null}
             </View>
 
@@ -769,35 +773,40 @@ export function SoloLiveScreen() {
               </Pressable>
 
               {isMinuteMenuOpen ? (
-                <SurfaceCard radius="md" style={styles.dropdownMenu}>
-                  {MINUTE_OPTIONS.map((minutes) => (
-                    <Pressable
-                      accessibilityLabel={`${minutes} minutes`}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected: selectedMinutes === minutes }}
-                      key={minutes}
-                      onPress={(event) => {
-                        event.stopPropagation();
-                        setSelectedMinutes(minutes);
-                        setIsMinuteMenuOpen(false);
-                      }}
-                      style={({ pressed }) => [
-                        styles.dropdownOption,
-                        selectedMinutes === minutes && styles.dropdownOptionActive,
-                        !reduceMotionEnabled && pressed && styles.dropdownOptionPressed,
-                      ]}
-                    >
-                      <Typography
-                        allowFontScaling={false}
-                        color={colors.textPrimary}
-                        variant="Body"
-                        weight="bold"
+                <View style={styles.dropdownMenu}>
+                  {MINUTE_OPTIONS.map((minutes) => {
+                    const isSelected = selectedMinutes === minutes;
+                    return (
+                      <Pressable
+                        accessibilityLabel={`${minutes} minutes`}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: isSelected }}
+                        key={minutes}
+                        onPress={(event) => {
+                          event.stopPropagation();
+                          setSelectedMinutes(minutes);
+                          setIsMinuteMenuOpen(false);
+                        }}
+                        style={({ pressed }) => [
+                          styles.dropdownOption,
+                          isSelected && styles.dropdownOptionActive,
+                          !reduceMotionEnabled && pressed && styles.dropdownOptionPressed,
+                        ]}
                       >
-                        {`${minutes} min`}
-                      </Typography>
-                    </Pressable>
-                  ))}
-                </SurfaceCard>
+                        <Typography
+                          allowFontScaling={false}
+                          color={
+                            isSelected ? roomAtmosphere.solo.transportFill : colors.textPrimary
+                          }
+                          variant="Body"
+                          weight="bold"
+                        >
+                          {`${minutes} min`}
+                        </Typography>
+                      </Pressable>
+                    );
+                  })}
+                </View>
               ) : null}
             </View>
           </View>
@@ -1116,12 +1125,19 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   dropdownMenu: {
+    backgroundColor: roomAtmosphere.solo.panelBackground,
+    borderColor: roomAtmosphere.solo.selectorBorder,
+    borderRadius: radii.md,
+    borderWidth: 0.8,
     gap: spacing.xxs,
     marginTop: spacing.xs,
+    paddingHorizontal: spacing.xxs,
     paddingVertical: spacing.xxs / 2,
   },
   dropdownOption: {
+    borderColor: 'transparent',
     borderRadius: radii.sm,
+    borderWidth: 0.7,
     minHeight: 30,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xxs,
@@ -1204,10 +1220,18 @@ const styles = StyleSheet.create({
     width: 20,
   },
   inviteMenu: {
+    backgroundColor: roomAtmosphere.solo.panelBackground,
+    borderColor: roomAtmosphere.solo.selectorBorder,
+    borderRadius: radii.md,
+    borderWidth: 0.8,
     gap: spacing.xxs,
+    paddingHorizontal: spacing.xxs,
+    paddingVertical: spacing.xxs / 2,
   },
   inviteOption: {
+    borderColor: 'transparent',
     borderRadius: radii.sm,
+    borderWidth: 0.7,
     minHeight: 30,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xxs,

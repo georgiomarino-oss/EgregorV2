@@ -12,9 +12,8 @@ import {
 
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
-import { SurfaceCard } from '../../../components/SurfaceCard';
 import { Typography } from '../../../components/Typography';
-import { colors, interaction, motion } from '../../../theme/tokens';
+import { colors, interaction, motion, radii, spacing } from '../../../theme/tokens';
 import { useReducedMotion } from '../../rooms/hooks/useReducedMotion';
 
 interface RoomTransportControlsStyles {
@@ -189,7 +188,7 @@ export function RoomTransportControls({
       </View>
 
       {isInviteOpen ? (
-        <SurfaceCard radius="md" style={styles?.inviteMenu}>
+        <View style={[localStyles.inviteMenuShell, styles?.inviteMenu]}>
           {inviteOptions.map((option) => (
             <Pressable
               accessibilityLabel={option}
@@ -209,7 +208,7 @@ export function RoomTransportControls({
               </Typography>
             </Pressable>
           ))}
-        </SurfaceCard>
+        </View>
       ) : null}
 
       <View style={styles?.bottomActionsRow}>
@@ -302,6 +301,15 @@ export function RoomTransportControls({
 const localStyles = StyleSheet.create({
   noMotion: {
     opacity: 1,
+  },
+  inviteMenuShell: {
+    backgroundColor: colors.surface,
+    borderColor: colors.borderSoft,
+    borderRadius: radii.md,
+    borderWidth: 0.7,
+    gap: spacing.xxs,
+    paddingHorizontal: spacing.xxs,
+    paddingVertical: spacing.xxs / 2,
   },
   progressLabelLeft: {
     flex: 1,
