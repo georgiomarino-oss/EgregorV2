@@ -172,7 +172,43 @@ Use this checklist for manual iOS + Android smoke QA before commit/release.
 - Highest-risk interaction:
   - Full navigation pass using screen reader + reduced motion enabled.
 
+## 15) Shared Solo final device QA (deep links + sync hardening)
+- Device matrix:
+  - Run all checks on at least one iOS + one Android physical device.
+  - Execute once with `Host=iOS / Participant=Android`, then swap (`Host=Android / Participant=iOS`).
+- Preconditions:
+  - Two authenticated test users that are members of the same prayer circle.
+  - Optional third authenticated non-member user.
+  - Host can enter `SoloLive` with script + audio loaded.
+- Deep-link coverage:
+  - Verify cold-start link open: app closed -> open `egregorv2://solo/live?...&sharedSessionId=<id>` -> lands in Solo Live shared session.
+  - Verify warm-start link open: app in background -> open same link -> active app resolves to same shared session.
+  - Verify post-auth capture: signed out user opens invite link -> completes auth -> lands in target shared session.
+  - Verify invalid link handling: missing/blank `sharedSessionId` does not enter shared session.
+  - Platform watch:
+    - Link handoff behavior from Messages/WhatsApp/browser differs on iOS vs Android.
+- Shared sync coverage:
+  - Verify participant playback follows host (`play`, `pause`, `seek`, completion), with participant controls blocked.
+  - Verify participant drift correction after host seek (participant snaps back to host timeline).
+  - Verify join count updates on both devices when participant joins/leaves.
+  - Verify host gets join notice (`Someone joined your prayer.` / `More people joined your prayer.`).
+- Background/resume coverage:
+  - Host path: while shared session active, background app for ~20-40s, resume, verify state still authoritative for participants.
+  - Participant path: background app for ~20-40s, resume, verify rejoin/presence refresh and playback resync.
+  - Network flap: briefly toggle airplane mode during active session, restore network, verify snapshot/presence recovery.
+- Host end cleanup coverage:
+  - End by completion: host reaches session end -> participant sees playback stop and session end state.
+  - End by exit: host taps close/exit early -> participant session ends and controls no longer attempt live sync.
+  - Re-entry check: previously joined participant cannot continue reading live session state after host end unless rejoined to a new active session.
+- Non-member / access control coverage:
+  - Non-member authenticated user opens invite link for an active shared session.
+  - Verify user cannot read/join session state unless they become an active participant (RLS scope).
+  - Verify leaving a shared session revokes further read visibility for that user until rejoin.
+- Highest-risk interaction:
+  - Host starts shared solo -> shares deep link -> participant joins mid-playback -> both background/resume -> host ends -> non-member attempts access.
+
 ## Exit criteria
 - All high-risk interactions above pass on at least one iOS and one Android device.
 - No route/param regressions observed.
 - No blocker in room entry, playback, event join, circle actions, or journal autosave.
+- Shared-solo final matrix (section 15) passes on both host/participant platform permutations.
