@@ -41,7 +41,9 @@ const styles = StyleSheet.create({
     backgroundColor: soloSurface.section.panelBackground,
     borderColor: soloSurface.section.panelBorder,
     borderRadius: radii.xl,
-    borderWidth: 1,
+    borderWidth: 0.8,
     gap: spacing.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm,
   },
 });

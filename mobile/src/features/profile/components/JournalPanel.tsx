@@ -3,6 +3,7 @@ import {
   Animated,
   Easing,
   Pressable,
+  ScrollView,
   StyleSheet,
   TextInput,
   View,
@@ -11,33 +12,86 @@ import {
 
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
+import { SectionHeader } from '../../../components/SectionHeader';
 import { Typography } from '../../../components/Typography';
 import { interaction, motion, profileSurface, radii, spacing } from '../../../theme/tokens';
 import { useReducedMotion } from '../../rooms/hooks/useReducedMotion';
 
+interface JournalEntryPreview {
+  contentPreview: string;
+  createdAt: string | null;
+  isPersisted: boolean;
+  localId: string;
+  pageNumber: number;
+  updatedAt: string | null;
+}
+
 interface JournalPanelProps {
+  activeEntryLocalId: string | null;
+  canCreateNewEntry: boolean;
   canGoPreviousPage: boolean;
   currentPageNumber: number;
+  entries: JournalEntryPreview[];
   isSavingCurrentPage: boolean;
+  onCreateEntry: () => void;
   onChangeText: (value: string) => void;
   onNextPage: () => void;
   onPreviousPage: () => void;
+  onSelectEntry: (localId: string) => void;
   pageContent: string;
   pagePanHandlers: PanResponderInstance['panHandlers'];
   pageTurnOffset: Animated.Value;
+  saveStateLabel: string;
+  saveStateTone: 'saved' | 'saving' | 'unsaved';
   totalPages: number;
 }
 
+function formatEntryDateLabel(input: string | null) {
+  if (!input) {
+    return 'Draft';
+  }
+
+  const value = new Date(input);
+  if (Number.isNaN(value.getTime())) {
+    return 'Entry';
+  }
+
+  return value.toLocaleDateString(undefined, {
+    day: 'numeric',
+    month: 'short',
+  });
+}
+
+function toPreviewText(value: string) {
+  const compact = value.replace(/\s+/g, ' ').trim();
+  if (!compact) {
+    return 'Start writing your reflection...';
+  }
+
+  if (compact.length <= 72) {
+    return compact;
+  }
+
+  return `${compact.slice(0, 72).trim()}...`;
+}
+
 export function JournalPanel({
+  activeEntryLocalId,
+  canCreateNewEntry,
   canGoPreviousPage,
   currentPageNumber,
+  entries,
   isSavingCurrentPage,
+  onCreateEntry,
   onChangeText,
   onNextPage,
   onPreviousPage,
+  onSelectEntry,
   pageContent,
   pagePanHandlers,
   pageTurnOffset,
+  saveStateLabel,
+  saveStateTone,
   totalPages,
 }: JournalPanelProps) {
   const reduceMotionEnabled = useReducedMotion();
@@ -115,11 +169,11 @@ export function JournalPanel({
     : {
         opacity: savePulse.interpolate({
           inputRange: [0, 1],
-          outputRange: [0.8, 1],
+          outputRange: [0.75, 1],
         }),
         transform: [
           {
-            scale: savePulse.interpolate({
+            scaleX: savePulse.interpolate({
               inputRange: [0, 1],
               outputRange: [1, 1 + motion.amplitude.subtle],
             }),
@@ -127,34 +181,138 @@ export function JournalPanel({
         ],
       };
 
+  const saveStateBadgeStyle =
+    saveStateTone === 'unsaved'
+      ? styles.saveStateUnsaved
+      : saveStateTone === 'saving'
+        ? styles.saveStateSaving
+        : styles.saveStateSaved;
+
   return (
     <Animated.View style={[styles.shell, settleStyle]}>
       <View pointerEvents="none" style={styles.shellGlow} />
 
-      <View style={styles.header}>
-        <View style={styles.titleWrap}>
+      <SectionHeader
+        leading={
           <MaterialCommunityIcons
             color={profileSurface.journal.title}
             name="notebook-outline"
             size={18}
           />
-          <Typography
-            allowFontScaling={false}
-            color={profileSurface.journal.title}
-            variant="H2"
-            weight="bold"
-          >
-            Journal
-          </Typography>
-        </View>
+        }
+        subtitle="Capture the moment and revisit previous reflections."
+        subtitleColor={profileSurface.journal.hintText}
+        title="Journal"
+        titleColor={profileSurface.journal.title}
+        trailing={
+          <View style={[styles.saveStatePill, saveStateBadgeStyle]}>
+            <Typography
+              allowFontScaling={false}
+              color={
+                saveStateTone === 'unsaved'
+                  ? profileSurface.journal.saveUnsavedText
+                  : profileSurface.journal.saveActiveText
+              }
+              variant="Caption"
+              weight="bold"
+            >
+              {saveStateLabel}
+            </Typography>
+          </View>
+        }
+      />
+
+      <View style={styles.entryMetaRow}>
         <Typography
           allowFontScaling={false}
           color={profileSurface.journal.pageMeta}
           variant="Caption"
           weight="bold"
         >
-          {`Page ${currentPageNumber} of ${totalPages}`}
+          {`Entry ${currentPageNumber} of ${totalPages}`}
         </Typography>
+        <Pressable
+          accessibilityHint="Creates a fresh journal entry and opens it."
+          accessibilityLabel="Create new journal entry"
+          accessibilityRole="button"
+          accessibilityState={{ disabled: !canCreateNewEntry }}
+          disabled={!canCreateNewEntry}
+          onPress={onCreateEntry}
+          style={({ pressed }) => [
+            styles.newEntryButton,
+            !canCreateNewEntry && styles.navButtonDisabled,
+            !reduceMotionEnabled && pressed && styles.navButtonPressed,
+          ]}
+        >
+          <MaterialCommunityIcons
+            color={profileSurface.journal.newEntryText}
+            name="plus"
+            size={14}
+          />
+          <Typography
+            allowFontScaling={false}
+            color={profileSurface.journal.newEntryText}
+            style={styles.newEntryText}
+            variant="Caption"
+            weight="bold"
+          >
+            New entry
+          </Typography>
+        </Pressable>
+      </View>
+
+      <View style={styles.historyShell}>
+        <ScrollView
+          horizontal
+          contentContainerStyle={styles.historyRail}
+          showsHorizontalScrollIndicator={false}
+        >
+          {entries.map((entry) => {
+            const isActive = entry.localId === activeEntryLocalId;
+            const isDraft = !entry.isPersisted;
+
+            return (
+              <Pressable
+                accessibilityHint="Opens this journal entry."
+                accessibilityLabel={`Journal entry ${entry.pageNumber}`}
+                accessibilityRole="button"
+                accessibilityState={{ selected: isActive }}
+                key={entry.localId}
+                onPress={() => onSelectEntry(entry.localId)}
+                style={({ pressed }) => [
+                  styles.historyCard,
+                  isActive ? styles.historyCardActive : styles.historyCardInactive,
+                  isDraft && styles.historyCardDraft,
+                  !reduceMotionEnabled && pressed && styles.historyCardPressed,
+                ]}
+              >
+                <Typography
+                  allowFontScaling={false}
+                  color={
+                    isDraft
+                      ? profileSurface.journal.historyCardDraftText
+                      : profileSurface.journal.historyCardMeta
+                  }
+                  variant="Caption"
+                  weight="bold"
+                >
+                  {isDraft
+                    ? `Draft - ${formatEntryDateLabel(entry.updatedAt)}`
+                    : formatEntryDateLabel(entry.createdAt)}
+                </Typography>
+                <Typography
+                  allowFontScaling={false}
+                  color={profileSurface.journal.historyCardPreview}
+                  numberOfLines={2}
+                  style={styles.historyPreview}
+                  variant="Caption"
+                >
+                  {toPreviewText(entry.contentPreview)}
+                </Typography>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
       </View>
 
       <Animated.View
@@ -173,8 +331,8 @@ export function JournalPanel({
         </View>
 
         <TextInput
-          accessibilityHint="Double tap to edit your current journal page."
-          accessibilityLabel={`Journal page ${currentPageNumber} of ${totalPages}`}
+          accessibilityHint="Double tap to edit your current journal entry."
+          accessibilityLabel={`Journal entry ${currentPageNumber} of ${totalPages}`}
           multiline
           onChangeText={onChangeText}
           placeholder="Write your intentions, manifestations, or reflections..."
@@ -198,12 +356,12 @@ export function JournalPanel({
           color={profileSurface.journal.hintText}
           variant="Caption"
         >
-          Swipe left for a new page, swipe right for previous reflections.
+          Swipe left or use New entry to continue. Tap any entry above to revisit.
         </Typography>
         <View style={styles.navButtons}>
           <Pressable
-            accessibilityHint="Moves to the previous journal page."
-            accessibilityLabel="Previous journal page"
+            accessibilityHint="Moves to the previous journal entry."
+            accessibilityLabel="Previous journal entry"
             accessibilityRole="button"
             accessibilityState={{ disabled: !canGoPreviousPage }}
             disabled={!canGoPreviousPage}
@@ -221,8 +379,8 @@ export function JournalPanel({
             />
           </Pressable>
           <Pressable
-            accessibilityHint="Moves to the next journal page."
-            accessibilityLabel="Next journal page"
+            accessibilityHint="Moves to the next journal entry."
+            accessibilityLabel="Next journal entry"
             accessibilityRole="button"
             onPress={onNextPage}
             style={({ pressed }) => [
@@ -240,39 +398,65 @@ export function JournalPanel({
       </View>
 
       {isSavingCurrentPage ? (
-        <Animated.View accessibilityLiveRegion="polite" style={[styles.savePill, savePulseStyle]}>
-          <Typography
-            allowFontScaling={false}
-            color={profileSurface.journal.saveActiveText}
-            variant="Caption"
-            weight="bold"
-          >
-            Saving page...
-          </Typography>
-        </Animated.View>
-      ) : (
-        <Typography
-          allowFontScaling={false}
-          color={profileSurface.journal.saveIdleText}
-          variant="Caption"
-        >
-          All changes saved
-        </Typography>
-      )}
+        <Animated.View
+          accessibilityLiveRegion="polite"
+          style={[styles.savingPulse, savePulseStyle]}
+        />
+      ) : null}
     </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
+  entryMetaRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
   footer: {
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
-  header: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  historyCard: {
+    borderRadius: radii.md,
+    borderWidth: 1,
+    gap: spacing.xxs,
+    minHeight: 72,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    width: 172,
+  },
+  historyCardActive: {
+    backgroundColor: profileSurface.journal.historyCardActiveBackground,
+    borderColor: profileSurface.journal.historyCardActiveBorder,
+  },
+  historyCardDraft: {
+    backgroundColor: profileSurface.journal.historyCardDraftBackground,
+    borderColor: profileSurface.journal.historyCardDraftBorder,
+  },
+  historyCardInactive: {
+    backgroundColor: profileSurface.journal.historyCardBackground,
+    borderColor: profileSurface.journal.historyCardBorder,
+  },
+  historyCardPressed: {
+    opacity: interaction.card.pressedOpacity,
+    transform: [{ scale: interaction.card.pressedScale }],
+  },
+  historyPreview: {
+    lineHeight: 16,
+  },
+  historyRail: {
+    gap: spacing.xs,
+    paddingRight: spacing.xs,
+  },
+  historyShell: {
+    backgroundColor: profileSurface.journal.historyShellBackground,
+    borderColor: profileSurface.journal.historyShellBorder,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    paddingHorizontal: spacing.xs,
+    paddingVertical: spacing.xs,
   },
   input: {
     color: profileSurface.journal.title,
@@ -302,6 +486,21 @@ const styles = StyleSheet.create({
   navButtons: {
     flexDirection: 'row',
     gap: spacing.xs,
+  },
+  newEntryButton: {
+    alignItems: 'center',
+    backgroundColor: profileSurface.journal.newEntryBackground,
+    borderColor: profileSurface.journal.newEntryBorder,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: spacing.xxs,
+    minHeight: 30,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xxs,
+  },
+  newEntryText: {
+    textTransform: 'none',
   },
   noMotion: {
     opacity: 1,
@@ -339,14 +538,32 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.sm,
   },
-  savePill: {
+  saveStatePill: {
     alignSelf: 'flex-start',
-    backgroundColor: profileSurface.journal.saveActiveBackground,
-    borderColor: profileSurface.journal.saveActiveBorder,
     borderRadius: radii.pill,
     borderWidth: 1,
     paddingHorizontal: spacing.sm,
     paddingVertical: 3,
+  },
+  saveStateSaved: {
+    backgroundColor: profileSurface.journal.saveActiveBackground,
+    borderColor: profileSurface.journal.saveActiveBorder,
+  },
+  saveStateSaving: {
+    backgroundColor: profileSurface.journal.saveActiveBackground,
+    borderColor: profileSurface.journal.saveActiveBorder,
+  },
+  saveStateUnsaved: {
+    backgroundColor: profileSurface.journal.saveUnsavedBackground,
+    borderColor: profileSurface.journal.saveUnsavedBorder,
+  },
+  savingPulse: {
+    backgroundColor: profileSurface.journal.saveActiveBackground,
+    borderColor: profileSurface.journal.saveActiveBorder,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    height: 2,
+    width: 90,
   },
   shell: {
     backgroundColor: profileSurface.journal.shellBackground,
@@ -362,10 +579,5 @@ const styles = StyleSheet.create({
   shellGlow: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: profileSurface.journal.shellGlow,
-  },
-  titleWrap: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: spacing.xs,
   },
 });

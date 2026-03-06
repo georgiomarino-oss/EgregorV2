@@ -214,7 +214,6 @@ export function EventRoomScreen() {
   const isCompactHeight = viewportHeight <= 780;
   const isNarrowWidth = viewportWidth <= 360;
   const useCompactLayout = isCompactHeight || isNarrowWidth;
-  const showCenterStatusHint = !useCompactLayout;
 
   const closeAllSelectors = useCallback(() => {
     setIsVoiceMenuOpen(false);
@@ -792,7 +791,10 @@ export function EventRoomScreen() {
           isVeryCompactHeight && styles.containerVeryCompact,
         ]}
       >
-        <CollectiveEnergyField energyLevel={collectiveEnergyLevel} isLive={isCollectiveRoomLive} />
+        <CollectiveEnergyField
+          energyLevel={collectiveEnergyLevel}
+          isLive={isCollectiveRoomLive && isRunning}
+        />
 
         <View
           style={[
@@ -926,7 +928,7 @@ export function EventRoomScreen() {
                     isVeryCompactHeight && styles.voiceAvatarVeryCompact,
                   ]}
                 >
-                  <MaterialCommunityIcons color={colors.textPrimary} name="account" size={13} />
+                  <MaterialCommunityIcons color={colors.textPrimary} name="account" size={12} />
                 </View>
                 <Typography
                   adjustsFontSizeToFit
@@ -946,7 +948,7 @@ export function EventRoomScreen() {
                 <MaterialCommunityIcons
                   color={colors.textSecondary}
                   name={isVoiceMenuOpen ? 'chevron-up' : 'chevron-down'}
-                  size={24}
+                  size={20}
                 />
               </Pressable>
 
@@ -1010,7 +1012,7 @@ export function EventRoomScreen() {
                 <MaterialCommunityIcons
                   color={hasStarted ? colors.success : colors.warning}
                   name={hasStarted ? 'clock-check-outline' : 'clock-outline'}
-                  size={20}
+                  size={18}
                 />
               </View>
             </View>
@@ -1079,7 +1081,7 @@ export function EventRoomScreen() {
                 <MaterialCommunityIcons
                   color={roomAtmosphere.collective.transportFill}
                   name={isRunning ? 'pause' : 'play'}
-                  size={42}
+                  size={36}
                 />
               </View>
             </Animated.View>
@@ -1131,18 +1133,6 @@ export function EventRoomScreen() {
               />
             </View>
           </Animated.View>
-
-          {showCenterStatusHint && !hasStarted ? (
-            <Typography allowFontScaling={false} color={colors.warning} variant="Caption">
-              Event begins in {startCountdownPhrase}. Audio starts automatically.
-            </Typography>
-          ) : null}
-
-          {showCenterStatusHint && hasEnded ? (
-            <Typography allowFontScaling={false} color={colors.success} variant="Caption">
-              This event has ended.
-            </Typography>
-          ) : null}
 
           {error ? (
             <InlineErrorCard
@@ -1246,18 +1236,18 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
     gap: spacing.xxs,
     justifyContent: 'center',
-    minWidth: 76,
+    minWidth: 70,
     opacity: 0.94,
     paddingHorizontal: spacing.xs,
     paddingVertical: spacing.xs,
   },
   bottomIconActionCompact: {
-    minWidth: 68,
+    minWidth: 64,
     paddingHorizontal: spacing.xxs,
     paddingVertical: 6,
   },
   bottomIconActionVeryCompact: {
-    minWidth: 62,
+    minWidth: 58,
     paddingHorizontal: spacing.xxs,
     paddingVertical: 4,
   },
@@ -1280,40 +1270,40 @@ const styles = StyleSheet.create({
   centerFocalStack: {
     alignItems: 'center',
     borderRadius: radii.pill,
-    height: 168,
+    height: 148,
     justifyContent: 'center',
     position: 'relative',
-    width: 168,
+    width: 148,
   },
   centerFocalStackCompact: {
-    height: 146,
-    width: 146,
-  },
-  centerFocalStackVeryCompact: {
     height: 130,
     width: 130,
+  },
+  centerFocalStackVeryCompact: {
+    height: 114,
+    width: 114,
   },
   centerHaloInner: {
     backgroundColor: roomAtmosphere.collective.auraInner,
     borderRadius: radii.pill,
-    bottom: 24,
-    left: 24,
-    opacity: 0.42,
-    position: 'absolute',
-    right: 24,
-    top: 24,
-  },
-  centerHaloInnerCompact: {
     bottom: 20,
     left: 20,
+    opacity: 0.42,
+    position: 'absolute',
     right: 20,
     top: 20,
   },
+  centerHaloInnerCompact: {
+    bottom: 16,
+    left: 16,
+    right: 16,
+    top: 16,
+  },
   centerHaloInnerVeryCompact: {
-    bottom: 17,
-    left: 17,
-    right: 17,
-    top: 17,
+    bottom: 14,
+    left: 14,
+    right: 14,
+    top: 14,
   },
   centerHaloOuter: {
     backgroundColor: roomAtmosphere.collective.auraOuter,
@@ -1354,16 +1344,16 @@ const styles = StyleSheet.create({
     borderWidth: 0.7,
     flexDirection: 'row',
     gap: spacing.xs,
-    minHeight: 32,
+    minHeight: 30,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xxs,
   },
   collectiveStatsChipCompact: {
-    minHeight: 30,
+    minHeight: 28,
     paddingHorizontal: spacing.xs,
   },
   collectiveStatsChipVeryCompact: {
-    minHeight: 28,
+    minHeight: 26,
     paddingHorizontal: spacing.xxs,
   },
   container: {
@@ -1447,15 +1437,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: spacing.xs,
     justifyContent: 'center',
-    minHeight: 48,
+    minHeight: 42,
     paddingHorizontal: spacing.sm,
   },
   inviteButtonCompact: {
-    minHeight: 44,
+    minHeight: 38,
     paddingHorizontal: spacing.xs,
   },
   inviteButtonVeryCompact: {
-    minHeight: 40,
+    minHeight: 36,
   },
   inviteIconCircle: {
     alignItems: 'center',
@@ -1463,17 +1453,17 @@ const styles = StyleSheet.create({
     borderColor: roomAtmosphere.collective.selectorBorder,
     borderRadius: radii.pill,
     borderWidth: 0.7,
-    height: 28,
+    height: 24,
     justifyContent: 'center',
-    width: 28,
+    width: 24,
   },
   inviteIconCircleCompact: {
-    height: 26,
-    width: 26,
+    height: 22,
+    width: 22,
   },
   inviteIconCircleVeryCompact: {
-    height: 24,
-    width: 24,
+    height: 20,
+    width: 20,
   },
   inviteMenu: {
     gap: spacing.xxs,
@@ -1485,6 +1475,8 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xxs,
   },
   inviteText: {
+    fontSize: 13,
+    lineHeight: 16,
     textTransform: 'none',
   },
   liveChip: {
@@ -1528,17 +1520,17 @@ const styles = StyleSheet.create({
     borderColor: roomAtmosphere.collective.selectorBorder,
     borderRadius: radii.pill,
     borderWidth: 0.7,
-    height: 96,
+    height: 84,
     justifyContent: 'center',
-    width: 96,
+    width: 84,
   },
   playButtonCoreCompact: {
-    height: 86,
-    width: 86,
+    height: 74,
+    width: 74,
   },
   playButtonCoreVeryCompact: {
-    height: 76,
-    width: 76,
+    height: 64,
+    width: 64,
   },
   playPulseTap: {
     alignItems: 'center',
@@ -1548,15 +1540,15 @@ const styles = StyleSheet.create({
     transform: [{ scale: 0.98 }],
   },
   prayerTitle: {
-    lineHeight: 34,
+    lineHeight: 31,
     maxWidth: '94%',
     textAlign: 'center',
   },
   prayerTitleCompact: {
-    lineHeight: 31,
+    lineHeight: 28,
   },
   prayerTitleVeryCompact: {
-    lineHeight: 28,
+    lineHeight: 25,
     maxWidth: '96%',
   },
   progressFill: {
@@ -1578,76 +1570,76 @@ const styles = StyleSheet.create({
     borderColor: roomAtmosphere.collective.selectorBorder,
     borderRadius: radii.pill,
     borderWidth: 0.7,
-    height: 16,
+    height: 14,
     overflow: 'hidden',
   },
   progressTrackCompact: {
-    height: 14,
+    height: 12,
   },
   progressTrackVeryCompact: {
-    height: 12,
+    height: 10,
   },
   screenContent: {
     flex: 1,
   },
   scriptPanelCard: {
-    backgroundColor: roomAtmosphere.collective.panelBackground,
-    borderColor: roomAtmosphere.collective.panelBorder,
+    backgroundColor: 'transparent',
+    borderColor: 'transparent',
     borderRadius: radii.xl,
-    borderWidth: 0.7,
-    minHeight: 188,
+    borderWidth: 0,
+    minHeight: 148,
     overflow: 'hidden',
     width: '100%',
   },
   scriptPanelCardCompact: {
-    minHeight: 160,
+    minHeight: 128,
   },
   scriptPanelCardVeryCompact: {
-    minHeight: 142,
+    minHeight: 114,
   },
   scriptSyncWrap: {
     alignItems: 'center',
     gap: spacing.xxs,
     justifyContent: 'flex-start',
-    maxHeight: 150,
+    maxHeight: 126,
     minHeight: 0,
     overflow: 'hidden',
     width: '100%',
   },
   scriptSyncWrapCompact: {
-    maxHeight: 126,
+    maxHeight: 110,
   },
   scriptSyncWrapVeryCompact: {
-    maxHeight: 108,
+    maxHeight: 94,
   },
   scriptTextActive: {
-    fontSize: 19,
-    lineHeight: 28,
+    fontSize: 17,
+    lineHeight: 25,
     maxWidth: '98%',
     textAlign: 'center',
   },
   scriptTextActiveCompact: {
-    fontSize: 17,
-    lineHeight: 25,
+    fontSize: 16,
+    lineHeight: 23,
   },
   scriptTextActiveVeryCompact: {
-    fontSize: 15,
-    lineHeight: 22,
+    fontSize: 14,
+    lineHeight: 20,
   },
   scriptWord: {
     color: roomAtmosphere.collective.scriptWord,
-    fontSize: 19,
+    fontSize: 17,
     letterSpacing: 0.1,
-    lineHeight: 28,
+    lineHeight: 25,
     marginRight: 2,
   },
   scriptWordCompact: {
-    fontSize: 17,
-    lineHeight: 25,
+    fontSize: 16,
+    lineHeight: 23,
   },
   scriptWordVeryCompact: {
-    fontSize: 15,
-    lineHeight: 22,
+    fontSize: 14,
+    lineHeight: 20,
   },
   scriptWordActive: {
     color: colors.textPrimary,
@@ -1661,16 +1653,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'center',
-    maxHeight: 156,
+    maxHeight: 132,
     maxWidth: '98%',
     overflow: 'hidden',
     paddingHorizontal: spacing.xs,
   },
   scriptWordFlowCompact: {
-    maxHeight: 132,
+    maxHeight: 114,
   },
   scriptWordFlowVeryCompact: {
-    maxHeight: 114,
+    maxHeight: 98,
   },
   scriptWrap: {
     alignItems: 'center',
@@ -1678,14 +1670,14 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-start',
     minHeight: 0,
     overflow: 'hidden',
-    paddingHorizontal: spacing.xs,
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.sm,
+    paddingHorizontal: spacing.sm,
+    paddingTop: spacing.xxs,
+    paddingBottom: spacing.xxs,
     width: '100%',
   },
   scriptWrapCompact: {
-    paddingBottom: spacing.xxs,
-    paddingTop: spacing.xxs,
+    paddingBottom: 2,
+    paddingTop: 2,
   },
   scriptWrapVeryCompact: {
     paddingBottom: 2,
@@ -1699,16 +1691,16 @@ const styles = StyleSheet.create({
     borderWidth: 0.7,
     flexDirection: 'row',
     gap: spacing.xs,
-    minHeight: 46,
-    paddingHorizontal: spacing.sm,
-  },
-  selectorButtonCompact: {
-    minHeight: 42,
+    minHeight: 40,
     paddingHorizontal: spacing.xs,
   },
-  selectorButtonVeryCompact: {
-    minHeight: 38,
+  selectorButtonCompact: {
+    minHeight: 36,
     paddingHorizontal: spacing.xxs,
+  },
+  selectorButtonVeryCompact: {
+    minHeight: 34,
+    paddingHorizontal: 6,
   },
   selectorContainer: {
     flex: 1,
@@ -1719,30 +1711,30 @@ const styles = StyleSheet.create({
   selectorRow: {
     flexDirection: 'row',
     gap: spacing.sm,
-    marginTop: spacing.xxs,
+    marginTop: spacing.sm,
   },
   selectorRowCompact: {
     gap: spacing.xs,
-    marginTop: 2,
+    marginTop: spacing.xs,
   },
   selectorRowVeryCompact: {
     gap: spacing.xxs,
-    marginTop: 1,
+    marginTop: spacing.xxs,
   },
   selectorValue: {
     flex: 1,
     flexShrink: 1,
-    fontSize: 16,
-    lineHeight: 18,
+    fontSize: 15,
+    lineHeight: 17,
     textTransform: 'none',
   },
   selectorValueCompact: {
-    fontSize: 15,
-    lineHeight: 17,
-  },
-  selectorValueVeryCompact: {
     fontSize: 14,
     lineHeight: 16,
+  },
+  selectorValueVeryCompact: {
+    fontSize: 13,
+    lineHeight: 15,
   },
   topActionsRow: {
     flexDirection: 'row',
@@ -1760,16 +1752,16 @@ const styles = StyleSheet.create({
     borderColor: roomAtmosphere.collective.selectorBorder,
     borderRadius: radii.pill,
     borderWidth: 0.7,
-    height: 26,
+    height: 22,
     justifyContent: 'center',
-    width: 26,
+    width: 22,
   },
   voiceAvatarCompact: {
-    height: 24,
-    width: 24,
+    height: 20,
+    width: 20,
   },
   voiceAvatarVeryCompact: {
-    height: 22,
-    width: 22,
+    height: 18,
+    width: 18,
   },
 });

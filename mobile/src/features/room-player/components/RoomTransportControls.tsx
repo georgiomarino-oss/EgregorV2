@@ -172,7 +172,7 @@ export function RoomTransportControls({
           allowFontScaling={false}
           numberOfLines={1}
           style={localStyles.progressLabelLeft}
-          variant="H2"
+          variant="Body"
           weight="bold"
         >
           {leftLabel}
@@ -181,7 +181,7 @@ export function RoomTransportControls({
           allowFontScaling={false}
           numberOfLines={1}
           style={localStyles.progressLabelRight}
-          variant="H2"
+          variant="Body"
           weight="bold"
         >
           {rightLabel}
@@ -283,7 +283,7 @@ export function RoomTransportControls({
           <Typography
             allowFontScaling={false}
             style={styles?.inviteText}
-            variant="H2"
+            variant="Body"
             weight="bold"
           >
             Invite
@@ -305,14 +305,14 @@ const localStyles = StyleSheet.create({
   },
   progressLabelLeft: {
     flex: 1,
-    fontSize: 18,
-    lineHeight: 22,
+    fontSize: 15,
+    lineHeight: 18,
     textAlign: 'left',
   },
   progressLabelRight: {
     flex: 1,
-    fontSize: 18,
-    lineHeight: 22,
+    fontSize: 15,
+    lineHeight: 18,
     textAlign: 'right',
   },
   progressLabelsRow: {

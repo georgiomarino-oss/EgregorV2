@@ -23,7 +23,6 @@ import {
 } from '../lib/api/data';
 import { prefetchPrayerAudio } from '../lib/api/functions';
 import { HOME_CARD_GAP, SCREEN_PAD_X } from '../theme/figmaV2Layout';
-import { CARD_PADDING_LG } from '../theme/layout';
 import { radii, soloSurface, spacing } from '../theme/tokens';
 
 type SoloNavigation = NativeStackNavigationProp<SoloStackParamList, 'SoloHome'>;
@@ -133,7 +132,7 @@ export function SoloScreen() {
   }, [availableCategories, selectedCategory, visibleLibrary]);
 
   const fallbackPrayerCardWidth = useMemo(() => {
-    const laneWidth = windowWidth - SCREEN_PAD_X * 2 - CARD_PADDING_LG * 2 - 2;
+    const laneWidth = windowWidth - SCREEN_PAD_X * 2 - spacing.sm * 2 - 2;
     return Math.max(200, laneWidth);
   }, [windowWidth]);
 
@@ -183,9 +182,7 @@ export function SoloScreen() {
   return (
     <Screen ambientSource={ambientAnimation} contentContainerStyle={styles.content} variant="solo">
       <SoloHero
-        actionLabel="Open full library"
         favoriteCount={favoriteCount}
-        onActionPress={() => navigation.navigate('PrayerLibrary')}
         recentCount={recentCount}
         subtitle="Choose a guided prayer and begin instantly in your private room."
         title="Your intention creates ripple effects."
@@ -333,10 +330,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: spacing.xxs,
     justifyContent: 'flex-start',
+    paddingHorizontal: spacing.xxs,
   },
   prayerRail: {
     gap: HOME_CARD_GAP,
     paddingBottom: spacing.xxs,
-    paddingRight: 0,
+    paddingRight: spacing.xxs,
   },
 });

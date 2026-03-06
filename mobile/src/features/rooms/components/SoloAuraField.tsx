@@ -17,6 +17,7 @@ export function SoloAuraField({ active = true }: SoloAuraFieldProps) {
   const reduceMotionEnabled = useReducedMotion();
   const breathe = useMemo(() => new Animated.Value(0), []);
   const drift = useMemo(() => new Animated.Value(0), []);
+  const mistOpacity = active ? 1 : 0.42;
 
   useEffect(() => {
     if (!active || reduceMotionEnabled) {
@@ -81,19 +82,23 @@ export function SoloAuraField({ active = true }: SoloAuraFieldProps) {
     };
   }, [active, breathe, drift, reduceMotionEnabled]);
 
-  const auraOpacity = reduceMotionEnabled
-    ? 0.34
-    : breathe.interpolate({
-        inputRange: [0, 1],
-        outputRange: [0.24, 0.5],
-      });
+  const auraOpacity = !active
+    ? 0.16
+    : reduceMotionEnabled
+      ? 0.34
+      : breathe.interpolate({
+          inputRange: [0, 1],
+          outputRange: [0.24, 0.5],
+        });
 
-  const auraScale = reduceMotionEnabled
+  const auraScale = !active
     ? 1.01
-    : breathe.interpolate({
-        inputRange: [0, 1],
-        outputRange: [1 - motion.amplitude.subtle, 1 + motion.amplitude.subtle * 1.5],
-      });
+    : reduceMotionEnabled
+      ? 1.01
+      : breathe.interpolate({
+          inputRange: [0, 1],
+          outputRange: [1 - motion.amplitude.subtle, 1 + motion.amplitude.subtle * 1.5],
+        });
 
   const auraTranslateY = reduceMotionEnabled
     ? 0
@@ -102,19 +107,23 @@ export function SoloAuraField({ active = true }: SoloAuraFieldProps) {
         outputRange: [1, -1.6, 1],
       });
 
-  const veilOpacity = reduceMotionEnabled
-    ? 0.22
-    : drift.interpolate({
-        inputRange: [0, 1],
-        outputRange: [0.12, 0.24],
-      });
+  const veilOpacity = !active
+    ? 0.08
+    : reduceMotionEnabled
+      ? 0.22
+      : drift.interpolate({
+          inputRange: [0, 1],
+          outputRange: [0.12, 0.24],
+        });
 
-  const innerGlowOpacity = reduceMotionEnabled
-    ? 0.28
-    : breathe.interpolate({
-        inputRange: [0, 1],
-        outputRange: [0.18, 0.34],
-      });
+  const innerGlowOpacity = !active
+    ? 0.12
+    : reduceMotionEnabled
+      ? 0.28
+      : breathe.interpolate({
+          inputRange: [0, 1],
+          outputRange: [0.18, 0.34],
+        });
 
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
@@ -122,7 +131,7 @@ export function SoloAuraField({ active = true }: SoloAuraFieldProps) {
         colors={[roomAtmosphere.solo.mistFrom, roomAtmosphere.solo.mistTo]}
         end={{ x: 0.5, y: 1 }}
         start={{ x: 0.5, y: 0 }}
-        style={StyleSheet.absoluteFill}
+        style={[StyleSheet.absoluteFill, { opacity: mistOpacity }]}
       />
 
       <Animated.View

@@ -34,6 +34,15 @@ interface JournalPageState {
   updatedAt: string | null;
 }
 
+interface JournalEntryPreview {
+  contentPreview: string;
+  createdAt: string | null;
+  isPersisted: boolean;
+  localId: string;
+  pageNumber: number;
+  updatedAt: string | null;
+}
+
 function createDraftJournalPage(): JournalPageState {
   return {
     content: '',
@@ -43,6 +52,37 @@ function createDraftJournalPage(): JournalPageState {
     localId: `draft-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
     updatedAt: null,
   };
+}
+
+function formatRelativeSaveTime(timestamp: string | null) {
+  if (!timestamp) {
+    return 'Not saved yet';
+  }
+
+  const value = new Date(timestamp).getTime();
+  if (!Number.isFinite(value)) {
+    return 'Saved';
+  }
+
+  const deltaMs = Date.now() - value;
+  if (deltaMs < 60_000) {
+    return 'Saved just now';
+  }
+
+  const minutes = Math.floor(deltaMs / 60_000);
+  if (minutes < 60) {
+    return `Saved ${minutes}m ago`;
+  }
+
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) {
+    return `Saved ${hours}h ago`;
+  }
+
+  return `Saved ${new Date(value).toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+  })}`;
 }
 
 export function ProfileScreen() {
@@ -237,10 +277,60 @@ export function ProfileScreen() {
 
     const hasExistingNext = currentJournalPageIndex < journalPagesRef.current.length - 1;
     if (!hasExistingNext) {
+      const canCreateNewPage = Boolean(currentPage?.entryId || currentPage?.content.trim().length);
+      if (!canCreateNewPage) {
+        return;
+      }
+
       setJournalPages((previous) => [...previous, createDraftJournalPage()]);
     }
 
     setCurrentJournalPageIndex((previous) => previous + 1);
+    animatePageTurn('left');
+  }, [animatePageTurn, currentJournalPageIndex, persistPageByLocalId]);
+
+  const selectJournalEntry = useCallback(
+    (localId: string) => {
+      const pages = journalPagesRef.current;
+      const nextIndex = pages.findIndex((page) => page.localId === localId);
+      if (nextIndex < 0 || nextIndex === currentJournalPageIndex) {
+        return;
+      }
+
+      const currentPage = pages[currentJournalPageIndex];
+      if (currentPage) {
+        void persistPageByLocalId(currentPage.localId);
+      }
+
+      setCurrentJournalPageIndex(nextIndex);
+      animatePageTurn(nextIndex > currentJournalPageIndex ? 'left' : 'right');
+    },
+    [animatePageTurn, currentJournalPageIndex, persistPageByLocalId],
+  );
+
+  const createAndFocusNewJournalEntry = useCallback(() => {
+    const pages = journalPagesRef.current;
+    const currentPage = pages[currentJournalPageIndex];
+    if (currentPage) {
+      void persistPageByLocalId(currentPage.localId);
+    }
+
+    const lastPage = pages[pages.length - 1];
+    const hasTrailingBlankDraft = Boolean(
+      lastPage && !lastPage.entryId && !lastPage.content.trim().length,
+    );
+
+    if (hasTrailingBlankDraft) {
+      const trailingIndex = pages.length - 1;
+      if (trailingIndex !== currentJournalPageIndex) {
+        setCurrentJournalPageIndex(trailingIndex);
+        animatePageTurn('left');
+      }
+      return;
+    }
+
+    setJournalPages((previous) => [...previous, createDraftJournalPage()]);
+    setCurrentJournalPageIndex(pages.length);
     animatePageTurn('left');
   }, [animatePageTurn, currentJournalPageIndex, persistPageByLocalId]);
 
@@ -322,6 +412,18 @@ export function ProfileScreen() {
   }, [user?.id]);
 
   const activeJournalPage = journalPages[currentJournalPageIndex] ?? journalPages[0] ?? null;
+  const journalEntryPreviews = useMemo<JournalEntryPreview[]>(
+    () =>
+      journalPages.map((page, index) => ({
+        contentPreview: page.content.trim(),
+        createdAt: page.createdAt,
+        isPersisted: Boolean(page.entryId),
+        localId: page.localId,
+        pageNumber: index + 1,
+        updatedAt: page.updatedAt,
+      })),
+    [journalPages],
+  );
 
   useEffect(() => {
     if (!activeJournalPage) {
@@ -360,6 +462,17 @@ export function ProfileScreen() {
 
   const currentPageNumber = Math.min(currentJournalPageIndex + 1, journalPages.length);
   const isSavingActivePage = journalSavingLocalId === activeJournalPage?.localId;
+  const hasUnsavedChanges = Boolean(
+    activeJournalPage && activeJournalPage.content !== activeJournalPage.lastSavedContent,
+  );
+  const saveStateLabel = isSavingActivePage
+    ? 'Saving...'
+    : hasUnsavedChanges
+      ? 'Unsaved changes'
+      : formatRelativeSaveTime(
+          activeJournalPage?.updatedAt ?? activeJournalPage?.createdAt ?? null,
+        );
+  const saveStateTone = isSavingActivePage ? 'saving' : hasUnsavedChanges ? 'unsaved' : 'saved';
 
   return (
     <Screen
@@ -385,9 +498,13 @@ export function ProfileScreen() {
       />
 
       <JournalPanel
+        activeEntryLocalId={activeJournalPage?.localId ?? null}
+        canCreateNewEntry
         canGoPreviousPage={currentJournalPageIndex > 0}
         currentPageNumber={currentPageNumber}
+        entries={journalEntryPreviews}
         isSavingCurrentPage={isSavingActivePage}
+        onCreateEntry={createAndFocusNewJournalEntry}
         onChangeText={(nextText) => {
           const activeLocalId = activeJournalPage?.localId;
           if (!activeLocalId) {
@@ -407,9 +524,12 @@ export function ProfileScreen() {
         }}
         onNextPage={goToNextJournalPage}
         onPreviousPage={goToPreviousJournalPage}
+        onSelectEntry={selectJournalEntry}
         pageContent={activeJournalPage?.content ?? ''}
         pagePanHandlers={pagePanResponder.panHandlers}
         pageTurnOffset={pageTurnOffset}
+        saveStateLabel={saveStateLabel}
+        saveStateTone={saveStateTone}
         totalPages={journalPages.length}
       />
 

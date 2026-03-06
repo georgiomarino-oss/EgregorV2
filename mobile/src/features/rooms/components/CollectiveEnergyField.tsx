@@ -23,6 +23,7 @@ export function CollectiveEnergyField({ energyLevel, isLive }: CollectiveEnergyF
   const preset = roomAtmosphere.collective.energy[energyLevel];
   const liveIntensity =
     energyLevel === 'high' ? motion.amplitude.pronounced : motion.amplitude.medium;
+  const mistOpacity = isLive ? 1 : 0.36;
 
   useEffect(() => {
     if (!isLive || reduceMotionEnabled) {
@@ -100,40 +101,50 @@ export function CollectiveEnergyField({ energyLevel, isLive }: CollectiveEnergyF
     };
   }, [depthShift, isLive, preset, primaryPulse, reduceMotionEnabled, secondaryPulse]);
 
-  const primaryOpacity = reduceMotionEnabled
-    ? preset.fieldOpacity * 0.7
-    : primaryPulse.interpolate({
-        inputRange: [0, 1],
-        outputRange: [preset.fieldOpacity * 0.52, preset.fieldOpacity * 1.04],
-      });
+  const primaryOpacity = !isLive
+    ? preset.fieldOpacity * 0.14
+    : reduceMotionEnabled
+      ? preset.fieldOpacity * 0.7
+      : primaryPulse.interpolate({
+          inputRange: [0, 1],
+          outputRange: [preset.fieldOpacity * 0.52, preset.fieldOpacity * 1.04],
+        });
 
-  const primaryScale = reduceMotionEnabled
-    ? 1.04
-    : primaryPulse.interpolate({
-        inputRange: [0, 1],
-        outputRange: [1, preset.auraScale + liveIntensity * 0.5],
-      });
+  const primaryScale = !isLive
+    ? 1.01
+    : reduceMotionEnabled
+      ? 1.04
+      : primaryPulse.interpolate({
+          inputRange: [0, 1],
+          outputRange: [1, preset.auraScale + liveIntensity * 0.5],
+        });
 
-  const secondaryOpacity = reduceMotionEnabled
-    ? preset.fieldOpacity * 0.48
-    : secondaryPulse.interpolate({
-        inputRange: [0, 1],
-        outputRange: [preset.fieldOpacity * 0.3, preset.fieldOpacity * 0.76],
-      });
+  const secondaryOpacity = !isLive
+    ? preset.fieldOpacity * 0.1
+    : reduceMotionEnabled
+      ? preset.fieldOpacity * 0.48
+      : secondaryPulse.interpolate({
+          inputRange: [0, 1],
+          outputRange: [preset.fieldOpacity * 0.3, preset.fieldOpacity * 0.76],
+        });
 
-  const secondaryScale = reduceMotionEnabled
-    ? 1.08
-    : secondaryPulse.interpolate({
-        inputRange: [0, 1],
-        outputRange: [1.03, preset.auraScale + 0.14 + liveIntensity * 0.6],
-      });
+  const secondaryScale = !isLive
+    ? 1.02
+    : reduceMotionEnabled
+      ? 1.08
+      : secondaryPulse.interpolate({
+          inputRange: [0, 1],
+          outputRange: [1.03, preset.auraScale + 0.14 + liveIntensity * 0.6],
+        });
 
-  const depthOpacity = reduceMotionEnabled
-    ? preset.fieldOpacity * 0.34
-    : depthShift.interpolate({
-        inputRange: [0, 1],
-        outputRange: [preset.fieldOpacity * 0.2, preset.fieldOpacity * 0.44],
-      });
+  const depthOpacity = !isLive
+    ? preset.fieldOpacity * 0.08
+    : reduceMotionEnabled
+      ? preset.fieldOpacity * 0.34
+      : depthShift.interpolate({
+          inputRange: [0, 1],
+          outputRange: [preset.fieldOpacity * 0.2, preset.fieldOpacity * 0.44],
+        });
 
   const depthTranslateY = reduceMotionEnabled
     ? 0
@@ -148,7 +159,7 @@ export function CollectiveEnergyField({ energyLevel, isLive }: CollectiveEnergyF
         colors={[roomAtmosphere.collective.mistFrom, roomAtmosphere.collective.mistTo]}
         end={{ x: 0.5, y: 1 }}
         start={{ x: 0.5, y: 0 }}
-        style={StyleSheet.absoluteFill}
+        style={[StyleSheet.absoluteFill, { opacity: mistOpacity }]}
       />
 
       <Animated.View

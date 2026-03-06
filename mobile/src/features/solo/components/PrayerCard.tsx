@@ -153,14 +153,15 @@ export function PrayerCard({
 
 const styles = StyleSheet.create({
   body: {
-    minHeight: 66,
+    lineHeight: 17,
+    minHeight: 58,
   },
   card: {
     gap: spacing.xs,
-    minHeight: 216,
+    minHeight: 220,
     overflow: 'hidden',
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
     borderRadius: radii.md,
   },
   cardFeatured: {
@@ -185,9 +186,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     flexDirection: 'row',
     justifyContent: 'space-between',
-    minHeight: 33,
+    minHeight: 36,
     paddingHorizontal: spacing.xs,
-    paddingVertical: 4,
+    paddingVertical: 5,
   },
   ctaText: {
     textTransform: 'none',
@@ -221,5 +222,6 @@ const styles = StyleSheet.create({
   },
   title: {
     flex: 1,
+    lineHeight: 24,
   },
 });
