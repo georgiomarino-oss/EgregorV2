@@ -1,7 +1,7 @@
 import ambientAnimation from '../../assets/lottie/cosmic-ambient.json';
 import globeFallbackAnimation from '../../assets/lottie/globe-fallback.json';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Animated, Easing, Pressable, StyleSheet, View } from 'react-native';
 
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -10,34 +10,50 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import LottieView from 'lottie-react-native';
 
 import type { EventsStackParamList } from '../app/navigation/types';
+import { InlineErrorCard } from '../components/InlineErrorCard';
+import { LiveLogo } from '../components/LiveLogo';
 import { Screen } from '../components/Screen';
 import { SurfaceCard } from '../components/SurfaceCard';
 import { Typography } from '../components/Typography';
 import {
   fetchEventById,
+  fetchEventRoomSnapshot,
   fetchEventLibraryItemById,
   getCachedEventById,
   getCachedEventLibraryItemById,
+  joinEventRoom,
+  leaveEventRoom,
+  refreshEventPresence,
 } from '../lib/api/data';
-import {
-  generatePrayerAudio,
-  hasPrayerAudioCached,
-  prefetchPrayerAudio,
-  type TimedWord,
-} from '../lib/api/functions';
-import { configureAudioForPlayback, createPlayer, type ManagedAudioPlayer } from '../lib/audio';
+import { prefetchPrayerAudio } from '../lib/api/functions';
+import { supabase } from '../lib/supabase';
 import { figmaV2Reference } from '../theme/figma-v2-reference';
 import { sectionGap } from '../theme/layout';
-import { colors, radii, spacing } from '../theme/tokens';
+import { colors, motion, radii, roomAtmosphere, spacing } from '../theme/tokens';
+import { RoomScriptPanel } from '../features/room-player/components/RoomScriptPanel';
+import { RoomTransportControls } from '../features/room-player/components/RoomTransportControls';
+import { useRoomAudioPlayer } from '../features/room-player/hooks/useRoomAudioPlayer';
+import { CollectiveEnergyField } from '../features/rooms/components/CollectiveEnergyField';
+import { resolveCollectiveEnergyLevel } from '../features/rooms/energyModel';
+import { useReducedMotion } from '../features/rooms/hooks/useReducedMotion';
+import {
+  buildPreviewParagraphsFromScript,
+  resolveFallbackParagraphIndex,
+  splitScriptIntoParagraphs,
+} from '../features/room-player/utils/scriptLayout';
+import {
+  findActiveTimedParagraph,
+  findActiveTimedWordIndex,
+  groupTimedWordsIntoParagraphs,
+} from '../features/room-player/utils/timedWords';
 
 type EventRoomRoute = RouteProp<EventsStackParamList, 'EventRoom'>;
 type EventNavigation = NativeStackNavigationProp<EventsStackParamList, 'EventRoom'>;
 
 const VOICE_OPTIONS = ['Oliver', 'Amaya', 'Rainbird', 'Dominic'] as const;
 const DEFAULT_ELEVENLABS_VOICE_ID = 'V904i8ujLitGpMyoTznT';
-const MAX_SCRIPT_PARAGRAPH_CHARS = 96;
-const MAX_TIMED_WORDS_PER_PARAGRAPH = 14;
 const MAX_SCRIPT_LINES = 4;
+const PRESENCE_HEARTBEAT_INTERVAL_MS = 30_000;
 const ELEVENLABS_VOICE_ID_BY_LABEL: Partial<Record<(typeof VOICE_OPTIONS)[number], string>> = {
   Oliver: 'jfIS2w2yJi0grJZPyEsk',
   Amaya: 'BFvr34n3gOoz0BAf9Rwn',
@@ -52,229 +68,6 @@ function formatClock(totalSeconds: number) {
     .padStart(1, '0');
   const seconds = (clamped % 60).toString().padStart(2, '0');
   return `${minutes}:${seconds}`;
-}
-
-function sanitizeScriptParagraph(paragraph: string) {
-  const withoutMarkdownHeadings = paragraph
-    .replace(/^\*\*\s*(grounding|prayer|closing)\s*\*\*\s*[:\-–—]?\s*/i, '')
-    .replace(/^(grounding|prayer|closing)\s*[:\-–—]\s*/i, '')
-    .replace(/\*\*/g, '');
-
-  return withoutMarkdownHeadings.trim();
-}
-
-function splitLongParagraph(paragraph: string, maxChars = MAX_SCRIPT_PARAGRAPH_CHARS) {
-  if (paragraph.length <= maxChars) {
-    return [paragraph];
-  }
-
-  const sentences = paragraph
-    .split(/(?<=[.!?])\s+/)
-    .map((sentence) => sentence.trim())
-    .filter((sentence) => sentence.length > 0);
-
-  if (sentences.length <= 1) {
-    return [paragraph];
-  }
-
-  const chunks: string[] = [];
-  let buffer = '';
-
-  for (const sentence of sentences) {
-    const candidate = buffer ? `${buffer} ${sentence}` : sentence;
-    if (candidate.length <= maxChars) {
-      buffer = candidate;
-      continue;
-    }
-
-    if (buffer) {
-      chunks.push(buffer.trim());
-      buffer = sentence;
-    } else {
-      chunks.push(sentence.trim());
-    }
-  }
-
-  if (buffer) {
-    chunks.push(buffer.trim());
-  }
-
-  return chunks.length > 0 ? chunks : [paragraph];
-}
-
-function splitScriptIntoParagraphs(script: string) {
-  const normalized = script.trim();
-  if (!normalized) {
-    return [];
-  }
-
-  const paragraphs = normalized
-    .replace(/\r\n/g, '\n')
-    .split(/\n{2,}/)
-    .map((part) => sanitizeScriptParagraph(part))
-    .filter((part) => part.length > 0);
-
-  if (paragraphs.length > 1) {
-    return paragraphs.flatMap((paragraph) => splitLongParagraph(paragraph));
-  }
-
-  const singleParagraph = paragraphs[0] ?? '';
-  if (!singleParagraph) {
-    return [];
-  }
-
-  const sentences = singleParagraph
-    .split(/(?<=[.!?])\s+/)
-    .map((sentence) => sentence.trim())
-    .filter((sentence) => sentence.length > 0);
-
-  if (sentences.length <= 2) {
-    return [singleParagraph];
-  }
-
-  const fallbackParagraphs: string[] = [];
-  let buffer = '';
-
-  for (const sentence of sentences) {
-    const candidate = buffer ? `${buffer} ${sentence}` : sentence;
-    if (candidate.length <= 240) {
-      buffer = candidate;
-      continue;
-    }
-
-    if (buffer) {
-      fallbackParagraphs.push(buffer.trim());
-      buffer = sentence;
-    } else {
-      fallbackParagraphs.push(sentence.trim());
-    }
-  }
-
-  if (buffer) {
-    fallbackParagraphs.push(buffer.trim());
-  }
-
-  if (fallbackParagraphs.length > 0) {
-    return fallbackParagraphs.flatMap((paragraph) => splitLongParagraph(paragraph));
-  }
-
-  return splitLongParagraph(singleParagraph);
-}
-
-interface TimedWordParagraph {
-  endIndex: number;
-  startIndex: number;
-  words: TimedWord[];
-}
-
-function groupTimedWordsIntoParagraphs(
-  words: TimedWord[],
-  maxWordsPerParagraph = MAX_TIMED_WORDS_PER_PARAGRAPH,
-) {
-  if (words.length === 0) {
-    return [] as TimedWordParagraph[];
-  }
-
-  const paragraphs: TimedWordParagraph[] = [];
-  let current: TimedWord[] = [];
-
-  const flush = () => {
-    if (current.length === 0) {
-      return;
-    }
-
-    paragraphs.push({
-      endIndex: current[current.length - 1]?.index ?? 0,
-      startIndex: current[0]?.index ?? 0,
-      words: current,
-    });
-    current = [];
-  };
-
-  words.forEach((word) => {
-    current.push(word);
-
-    const hasSentenceEnding = /[.!?]["']?$/.test(word.word);
-    const reachedMax = current.length >= maxWordsPerParagraph;
-    const shouldBreak = reachedMax || (hasSentenceEnding && current.length >= 10);
-
-    if (shouldBreak) {
-      flush();
-    }
-  });
-
-  flush();
-  return paragraphs;
-}
-
-function buildPreviewParagraphsFromScript(script: string) {
-  const normalized = script
-    .replace(/\r\n/g, '\n')
-    .split(/\n+/)
-    .map((line) => sanitizeScriptParagraph(line))
-    .join(' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-
-  if (!normalized) {
-    return [] as string[];
-  }
-
-  const words = normalized.split(/\s+/).filter((word) => word.length > 0);
-  if (words.length === 0) {
-    return [] as string[];
-  }
-
-  const pseudoTimedWords: TimedWord[] = words.map((word, index) => ({
-    endSeconds: index + 0.2,
-    index,
-    startSeconds: index,
-    word,
-  }));
-
-  return groupTimedWordsIntoParagraphs(pseudoTimedWords, MAX_TIMED_WORDS_PER_PARAGRAPH).map(
-    (paragraph) =>
-      paragraph.words
-        .map((word) => word.word)
-        .join(' ')
-        .trim(),
-  );
-}
-
-function findActiveTimedWordIndex(words: TimedWord[], elapsedMillis: number) {
-  if (words.length === 0) {
-    return -1;
-  }
-
-  const elapsedSeconds = elapsedMillis / 1000;
-  const first = words[0];
-  const last = words[words.length - 1];
-
-  if (elapsedSeconds <= (first?.startSeconds ?? 0)) {
-    return first?.index ?? 0;
-  }
-
-  if (elapsedSeconds >= (last?.endSeconds ?? 0)) {
-    return last?.index ?? words.length - 1;
-  }
-
-  for (let index = 0; index < words.length; index += 1) {
-    const word = words[index];
-    if (!word) {
-      continue;
-    }
-
-    if (elapsedSeconds >= word.startSeconds && elapsedSeconds <= word.endSeconds) {
-      return word.index;
-    }
-
-    const next = words[index + 1];
-    if (next && elapsedSeconds > word.endSeconds && elapsedSeconds < next.startSeconds) {
-      return next.index;
-    }
-  }
-
-  return last?.index ?? words.length - 1;
 }
 
 function buildFallbackEventScript(description?: string | null, hostNote?: string | null) {
@@ -317,13 +110,11 @@ export function EventRoomScreen() {
     route.params?.scheduledStartAt?.trim() || cachedEvent?.startsAt || new Date().toISOString();
   const hasInitialEventData = Boolean(initialEventScript || cachedTemplate || cachedEvent);
   const allowAudioGeneration = route.params?.allowAudioGeneration === true;
+  const eventId = route.params?.eventId?.trim() || '';
 
   const [selectedVoice, setSelectedVoice] = useState<(typeof VOICE_OPTIONS)[number]>('Dominic');
   const [isVoiceMenuOpen, setIsVoiceMenuOpen] = useState(false);
   const [isInviteOpen, setIsInviteOpen] = useState(false);
-  const [isMuted, setIsMuted] = useState(false);
-  const [isRunning, setIsRunning] = useState(false);
-  const [loadingAudio, setLoadingAudio] = useState(false);
   const [loadingEvent, setLoadingEvent] = useState(!hasInitialEventData);
   const [error, setError] = useState<string | null>(null);
 
@@ -332,17 +123,23 @@ export function EventRoomScreen() {
   const [eventScript, setEventScript] = useState(initialEventScript);
   const [eventDurationMinutes, setEventDurationMinutes] = useState(initialEventDurationMinutes);
   const [eventStartAt, setEventStartAt] = useState(initialEventStartAt);
+  const [participantCount, setParticipantCount] = useState(cachedEvent?.participants ?? 0);
 
-  const [timedWords, setTimedWords] = useState<TimedWord[]>([]);
-  const [playerPositionMillis, setPlayerPositionMillis] = useState(0);
   const [nowTick, setNowTick] = useState(() => Date.now());
 
   const playPulseRef = useRef<LottieView>(null);
   const hasInitialEventDataRef = useRef(hasInitialEventData);
   const autoStartTriggeredRef = useRef(false);
-  const activePlayerRef = useRef<ManagedAudioPlayer | null>(null);
-  const activePlayerKeyRef = useRef<string | null>(null);
-  const activePlayerUnsubscribeRef = useRef<(() => void) | null>(null);
+  const eventPresenceUserIdRef = useRef<string | null>(null);
+  const presenceJoinedRef = useRef(false);
+  const presenceLeftRef = useRef(false);
+  const reduceMotionEnabled = useReducedMotion();
+  const headerIntro = useMemo(() => new Animated.Value(0), []);
+  const metaIntro = useMemo(() => new Animated.Value(0), []);
+  const stageIntro = useMemo(() => new Animated.Value(0), []);
+  const transportIntro = useMemo(() => new Animated.Value(0), []);
+  const scriptFocus = useMemo(() => new Animated.Value(0), []);
+  const liveMetaPulse = useMemo(() => new Animated.Value(0), []);
 
   const startMillis = useMemo(() => new Date(eventStartAt).getTime(), [eventStartAt]);
   const durationMillis = useMemo(
@@ -359,157 +156,96 @@ export function EventRoomScreen() {
     ? Math.max(0, Math.min(durationMillis, nowTick - startMillis))
     : 0;
 
-  const activeElapsedMillis = hasStarted ? elapsedFromScheduleMillis : playerPositionMillis;
-  const progress = durationMillis > 0 ? Math.min(1, activeElapsedMillis / durationMillis) : 0;
-
-  const elapsedLabel = formatClock(activeElapsedMillis / 1000);
-  const remainingLabel = formatClock(remainingEventMillis / 1000);
-  const startCountdownLabel = formatClock(remainingUntilStartMillis / 1000);
-
   const activeVoiceId = ELEVENLABS_VOICE_ID_BY_LABEL[selectedVoice] ?? DEFAULT_ELEVENLABS_VOICE_ID;
   const activeAudioKey = useMemo(
     () => `${activeVoiceId}|${eventScript.trim()}`,
     [activeVoiceId, eventScript],
   );
 
+  const {
+    ensureAudioPlayer,
+    isMuted,
+    isRunning,
+    loadingAudio,
+    pause,
+    play,
+    positionMillis: playerPositionMillis,
+    seekTo,
+    setMuted,
+    stop,
+    timedWords,
+  } = useRoomAudioPlayer({
+    activeAudioKey,
+    allowAudioGeneration,
+    durationMinutes: eventDurationMinutes,
+    scriptText: eventScript,
+    title: eventTitle,
+    voiceId: activeVoiceId,
+  });
+
+  const activeElapsedMillis = hasStarted ? elapsedFromScheduleMillis : playerPositionMillis;
+  const collectiveEnergyLevel = useMemo(
+    () => resolveCollectiveEnergyLevel(participantCount),
+    [participantCount],
+  );
+  const isCollectiveRoomLive = hasStarted && !hasEnded;
+  const isPlaybackDisabled =
+    loadingEvent || loadingAudio || !eventScript.trim() || !hasStarted || hasEnded;
+  const progress = durationMillis > 0 ? Math.min(1, activeElapsedMillis / durationMillis) : 0;
+
+  const elapsedLabel = formatClock(activeElapsedMillis / 1000);
+  const remainingLabel = formatClock(remainingEventMillis / 1000);
+  const startCountdownLabel = formatClock(remainingUntilStartMillis / 1000);
+
   const closeAllSelectors = useCallback(() => {
     setIsVoiceMenuOpen(false);
     setIsInviteOpen(false);
   }, []);
 
-  const disposeActivePlayer = useCallback(() => {
-    activePlayerRef.current?.pause();
-    activePlayerUnsubscribeRef.current?.();
-    activePlayerUnsubscribeRef.current = null;
-    activePlayerRef.current?.dispose();
-    activePlayerRef.current = null;
-    activePlayerKeyRef.current = null;
-  }, []);
+  useEffect(() => {
+    presenceJoinedRef.current = false;
+    presenceLeftRef.current = false;
+  }, [eventId]);
 
-  const stopPlayback = useCallback(async () => {
-    const activePlayer = activePlayerRef.current;
-    if (!activePlayer) {
+  const leavePresence = useCallback(async () => {
+    if (!eventId || presenceLeftRef.current || !presenceJoinedRef.current) {
       return;
     }
 
-    try {
-      await activePlayer.stop();
-    } catch {
-      activePlayer.pause();
+    const userId = eventPresenceUserIdRef.current;
+    if (!userId) {
+      return;
     }
 
-    setIsRunning(false);
-    setPlayerPositionMillis(0);
-  }, []);
+    presenceLeftRef.current = true;
+    try {
+      await leaveEventRoom(eventId, userId);
+    } catch {
+      // Presence cleanup is best-effort.
+    }
+  }, [eventId]);
 
   const onExitSession = useCallback(() => {
     closeAllSelectors();
 
     void (async () => {
-      await stopPlayback();
-      disposeActivePlayer();
+      await stop();
+      await leavePresence();
       navigation.goBack();
     })();
-  }, [closeAllSelectors, disposeActivePlayer, navigation, stopPlayback]);
-
-  const ensureAudioPlayer = useCallback(async () => {
-    const nextScript = eventScript.trim();
-    if (!nextScript) {
-      throw new Error('No event script is available yet.');
-    }
-
-    if (activePlayerRef.current && activePlayerKeyRef.current === activeAudioKey) {
-      return activePlayerRef.current;
-    }
-
-    const shouldShowAudioLoader = !hasPrayerAudioCached({
-      script: nextScript,
-      voiceId: activeVoiceId,
-    });
-    if (shouldShowAudioLoader) {
-      setLoadingAudio(true);
-    }
-
-    try {
-      await configureAudioForPlayback();
-
-      const audioResponse = await generatePrayerAudio({
-        allowGeneration: allowAudioGeneration,
-        durationMinutes: eventDurationMinutes,
-        language: 'en',
-        script: nextScript,
-        title: eventTitle,
-        voiceId: activeVoiceId,
-      });
-
-      const audioUrl = audioResponse?.audioUrl?.trim();
-      const audioBase64 = audioResponse?.audioBase64?.trim();
-      const contentType = audioResponse?.contentType?.trim() || 'audio/mpeg';
-      const nextTimedWords = (audioResponse?.wordTimings ?? [])
-        .filter(
-          (word) =>
-            typeof word?.word === 'string' &&
-            Number.isFinite(word?.startSeconds) &&
-            Number.isFinite(word?.endSeconds),
-        )
-        .sort((left, right) => left.startSeconds - right.startSeconds)
-        .map((word, index) => ({
-          ...word,
-          endSeconds: Math.max(word.startSeconds, word.endSeconds),
-          index,
-          startSeconds: Math.max(0, word.startSeconds),
-          word: word.word.trim(),
-        }))
-        .filter((word) => word.word.length > 0);
-
-      if (!audioUrl && !audioBase64) {
-        throw new Error('Audio generation returned an empty payload.');
-      }
-
-      const sourceUri = audioUrl || `data:${contentType};base64,${audioBase64}`;
-      setTimedWords(nextTimedWords);
-
-      disposeActivePlayer();
-
-      const player = createPlayer(sourceUri);
-      activePlayerUnsubscribeRef.current = player.subscribe((status) => {
-        setPlayerPositionMillis(Math.max(0, status.positionMillis));
-        if (status.didJustFinish) {
-          setIsRunning(false);
-        }
-      });
-
-      activePlayerRef.current = player;
-      activePlayerKeyRef.current = activeAudioKey;
-
-      return player;
-    } finally {
-      if (shouldShowAudioLoader) {
-        setLoadingAudio(false);
-      }
-    }
-  }, [
-    activeAudioKey,
-    activeVoiceId,
-    allowAudioGeneration,
-    disposeActivePlayer,
-    eventDurationMinutes,
-    eventScript,
-    eventTitle,
-  ]);
+  }, [closeAllSelectors, leavePresence, navigation, stop]);
 
   const startPlaybackAtScheduleOffset = useCallback(async () => {
     if (!hasStarted || hasEnded) {
       return;
     }
 
-    const player = await ensureAudioPlayer();
     const offsetMillis = Math.max(0, Math.min(durationMillis, nowTick - startMillis));
-    await player.seekTo(offsetMillis);
-    player.play();
-    setIsRunning(true);
+    await ensureAudioPlayer();
+    await seekTo(offsetMillis);
+    await play();
     setError(null);
-  }, [durationMillis, ensureAudioPlayer, hasEnded, hasStarted, nowTick, startMillis]);
+  }, [durationMillis, ensureAudioPlayer, hasEnded, hasStarted, nowTick, play, seekTo, startMillis]);
 
   const onTogglePlayback = useCallback(async () => {
     closeAllSelectors();
@@ -525,8 +261,7 @@ export function EventRoomScreen() {
     }
 
     if (isRunning) {
-      activePlayerRef.current?.pause();
-      setIsRunning(false);
+      pause();
       return;
     }
 
@@ -536,9 +271,8 @@ export function EventRoomScreen() {
       const message =
         nextError instanceof Error ? nextError.message : 'Failed to start event audio.';
       setError(message);
-      setIsRunning(false);
     }
-  }, [closeAllSelectors, hasEnded, hasStarted, isRunning, startPlaybackAtScheduleOffset]);
+  }, [closeAllSelectors, hasEnded, hasStarted, isRunning, pause, startPlaybackAtScheduleOffset]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -549,6 +283,86 @@ export function EventRoomScreen() {
       clearInterval(interval);
     };
   }, []);
+
+  useEffect(() => {
+    if (!eventId) {
+      return;
+    }
+
+    let active = true;
+    let heartbeat: ReturnType<typeof setInterval> | null = null;
+
+    const initPresence = async () => {
+      const { data, error: userError } = await supabase.auth.getUser();
+      const userId = userError ? null : (data.user?.id?.trim() ?? null);
+
+      if (!active || !userId) {
+        return;
+      }
+
+      eventPresenceUserIdRef.current = userId;
+      presenceLeftRef.current = false;
+
+      try {
+        const snapshot = await fetchEventRoomSnapshot(eventId, userId);
+        if (!active) {
+          return;
+        }
+
+        const snapshotEvent = snapshot.event;
+        setEventTitle(route.params?.eventTitle?.trim() || snapshotEvent.title);
+        setEventDurationMinutes(
+          route.params?.durationMinutes ?? snapshotEvent.durationMinutes ?? 10,
+        );
+        setParticipantCount(snapshot.joinedCount);
+        setEventStartAt(
+          route.params?.scheduledStartAt?.trim() ||
+            snapshotEvent.startsAt ||
+            new Date().toISOString(),
+        );
+      } catch {
+        // Non-blocking: room can still proceed with route-provided state.
+      }
+
+      try {
+        await joinEventRoom(eventId, userId);
+        presenceJoinedRef.current = true;
+      } catch {
+        // Best-effort presence; keep room usable even if this fails.
+      }
+
+      heartbeat = setInterval(() => {
+        void refreshEventPresence(eventId, userId);
+        void fetchEventRoomSnapshot(eventId, userId)
+          .then((snapshot) => {
+            if (!active) {
+              return;
+            }
+
+            setParticipantCount(snapshot.joinedCount);
+          })
+          .catch(() => {
+            // Snapshot refresh is best-effort.
+          });
+      }, PRESENCE_HEARTBEAT_INTERVAL_MS);
+    };
+
+    void initPresence();
+
+    return () => {
+      active = false;
+      if (heartbeat) {
+        clearInterval(heartbeat);
+      }
+      void leavePresence();
+    };
+  }, [
+    eventId,
+    leavePresence,
+    route.params?.durationMinutes,
+    route.params?.eventTitle,
+    route.params?.scheduledStartAt,
+  ]);
 
   useEffect(() => {
     let active = true;
@@ -570,6 +384,7 @@ export function EventRoomScreen() {
           setEventTitle(route.params?.eventTitle?.trim() || 'Event Room');
           setEventDurationMinutes(route.params?.durationMinutes ?? 10);
           setEventStartAt(route.params?.scheduledStartAt?.trim() || new Date().toISOString());
+          setParticipantCount(0);
           hasInitialEventDataRef.current = true;
           setError(null);
           return;
@@ -590,6 +405,7 @@ export function EventRoomScreen() {
               route.params?.durationMinutes ?? template.durationMinutes ?? 10,
             );
             setEventStartAt(route.params?.scheduledStartAt?.trim() || new Date().toISOString());
+            setParticipantCount(0);
             hasInitialEventDataRef.current = true;
             setError(null);
             return;
@@ -615,6 +431,7 @@ export function EventRoomScreen() {
             setEventStartAt(
               route.params?.scheduledStartAt?.trim() || event.startsAt || new Date().toISOString(),
             );
+            setParticipantCount(event.participants);
             hasInitialEventDataRef.current = true;
             setError(null);
             return;
@@ -653,19 +470,8 @@ export function EventRoomScreen() {
   ]);
 
   useEffect(() => {
-    setIsRunning(false);
-    setPlayerPositionMillis(0);
-    setTimedWords([]);
     autoStartTriggeredRef.current = false;
-    disposeActivePlayer();
-  }, [activeAudioKey, disposeActivePlayer, eventStartAt]);
-
-  useEffect(() => {
-    return () => {
-      void stopPlayback();
-      disposeActivePlayer();
-    };
-  }, [disposeActivePlayer, stopPlayback]);
+  }, [activeAudioKey, eventStartAt]);
 
   useEffect(() => {
     if (!playPulseRef.current) {
@@ -681,6 +487,112 @@ export function EventRoomScreen() {
   }, [isRunning]);
 
   useEffect(() => {
+    if (reduceMotionEnabled) {
+      headerIntro.setValue(1);
+      metaIntro.setValue(1);
+      stageIntro.setValue(1);
+      transportIntro.setValue(1);
+      return;
+    }
+
+    headerIntro.setValue(0);
+    metaIntro.setValue(0);
+    stageIntro.setValue(0);
+    transportIntro.setValue(0);
+
+    const animation = Animated.parallel([
+      Animated.timing(headerIntro, {
+        duration: motion.room.collective.entryHeaderMs,
+        easing: Easing.out(Easing.cubic),
+        toValue: 1,
+        useNativeDriver: true,
+      }),
+      Animated.sequence([
+        Animated.delay(motion.durationMs.fast),
+        Animated.timing(metaIntro, {
+          duration: motion.room.collective.entryMetaMs,
+          easing: Easing.out(Easing.cubic),
+          toValue: 1,
+          useNativeDriver: true,
+        }),
+      ]),
+      Animated.sequence([
+        Animated.delay(motion.durationMs.base),
+        Animated.timing(stageIntro, {
+          duration: motion.room.collective.entryStageMs,
+          easing: Easing.out(Easing.cubic),
+          toValue: 1,
+          useNativeDriver: true,
+        }),
+      ]),
+      Animated.sequence([
+        Animated.delay(motion.durationMs.base + motion.durationMs.fast),
+        Animated.timing(transportIntro, {
+          duration: motion.room.collective.entryTransportMs,
+          easing: Easing.out(Easing.cubic),
+          toValue: 1,
+          useNativeDriver: true,
+        }),
+      ]),
+    ]);
+
+    animation.start();
+    return () => {
+      animation.stop();
+    };
+  }, [headerIntro, metaIntro, reduceMotionEnabled, stageIntro, transportIntro]);
+
+  useEffect(() => {
+    if (reduceMotionEnabled) {
+      scriptFocus.setValue(0);
+      return;
+    }
+
+    const animation = Animated.timing(scriptFocus, {
+      duration: motion.durationMs.base,
+      easing: Easing.out(Easing.cubic),
+      toValue: isRunning ? 1 : 0,
+      useNativeDriver: true,
+    });
+    animation.start();
+
+    return () => {
+      animation.stop();
+    };
+  }, [isRunning, reduceMotionEnabled, scriptFocus]);
+
+  useEffect(() => {
+    if (!isCollectiveRoomLive || reduceMotionEnabled) {
+      liveMetaPulse.stopAnimation();
+      liveMetaPulse.setValue(0);
+      return;
+    }
+
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(liveMetaPulse, {
+          duration: motion.room.collective.liveMetaPulseMs,
+          easing: Easing.inOut(Easing.sin),
+          toValue: 1,
+          useNativeDriver: true,
+        }),
+        Animated.timing(liveMetaPulse, {
+          duration: motion.room.collective.liveMetaPulseMs,
+          easing: Easing.inOut(Easing.sin),
+          toValue: 0,
+          useNativeDriver: true,
+        }),
+      ]),
+      { resetBeforeIteration: true },
+    );
+    loop.start();
+
+    return () => {
+      loop.stop();
+    };
+  }, [isCollectiveRoomLive, liveMetaPulse, reduceMotionEnabled]);
+
+  useEffect(() => {
     if (!hasStarted || hasEnded || loadingEvent || autoStartTriggeredRef.current) {
       return;
     }
@@ -691,7 +603,6 @@ export function EventRoomScreen() {
       const message =
         nextError instanceof Error ? nextError.message : 'Failed to start event audio.';
       setError(message);
-      setIsRunning(false);
     });
   }, [hasEnded, hasStarted, loadingEvent, startPlaybackAtScheduleOffset]);
 
@@ -700,11 +611,8 @@ export function EventRoomScreen() {
       return;
     }
 
-    setIsRunning(false);
-    if (activePlayerRef.current) {
-      void activePlayerRef.current.stop();
-    }
-  }, [hasEnded]);
+    void stop();
+  }, [hasEnded, stop]);
 
   useEffect(() => {
     const nextScript = eventScript.trim();
@@ -730,25 +638,10 @@ export function EventRoomScreen() {
     () => groupTimedWordsIntoParagraphs(timedWords),
     [timedWords],
   );
-  const activeTimedParagraph = useMemo(() => {
-    if (timedWordParagraphs.length === 0) {
-      return null;
-    }
-
-    if (activeTimedWordIndex < 0) {
-      return timedWordParagraphs[0] ?? null;
-    }
-
-    return (
-      timedWordParagraphs.find(
-        (paragraph) =>
-          activeTimedWordIndex >= paragraph.startIndex &&
-          activeTimedWordIndex <= paragraph.endIndex,
-      ) ??
-      timedWordParagraphs[timedWordParagraphs.length - 1] ??
-      null
-    );
-  }, [activeTimedWordIndex, timedWordParagraphs]);
+  const activeTimedParagraph = useMemo(
+    () => findActiveTimedParagraph(timedWordParagraphs, activeTimedWordIndex),
+    [activeTimedWordIndex, timedWordParagraphs],
+  );
 
   const scriptParagraphs = useMemo(() => {
     const previewParagraphs = buildPreviewParagraphsFromScript(eventScript);
@@ -759,155 +652,312 @@ export function EventRoomScreen() {
     return splitScriptIntoParagraphs(eventScript);
   }, [eventScript]);
 
-  const fallbackParagraphIndex = useMemo(() => {
-    if (scriptParagraphs.length <= 1 || durationMillis <= 0) {
-      return 0;
-    }
-
-    const normalizedProgress = Math.min(
-      0.999999,
-      Math.max(0, activeElapsedMillis / durationMillis),
-    );
-    return Math.min(
-      scriptParagraphs.length - 1,
-      Math.floor(normalizedProgress * scriptParagraphs.length),
-    );
-  }, [activeElapsedMillis, durationMillis, scriptParagraphs.length]);
+  const fallbackParagraphIndex = useMemo(
+    () =>
+      resolveFallbackParagraphIndex({
+        elapsedMillis: activeElapsedMillis,
+        paragraphCount: scriptParagraphs.length,
+        totalMillis: durationMillis,
+      }),
+    [activeElapsedMillis, durationMillis, scriptParagraphs.length],
+  );
 
   const fallbackParagraph = scriptParagraphs[fallbackParagraphIndex] ?? '';
+
+  const headerIntroStyle = reduceMotionEnabled
+    ? styles.noMotion
+    : {
+        opacity: headerIntro.interpolate({
+          inputRange: [0, 1],
+          outputRange: [0.86, 1],
+        }),
+        transform: [
+          {
+            translateY: headerIntro.interpolate({
+              inputRange: [0, 1],
+              outputRange: [10, 0],
+            }),
+          },
+        ],
+      };
+
+  const metaIntroStyle = reduceMotionEnabled
+    ? styles.noMotion
+    : {
+        opacity: metaIntro.interpolate({
+          inputRange: [0, 1],
+          outputRange: [0.8, 1],
+        }),
+        transform: [
+          {
+            translateY: metaIntro.interpolate({
+              inputRange: [0, 1],
+              outputRange: [12, 0],
+            }),
+          },
+          {
+            scale: liveMetaPulse.interpolate({
+              inputRange: [0, 1],
+              outputRange: [1, 1 + motion.amplitude.subtle],
+            }),
+          },
+        ],
+      };
+
+  const stageIntroStyle = reduceMotionEnabled
+    ? styles.noMotion
+    : {
+        opacity: stageIntro.interpolate({
+          inputRange: [0, 1],
+          outputRange: [0.78, 1],
+        }),
+        transform: [
+          {
+            translateY: stageIntro.interpolate({
+              inputRange: [0, 1],
+              outputRange: [14, 0],
+            }),
+          },
+        ],
+      };
+
+  const transportIntroStyle = reduceMotionEnabled
+    ? styles.noMotion
+    : {
+        opacity: transportIntro.interpolate({
+          inputRange: [0, 1],
+          outputRange: [0.82, 1],
+        }),
+        transform: [
+          {
+            translateY: transportIntro.interpolate({
+              inputRange: [0, 1],
+              outputRange: [16, 0],
+            }),
+          },
+        ],
+      };
+
+  const scriptPanelFocusStyle = reduceMotionEnabled
+    ? styles.noMotion
+    : {
+        transform: [
+          {
+            scale: scriptFocus.interpolate({
+              inputRange: [0, 1],
+              outputRange: [1, 1 + motion.amplitude.medium],
+            }),
+          },
+        ],
+      };
 
   return (
     <Screen
       ambientSource={ambientAnimation}
       contentContainerStyle={styles.screenContent}
       scrollable={false}
-      variant="events"
+      variant="eventRoom"
       withTabBarInset={false}
     >
-      <Pressable onPress={closeAllSelectors} style={styles.container}>
+      <Pressable
+        accessible={false}
+        importantForAccessibility="no-hide-descendants"
+        onPress={closeAllSelectors}
+        style={styles.container}
+      >
+        <CollectiveEnergyField energyLevel={collectiveEnergyLevel} isLive={isCollectiveRoomLive} />
+
         <View style={styles.topActionsRow}>
           <View style={styles.iconSpacer} />
 
           <Pressable
+            accessibilityHint="Closes this event room."
             accessibilityLabel="Close event room"
+            accessibilityRole="button"
+            hitSlop={6}
             onPress={onExitSession}
-            style={({ pressed }) => [styles.iconCircleButton, pressed && styles.iconButtonPressed]}
+            style={({ pressed }) => [
+              styles.iconCircleButton,
+              !reduceMotionEnabled && pressed && styles.iconButtonPressed,
+            ]}
           >
             <MaterialCommunityIcons color={colors.textPrimary} name="close" size={24} />
           </Pressable>
         </View>
 
-        <View style={styles.headerBlock}>
-          <Typography
-            allowFontScaling={false}
-            style={styles.prayerTitle}
-            variant="H1"
-            weight="bold"
-          >
-            {eventTitle}
-          </Typography>
-        </View>
-
-        <View style={styles.selectorRow}>
-          <View style={styles.selectorContainer}>
-            <Pressable
-              onPress={(event) => {
-                event.stopPropagation();
-                setIsVoiceMenuOpen((current) => !current);
-              }}
-              style={({ pressed }) => [styles.selectorButton, pressed && styles.selectorPressed]}
+        <Animated.View style={headerIntroStyle}>
+          <View style={styles.headerBlock}>
+            <Typography
+              accessibilityRole="header"
+              allowFontScaling={false}
+              style={styles.prayerTitle}
+              variant="H1"
+              weight="bold"
             >
-              <View style={styles.voiceAvatar}>
-                <MaterialCommunityIcons color={colors.textPrimary} name="account" size={13} />
-              </View>
-              <Typography
-                adjustsFontSizeToFit
-                allowFontScaling={false}
-                minimumFontScale={0.75}
-                numberOfLines={1}
-                style={styles.selectorValue}
-                variant="Body"
-                weight="bold"
-              >
-                {selectedVoice}
-              </Typography>
-              <MaterialCommunityIcons
-                color={colors.textSecondary}
-                name={isVoiceMenuOpen ? 'chevron-up' : 'chevron-down'}
-                size={24}
-              />
-            </Pressable>
-
-            {isVoiceMenuOpen ? (
-              <SurfaceCard radius="md" style={styles.dropdownMenu}>
-                {VOICE_OPTIONS.map((voice) => (
-                  <Pressable
-                    key={voice}
-                    onPress={(event) => {
-                      event.stopPropagation();
-                      setSelectedVoice(voice);
-                      setIsVoiceMenuOpen(false);
-                    }}
-                    style={({ pressed }) => [
-                      styles.dropdownOption,
-                      selectedVoice === voice && styles.dropdownOptionActive,
-                      pressed && styles.dropdownOptionPressed,
-                    ]}
-                  >
-                    <Typography
-                      allowFontScaling={false}
-                      color={selectedVoice === voice ? colors.textOnSky : colors.textPrimary}
-                      variant="Body"
-                      weight="bold"
-                    >
-                      {voice}
-                    </Typography>
-                  </Pressable>
-                ))}
-              </SurfaceCard>
-            ) : null}
+              {eventTitle}
+            </Typography>
           </View>
+        </Animated.View>
 
-          <View style={styles.selectorContainer}>
-            <View style={[styles.selectorButton, styles.minutesSelectorButton]}>
+        <Animated.View style={metaIntroStyle}>
+          <View style={styles.collectiveMetaRow}>
+            <View
+              style={[
+                styles.liveChip,
+                isCollectiveRoomLive
+                  ? styles.liveChipActive
+                  : hasEnded
+                    ? styles.liveChipEnded
+                    : styles.liveChipSoon,
+              ]}
+            >
               <Typography
-                adjustsFontSizeToFit
                 allowFontScaling={false}
-                minimumFontScale={0.75}
-                numberOfLines={1}
-                style={styles.selectorValue}
-                variant="Body"
+                color={colors.textPrimary}
+                variant="Caption"
                 weight="bold"
               >
-                {hasStarted ? `${remainingLabel} left` : `${startCountdownLabel} to start`}
+                {isCollectiveRoomLive ? 'Live' : hasEnded ? 'Ended' : 'Soon'}
               </Typography>
-              <MaterialCommunityIcons
-                color={hasStarted ? colors.success : colors.warning}
-                name={hasStarted ? 'clock-check-outline' : 'clock-outline'}
-                size={20}
-              />
+            </View>
+
+            <View style={styles.collectiveStatsChip}>
+              <LiveLogo size={20} />
+              <Typography
+                allowFontScaling={false}
+                color={colors.textSecondary}
+                variant="Caption"
+                weight="bold"
+              >
+                {`${participantCount} joined`}
+              </Typography>
             </View>
           </View>
-        </View>
+        </Animated.View>
 
-        <View style={styles.centerBlock}>
+        <Animated.View style={headerIntroStyle}>
+          <View style={styles.selectorRow}>
+            <View style={styles.selectorContainer}>
+              <Pressable
+                accessibilityHint="Opens voice options for this event room."
+                accessibilityLabel="Voice selection"
+                accessibilityRole="button"
+                accessibilityState={{ expanded: isVoiceMenuOpen }}
+                onPress={(event) => {
+                  event.stopPropagation();
+                  setIsVoiceMenuOpen((current) => !current);
+                }}
+                style={({ pressed }) => [
+                  styles.selectorButton,
+                  !reduceMotionEnabled && pressed && styles.selectorPressed,
+                ]}
+              >
+                <View style={styles.voiceAvatar}>
+                  <MaterialCommunityIcons color={colors.textPrimary} name="account" size={13} />
+                </View>
+                <Typography
+                  adjustsFontSizeToFit
+                  allowFontScaling={false}
+                  minimumFontScale={0.75}
+                  numberOfLines={1}
+                  style={styles.selectorValue}
+                  variant="Body"
+                  weight="bold"
+                >
+                  {selectedVoice}
+                </Typography>
+                <MaterialCommunityIcons
+                  color={colors.textSecondary}
+                  name={isVoiceMenuOpen ? 'chevron-up' : 'chevron-down'}
+                  size={24}
+                />
+              </Pressable>
+
+              {isVoiceMenuOpen ? (
+                <SurfaceCard radius="md" style={styles.dropdownMenu}>
+                  {VOICE_OPTIONS.map((voice) => (
+                    <Pressable
+                      accessibilityLabel={voice}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: selectedVoice === voice }}
+                      key={voice}
+                      onPress={(event) => {
+                        event.stopPropagation();
+                        setSelectedVoice(voice);
+                        setIsVoiceMenuOpen(false);
+                      }}
+                      style={({ pressed }) => [
+                        styles.dropdownOption,
+                        selectedVoice === voice && styles.dropdownOptionActive,
+                        !reduceMotionEnabled && pressed && styles.dropdownOptionPressed,
+                      ]}
+                    >
+                      <Typography
+                        allowFontScaling={false}
+                        color={selectedVoice === voice ? colors.textOnSky : colors.textPrimary}
+                        variant="Body"
+                        weight="bold"
+                      >
+                        {voice}
+                      </Typography>
+                    </Pressable>
+                  ))}
+                </SurfaceCard>
+              ) : null}
+            </View>
+
+            <View style={styles.selectorContainer}>
+              <View style={[styles.selectorButton, styles.minutesSelectorButton]}>
+                <Typography
+                  adjustsFontSizeToFit
+                  allowFontScaling={false}
+                  minimumFontScale={0.75}
+                  numberOfLines={1}
+                  style={styles.selectorValue}
+                  variant="Body"
+                  weight="bold"
+                >
+                  {hasStarted ? `${remainingLabel} left` : `${startCountdownLabel} to start`}
+                </Typography>
+                <MaterialCommunityIcons
+                  color={hasStarted ? colors.success : colors.warning}
+                  name={hasStarted ? 'clock-check-outline' : 'clock-outline'}
+                  size={20}
+                />
+              </View>
+            </View>
+          </View>
+        </Animated.View>
+
+        <Animated.View style={[styles.centerBlock, stageIntroStyle]}>
           <Pressable
-            disabled={
-              loadingEvent || loadingAudio || !eventScript.trim() || !hasStarted || hasEnded
-            }
+            accessibilityHint="Starts or pauses event room audio."
+            accessibilityLabel={isRunning ? 'Pause event audio' : 'Play event audio'}
+            accessibilityRole="button"
+            accessibilityState={{
+              busy: loadingAudio || loadingEvent,
+              disabled: isPlaybackDisabled,
+              selected: isRunning,
+            }}
+            disabled={isPlaybackDisabled}
             onPress={() => {
               void onTogglePlayback();
             }}
-            style={({ pressed }) => [styles.playPulseTap, pressed && styles.playPressed]}
+            style={({ pressed }) => [
+              styles.playPulseTap,
+              !reduceMotionEnabled && pressed && styles.playPressed,
+            ]}
           >
             <View style={styles.playPulseContainer}>
-              <LottieView
-                autoPlay={false}
-                loop
-                ref={playPulseRef}
-                source={globeFallbackAnimation}
-                style={styles.playPulseLottie}
-              />
+              <View accessible={false} importantForAccessibility="no-hide-descendants">
+                <LottieView
+                  autoPlay={false}
+                  loop
+                  ref={playPulseRef}
+                  source={globeFallbackAnimation}
+                  style={styles.playPulseLottie}
+                />
+              </View>
               <View style={styles.playButtonCore}>
                 <MaterialCommunityIcons
                   color={figmaV2Reference.tabs.activeBorder}
@@ -918,47 +968,26 @@ export function EventRoomScreen() {
             </View>
           </Pressable>
 
-          <View style={styles.scriptWrap}>
-            {loadingEvent ? (
-              <Typography allowFontScaling={false} color={colors.textSecondary} variant="Body">
-                Loading event details...
-              </Typography>
-            ) : activeTimedParagraph?.words.length ? (
-              <View style={styles.scriptWordFlow}>
-                {activeTimedParagraph.words.map((word) => {
-                  const isActiveWord = word.index === activeTimedWordIndex;
-
-                  return (
-                    <Typography
-                      key={`${word.index}-${word.startSeconds}-${word.word}`}
-                      allowFontScaling={false}
-                      style={[styles.scriptWord, isActiveWord && styles.scriptWordActive]}
-                      variant="H2"
-                      weight={isActiveWord ? 'bold' : 'medium'}
-                    >
-                      {`${word.word} `}
-                    </Typography>
-                  );
-                })}
-              </View>
-            ) : eventScript ? (
-              <View style={styles.scriptSyncWrap}>
-                <Typography
-                  allowFontScaling={false}
-                  numberOfLines={MAX_SCRIPT_LINES}
-                  style={styles.scriptTextActive}
-                  variant="H2"
-                  weight="bold"
-                >
-                  {fallbackParagraph}
-                </Typography>
-              </View>
-            ) : (
-              <Typography allowFontScaling={false} color={colors.textSecondary} variant="Body">
-                No script available for this event.
-              </Typography>
-            )}
-          </View>
+          <Animated.View style={scriptPanelFocusStyle}>
+            <View style={styles.scriptPanelCard}>
+              <RoomScriptPanel
+                activeTimedWordIndex={activeTimedWordIndex}
+                activeTimedWords={activeTimedParagraph?.words}
+                fallbackParagraph={fallbackParagraph}
+                loading={loadingEvent}
+                loadingMessage="Loading event details..."
+                maxScriptLines={MAX_SCRIPT_LINES}
+                noScriptMessage="No script available for this event."
+                scriptSyncWrapStyle={styles.scriptSyncWrap}
+                scriptText={eventScript}
+                scriptTextActiveStyle={styles.scriptTextActive}
+                scriptWordActiveStyle={styles.scriptWordActive}
+                scriptWordFlowStyle={styles.scriptWordFlow}
+                scriptWordStyle={styles.scriptWord}
+                scriptWrapStyle={styles.scriptWrap}
+              />
+            </View>
+          </Animated.View>
 
           {!hasStarted ? (
             <Typography allowFontScaling={false} color={colors.warning} variant="Caption">
@@ -973,113 +1002,45 @@ export function EventRoomScreen() {
           ) : null}
 
           {error ? (
-            <Typography allowFontScaling={false} color={colors.danger} variant="Caption">
-              {error}
-            </Typography>
+            <InlineErrorCard
+              message={error}
+              style={styles.errorCard}
+              title="Could not continue room playback"
+            />
           ) : null}
-        </View>
+        </Animated.View>
 
-        <View style={styles.bottomBlock}>
-          <View style={styles.progressTrack}>
-            <View style={[styles.progressFill, { width: `${progress * 100}%` }]} />
-          </View>
-          <View style={styles.progressLabels}>
-            <Typography allowFontScaling={false} variant="H2" weight="bold">
-              {elapsedLabel}
-            </Typography>
-            <Typography allowFontScaling={false} variant="H2" weight="bold">
-              {remainingLabel}
-            </Typography>
-          </View>
-
-          {isInviteOpen ? (
-            <SurfaceCard radius="md" style={styles.inviteMenu}>
-              {['Invite your circle', 'Copy invite link', 'Share externally'].map((option) => (
-                <Pressable
-                  key={option}
-                  onPress={(event) => {
-                    event.stopPropagation();
-                    setIsInviteOpen(false);
-                  }}
-                  style={({ pressed }) => [
-                    styles.inviteOption,
-                    pressed && styles.dropdownOptionPressed,
-                  ]}
-                >
-                  <Typography allowFontScaling={false} variant="Body" weight="bold">
-                    {option}
-                  </Typography>
-                </Pressable>
-              ))}
-            </SurfaceCard>
-          ) : null}
-
-          <View style={styles.bottomActionsRow}>
-            <Pressable
-              onPress={() => setIsMuted((current) => !current)}
-              style={({ pressed }) => [styles.bottomIconAction, pressed && styles.selectorPressed]}
-            >
-              <MaterialCommunityIcons
-                color={colors.textPrimary}
-                name={isMuted ? 'volume-off' : 'volume-high'}
-                size={30}
-              />
-              <Typography
-                allowFontScaling={false}
-                color={colors.textSecondary}
-                variant="Body"
-                weight="bold"
-              >
-                {isMuted ? 'Unmute' : 'Mute'}
-              </Typography>
-            </Pressable>
-
-            <Pressable
-              onPress={() => {
-                setIsRunning(false);
-                if (activePlayerRef.current) {
-                  void activePlayerRef.current.stop();
-                }
-              }}
-              style={({ pressed }) => [styles.bottomIconAction, pressed && styles.selectorPressed]}
-            >
-              <MaterialCommunityIcons color={colors.textPrimary} name="restore" size={30} />
-              <Typography
-                allowFontScaling={false}
-                color={colors.textSecondary}
-                variant="Body"
-                weight="bold"
-              >
-                Reset
-              </Typography>
-            </Pressable>
-
-            <Pressable
-              onPress={(event) => {
-                event.stopPropagation();
-                setIsInviteOpen((current) => !current);
-              }}
-              style={({ pressed }) => [styles.inviteButton, pressed && styles.selectorPressed]}
-            >
-              <View style={styles.inviteIconCircle}>
-                <MaterialCommunityIcons color={colors.textPrimary} name="account-group" size={16} />
-              </View>
-              <Typography
-                allowFontScaling={false}
-                style={styles.inviteText}
-                variant="H2"
-                weight="bold"
-              >
-                Invite
-              </Typography>
-              <MaterialCommunityIcons
-                color={colors.textSecondary}
-                name={isInviteOpen ? 'chevron-down' : 'chevron-up'}
-                size={20}
-              />
-            </Pressable>
-          </View>
-        </View>
+        <Animated.View style={transportIntroStyle}>
+          <RoomTransportControls
+            isInviteOpen={isInviteOpen}
+            isMuted={isMuted}
+            isRunning={isRunning}
+            leftLabel={elapsedLabel}
+            onReset={() => {
+              void stop();
+            }}
+            onSelectInviteOption={() => setIsInviteOpen(false)}
+            onToggleInvite={() => setIsInviteOpen((current) => !current)}
+            onToggleMute={() => setMuted((current) => !current)}
+            progress={progress}
+            rightLabel={remainingLabel}
+            styles={{
+              bottomActionsRow: styles.bottomActionsRow,
+              bottomBlock: styles.bottomBlock,
+              bottomIconAction: styles.bottomIconAction,
+              dropdownOptionPressed: styles.dropdownOptionPressed,
+              inviteButton: styles.inviteButton,
+              inviteIconCircle: styles.inviteIconCircle,
+              inviteMenu: styles.inviteMenu,
+              inviteOption: styles.inviteOption,
+              inviteText: styles.inviteText,
+              progressFill: styles.progressFill,
+              progressLabels: styles.progressLabels,
+              progressTrack: styles.progressTrack,
+              selectorPressed: styles.selectorPressed,
+            }}
+          />
+        </Animated.View>
       </Pressable>
     </Screen>
   );
@@ -1102,6 +1063,7 @@ const styles = StyleSheet.create({
     gap: spacing.xxs,
     justifyContent: 'center',
     minWidth: 76,
+    opacity: 0.94,
     paddingHorizontal: spacing.xs,
     paddingVertical: spacing.xs,
   },
@@ -1111,6 +1073,24 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     justifyContent: 'flex-start',
     minHeight: 0,
+  },
+  collectiveMetaRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: spacing.xs,
+    justifyContent: 'center',
+  },
+  collectiveStatsChip: {
+    alignItems: 'center',
+    backgroundColor: roomAtmosphere.collective.selectorBackground,
+    borderColor: roomAtmosphere.collective.selectorBorder,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: spacing.xs,
+    minHeight: 32,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xxs,
   },
   container: {
     flex: 1,
@@ -1135,6 +1115,10 @@ const styles = StyleSheet.create({
   dropdownOptionPressed: {
     transform: [{ scale: 0.99 }],
   },
+  errorCard: {
+    minHeight: 44,
+    width: '100%',
+  },
   headerBlock: {
     alignItems: 'center',
     gap: spacing.xxs,
@@ -1144,8 +1128,8 @@ const styles = StyleSheet.create({
   },
   iconCircleButton: {
     alignItems: 'center',
-    backgroundColor: figmaV2Reference.tabs.activeBackground,
-    borderColor: figmaV2Reference.tabs.activeBorder,
+    backgroundColor: roomAtmosphere.collective.selectorBackground,
+    borderColor: roomAtmosphere.collective.selectorBorder,
     borderRadius: radii.pill,
     borderWidth: 1,
     height: 52,
@@ -1157,8 +1141,8 @@ const styles = StyleSheet.create({
   },
   inviteButton: {
     alignItems: 'center',
-    backgroundColor: figmaV2Reference.tabs.activeBackground,
-    borderColor: figmaV2Reference.tabs.activeBorder,
+    backgroundColor: roomAtmosphere.collective.selectorBackground,
+    borderColor: roomAtmosphere.collective.selectorBorder,
     borderRadius: radii.pill,
     borderWidth: 1,
     flexDirection: 'row',
@@ -1189,8 +1173,32 @@ const styles = StyleSheet.create({
   inviteText: {
     textTransform: 'none',
   },
+  liveChip: {
+    alignItems: 'center',
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    minHeight: 32,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xxs,
+  },
+  liveChipActive: {
+    backgroundColor: roomAtmosphere.collective.liveChipBackground,
+    borderColor: roomAtmosphere.collective.liveChipBorder,
+  },
+  liveChipEnded: {
+    backgroundColor: colors.surfaceStrong,
+    borderColor: colors.borderMedium,
+  },
+  liveChipSoon: {
+    backgroundColor: roomAtmosphere.collective.selectorBackground,
+    borderColor: roomAtmosphere.collective.selectorBorder,
+  },
   minutesSelectorButton: {
     justifyContent: 'center',
+  },
+  noMotion: {
+    opacity: 1,
   },
   playButtonCore: {
     alignItems: 'center',
@@ -1224,8 +1232,8 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   progressFill: {
-    backgroundColor: figmaV2Reference.buttons.sky.from,
-    borderColor: figmaV2Reference.tabs.activeBorder,
+    backgroundColor: roomAtmosphere.collective.transportFill,
+    borderColor: roomAtmosphere.collective.selectorBorder,
     borderRadius: radii.pill,
     borderWidth: 1,
     height: '100%',
@@ -1235,8 +1243,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   progressTrack: {
-    backgroundColor: figmaV2Reference.tabs.activeBackground,
-    borderColor: figmaV2Reference.tabs.activeBorder,
+    backgroundColor: roomAtmosphere.collective.transportTrack,
+    borderColor: roomAtmosphere.collective.selectorBorder,
     borderRadius: radii.pill,
     borderWidth: 1,
     height: 16,
@@ -1244,6 +1252,15 @@ const styles = StyleSheet.create({
   },
   screenContent: {
     flex: 1,
+  },
+  scriptPanelCard: {
+    backgroundColor: roomAtmosphere.collective.panelBackground,
+    borderColor: roomAtmosphere.collective.panelBorder,
+    borderRadius: radii.xl,
+    borderWidth: 1,
+    minHeight: 198,
+    overflow: 'hidden',
+    width: '100%',
   },
   scriptSyncWrap: {
     alignItems: 'center',
@@ -1261,7 +1278,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   scriptWord: {
-    color: colors.textSecondary,
+    color: roomAtmosphere.collective.scriptWord,
     fontSize: 20,
     letterSpacing: 0.1,
     lineHeight: 29,
@@ -1269,7 +1286,7 @@ const styles = StyleSheet.create({
   },
   scriptWordActive: {
     color: colors.textPrimary,
-    textShadowColor: figmaV2Reference.tabs.activeBorder,
+    textShadowColor: roomAtmosphere.collective.scriptGlow,
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 9,
     transform: [{ scale: 1.04 }],
@@ -1297,8 +1314,8 @@ const styles = StyleSheet.create({
   },
   selectorButton: {
     alignItems: 'center',
-    backgroundColor: figmaV2Reference.tabs.activeBackground,
-    borderColor: figmaV2Reference.tabs.activeBorder,
+    backgroundColor: roomAtmosphere.collective.selectorBackground,
+    borderColor: roomAtmosphere.collective.selectorBorder,
     borderRadius: radii.pill,
     borderWidth: 1,
     flexDirection: 'row',

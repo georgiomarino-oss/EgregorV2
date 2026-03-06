@@ -25,6 +25,8 @@ export interface ManagedAudioPlayer {
   getStatus: () => AudioPlaybackStatus;
   pause: () => void;
   play: () => void;
+  setMuted: (muted: boolean) => void;
+  setVolume: (volume: number) => void;
   seekTo: (positionMillis: number) => Promise<void>;
   stop: () => Promise<void>;
   subscribe: (listener: (status: AudioPlaybackStatus) => void) => () => void;
@@ -65,10 +67,13 @@ function normalizeSource(source: AudioSource | string | number): AudioSource {
 type CompatAudioPlayer = {
   addListener: (eventName: string, listener: (status: AudioStatus) => void) => EventSubscription;
   currentStatus: AudioStatus | null;
+  muted?: boolean;
   pause: () => void;
   play: () => void;
   remove: () => void;
+  setVolume?: (value: number) => void;
   seekTo: (seconds: number) => Promise<void>;
+  volume?: number;
 };
 
 type ExpoAudioNativeModule = {
@@ -106,6 +111,36 @@ function createAudioPlayerCompat(source: AudioSource): CompatAudioPlayer {
   }
 }
 
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function setPlayerVolume(player: CompatAudioPlayer, nextVolume: number) {
+  const normalizedVolume = clamp(nextVolume, 0, 1);
+
+  try {
+    player.setVolume?.(normalizedVolume);
+  } catch {
+    // Some Expo audio runtimes do not expose setVolume.
+  }
+
+  try {
+    if ('volume' in player) {
+      player.volume = normalizedVolume;
+    }
+  } catch {
+    // Best-effort fallback for bridge variants.
+  }
+
+  try {
+    if ('muted' in player) {
+      player.muted = normalizedVolume <= 0;
+    }
+  } catch {
+    // Best-effort fallback for bridge variants.
+  }
+}
+
 export async function configureAudioForPlayback() {
   if (!configureAudioPromise) {
     configureAudioPromise = setAudioModeAsync({
@@ -127,6 +162,8 @@ export function createPlayer(sourceUriOrAsset: AudioSource | string | number): M
   const player = createAudioPlayerCompat(normalizeSource(sourceUriOrAsset));
 
   let status = mapStatus(player.currentStatus);
+  let volume = 1;
+  let muted = false;
   let subscription: EventSubscription | null = null;
   const listeners = new Set<(nextStatus: AudioPlaybackStatus) => void>();
 
@@ -138,6 +175,8 @@ export function createPlayer(sourceUriOrAsset: AudioSource | string | number): M
   subscription = player.addListener('playbackStatusUpdate', (nextStatus) => {
     publishStatus(mapStatus(nextStatus));
   });
+
+  setPlayerVolume(player, volume);
 
   return {
     dispose() {
@@ -154,6 +193,14 @@ export function createPlayer(sourceUriOrAsset: AudioSource | string | number): M
     },
     play() {
       player.play();
+    },
+    setMuted(nextMuted) {
+      muted = nextMuted;
+      setPlayerVolume(player, muted ? 0 : volume);
+    },
+    setVolume(nextVolume) {
+      volume = clamp(nextVolume, 0, 1);
+      setPlayerVolume(player, muted ? 0 : volume);
     },
     async seekTo(positionMillis: number) {
       const seconds = Math.max(0, positionMillis) / 1000;

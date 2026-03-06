@@ -11,7 +11,12 @@ import Svg, {
   Stop,
 } from 'react-native-svg';
 
+import { useReducedMotion } from '../features/rooms/hooks/useReducedMotion';
+import { motion } from '../theme/tokens';
+
 interface LiveLogoProps {
+  accessibilityLabel?: string;
+  decorative?: boolean;
   size?: number;
   style?: StyleProp<ViewStyle>;
 }
@@ -153,15 +158,28 @@ function FastOrbitLayer() {
   );
 }
 
-export function LiveLogo({ size = 86, style }: LiveLogoProps) {
+export function LiveLogo({
+  accessibilityLabel = 'Live',
+  decorative = true,
+  size = 86,
+  style,
+}: LiveLogoProps) {
+  const reduceMotionEnabled = useReducedMotion();
   const slowSpin = useMemo(() => new Animated.Value(0), []);
   const fastSpin = useMemo(() => new Animated.Value(0), []);
   const pulse = useMemo(() => new Animated.Value(0), []);
 
   useEffect(() => {
+    if (reduceMotionEnabled) {
+      slowSpin.setValue(0);
+      fastSpin.setValue(0);
+      pulse.setValue(0);
+      return;
+    }
+
     const slowLoop = Animated.loop(
       Animated.timing(slowSpin, {
-        duration: 16000,
+        duration: motion.liveLogo.slowOrbitMs,
         easing: Easing.linear,
         toValue: 1,
         useNativeDriver: true,
@@ -171,7 +189,7 @@ export function LiveLogo({ size = 86, style }: LiveLogoProps) {
 
     const fastLoop = Animated.loop(
       Animated.timing(fastSpin, {
-        duration: 7000,
+        duration: motion.liveLogo.fastOrbitMs,
         easing: Easing.linear,
         toValue: 1,
         useNativeDriver: true,
@@ -182,13 +200,13 @@ export function LiveLogo({ size = 86, style }: LiveLogoProps) {
     const pulseLoop = Animated.loop(
       Animated.sequence([
         Animated.timing(pulse, {
-          duration: 1200,
+          duration: motion.liveLogo.pulseMs,
           easing: Easing.inOut(Easing.ease),
           toValue: 1,
           useNativeDriver: true,
         }),
         Animated.timing(pulse, {
-          duration: 1200,
+          duration: motion.liveLogo.pulseMs,
           easing: Easing.inOut(Easing.ease),
           toValue: 0,
           useNativeDriver: true,
@@ -206,7 +224,7 @@ export function LiveLogo({ size = 86, style }: LiveLogoProps) {
       fastLoop.stop();
       pulseLoop.stop();
     };
-  }, [fastSpin, pulse, slowSpin]);
+  }, [fastSpin, pulse, reduceMotionEnabled, slowSpin]);
 
   const slowRotation = slowSpin.interpolate({
     inputRange: [0, 1],
@@ -220,7 +238,7 @@ export function LiveLogo({ size = 86, style }: LiveLogoProps) {
 
   const pulseScale = pulse.interpolate({
     inputRange: [0, 1],
-    outputRange: [1, 1.08],
+    outputRange: [1, 1 + motion.amplitude.medium],
   });
 
   const pulseOpacity = pulse.interpolate({
@@ -229,7 +247,13 @@ export function LiveLogo({ size = 86, style }: LiveLogoProps) {
   });
 
   return (
-    <View style={[styles.root, { height: size, width: size }, style]}>
+    <View
+      accessibilityLabel={decorative ? undefined : accessibilityLabel}
+      accessibilityRole={decorative ? undefined : 'image'}
+      accessible={!decorative}
+      importantForAccessibility={decorative ? 'no-hide-descendants' : 'auto'}
+      style={[styles.root, { height: size, width: size }, style]}
+    >
       <BaseLayer />
 
       <Animated.View

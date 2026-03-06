@@ -1,14 +1,24 @@
-import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Pressable,
+  StyleSheet,
+  View,
+  type AccessibilityRole,
+} from 'react-native';
 
 import { LinearGradient } from 'expo-linear-gradient';
 
+import { useReducedMotion } from '../features/rooms/hooks/useReducedMotion';
 import { figmaV2Reference } from '../theme/figma-v2-reference';
-import { radii, spacing } from '../theme/tokens';
+import { interaction, radii } from '../theme/tokens';
 import { Typography } from './Typography';
 
 type ButtonVariant = 'primary' | 'secondary' | 'gold' | 'sky';
 
 interface ButtonProps {
+  accessibilityHint?: string;
+  accessibilityLabel?: string;
+  accessibilityRole?: AccessibilityRole;
   disabled?: boolean;
   loading?: boolean;
   onPress: () => void;
@@ -49,21 +59,41 @@ const textColorByVariant: Record<ButtonVariant, string> = {
 };
 
 export function Button({
+  accessibilityHint,
+  accessibilityLabel,
+  accessibilityRole = 'button',
   disabled = false,
   loading = false,
   onPress,
   title,
   variant = 'primary',
 }: ButtonProps) {
+  const reduceMotionEnabled = useReducedMotion();
+  const isBusy = disabled || loading;
+  const resolvedAccessibilityLabel = accessibilityLabel ?? title;
+
   return (
     <Pressable
-      accessibilityRole="button"
-      disabled={disabled || loading}
+      accessibilityHint={accessibilityHint}
+      accessibilityLabel={resolvedAccessibilityLabel}
+      accessibilityRole={accessibilityRole}
+      accessibilityState={{ busy: loading, disabled: isBusy }}
+      disabled={isBusy}
       onPress={onPress}
-      style={({ pressed }) => [styles.pressable, pressed && styles.pressedScale]}
+      style={({ pressed }) => [
+        styles.pressable,
+        isBusy
+          ? {
+              opacity: loading
+                ? interaction.button.loadingOpacity
+                : interaction.button.disabledOpacity,
+            }
+          : null,
+        !reduceMotionEnabled && pressed && styles.pressedScale,
+      ]}
     >
       {({ pressed }) => {
-        const showOverlay = pressed || disabled || loading;
+        const showOverlay = pressed || isBusy;
 
         return (
           <LinearGradient
@@ -80,7 +110,11 @@ export function Button({
           >
             {loading ? (
               <View style={styles.loader}>
-                <ActivityIndicator color={textColorByVariant[variant]} />
+                <ActivityIndicator
+                  accessible={false}
+                  color={textColorByVariant[variant]}
+                  importantForAccessibility="no"
+                />
               </View>
             ) : (
               <Typography
@@ -95,6 +129,8 @@ export function Button({
 
             {showOverlay ? (
               <View
+                accessible={false}
+                importantForAccessibility="no-hide-descendants"
                 pointerEvents="none"
                 style={[
                   styles.stateOverlay,
@@ -121,8 +157,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderRadius: radii.md,
     justifyContent: 'center',
-    minHeight: 45,
-    paddingHorizontal: spacing.lg,
+    minHeight: interaction.button.minHeight,
+    paddingHorizontal: interaction.button.paddingX,
   },
   label: {
     letterSpacing: 0.26,
@@ -137,7 +173,7 @@ const styles = StyleSheet.create({
     backgroundColor: figmaV2Reference.overlays.pressed,
   },
   pressedScale: {
-    transform: [{ scale: 0.99 }],
+    transform: [{ scale: interaction.button.pressedScale }],
   },
   pressable: {
     borderRadius: radii.md,

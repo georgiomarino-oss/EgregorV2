@@ -142,3 +142,147 @@ export const eventMarkerColors = {
   scheduled: colors.scheduled,
   user: colors.user,
 } as const;
+
+export const eventMapColors = {
+  live: figmaV2Reference.markers.live,
+  news: figmaV2Reference.status.warning,
+  scheduled: figmaV2Reference.markers.scheduled,
+  user: figmaV2Reference.markers.user,
+} as const;
+
+export const eventsSurface = {
+  filter: figmaV2Reference.eventsSurface.filter,
+  globe: figmaV2Reference.eventsSurface.globe,
+  globeFullscreen: figmaV2Reference.eventsSurface.globeFullscreen,
+  hero: figmaV2Reference.eventsSurface.hero,
+  occurrence: figmaV2Reference.eventsSurface.occurrence,
+} as const;
+
+export const communitySurface = {
+  alerts: figmaV2Reference.communitySurface.alerts,
+  circles: figmaV2Reference.communitySurface.circles,
+  hero: figmaV2Reference.communitySurface.hero,
+  metrics: figmaV2Reference.communitySurface.metrics,
+} as const;
+
+export const circleSurface = {
+  events: figmaV2Reference.circleSurface.events,
+  prayer: figmaV2Reference.circleSurface.prayer,
+} as const;
+
+export const profileSurface = {
+  hero: figmaV2Reference.profileSurface.hero,
+  journal: figmaV2Reference.profileSurface.journal,
+  metrics: figmaV2Reference.profileSurface.metrics,
+  utility: figmaV2Reference.profileSurface.utility,
+} as const;
+
+export const soloSurface = {
+  card: figmaV2Reference.soloSurface.card,
+  filters: figmaV2Reference.soloSurface.filters,
+  hero: figmaV2Reference.soloSurface.hero,
+  library: figmaV2Reference.soloSurface.library,
+  section: figmaV2Reference.soloSurface.section,
+} as const;
+
+export const handoffSurface = {
+  eventDetails: figmaV2Reference.handoffSurface.eventDetails,
+  soloSetup: figmaV2Reference.handoffSurface.soloSetup,
+} as const;
+
+export const crossApp = figmaV2Reference.crossApp;
+export const feedbackSurface = figmaV2Reference.crossApp.feedback;
+export const interaction = figmaV2Reference.crossApp.interaction;
+
+export const statusChipPalette = {
+  danger: {
+    backgroundColor: figmaV2Reference.handoffSurface.eventDetails.state.errorBackground,
+    borderColor: figmaV2Reference.handoffSurface.eventDetails.state.errorBorder,
+    textColor: figmaV2Reference.handoffSurface.eventDetails.state.errorText,
+  },
+  live: {
+    backgroundColor: figmaV2Reference.handoffSurface.eventDetails.status.liveBackground,
+    borderColor: figmaV2Reference.handoffSurface.eventDetails.status.liveBorder,
+    textColor: figmaV2Reference.handoffSurface.eventDetails.status.liveText,
+  },
+  neutral: {
+    backgroundColor: figmaV2Reference.soloSurface.filters.modeChipBackground,
+    borderColor: figmaV2Reference.soloSurface.filters.modeChipBorder,
+    textColor: figmaV2Reference.soloSurface.filters.modeChipText,
+  },
+  scheduled: {
+    backgroundColor: figmaV2Reference.handoffSurface.eventDetails.status.scheduledBackground,
+    borderColor: figmaV2Reference.handoffSurface.eventDetails.status.scheduledBorder,
+    textColor: figmaV2Reference.handoffSurface.eventDetails.status.scheduledText,
+  },
+  soon: {
+    backgroundColor: figmaV2Reference.handoffSurface.eventDetails.status.soonBackground,
+    borderColor: figmaV2Reference.handoffSurface.eventDetails.status.soonBorder,
+    textColor: figmaV2Reference.handoffSurface.eventDetails.status.soonText,
+  },
+  success: {
+    backgroundColor: figmaV2Reference.profileSurface.journal.saveActiveBackground,
+    borderColor: figmaV2Reference.profileSurface.journal.saveActiveBorder,
+    textColor: figmaV2Reference.profileSurface.journal.saveActiveText,
+  },
+  template: {
+    backgroundColor: figmaV2Reference.handoffSurface.eventDetails.status.templateBackground,
+    borderColor: figmaV2Reference.handoffSurface.eventDetails.status.templateBorder,
+    textColor: figmaV2Reference.handoffSurface.eventDetails.status.templateText,
+  },
+  upcoming: {
+    backgroundColor: figmaV2Reference.handoffSurface.eventDetails.status.upcomingBackground,
+    borderColor: figmaV2Reference.handoffSurface.eventDetails.status.upcomingBorder,
+    textColor: figmaV2Reference.handoffSurface.eventDetails.status.upcomingText,
+  },
+  warning: {
+    backgroundColor: figmaV2Reference.handoffSurface.eventDetails.status.soonBackground,
+    borderColor: figmaV2Reference.handoffSurface.eventDetails.status.soonBorder,
+    textColor: figmaV2Reference.handoffSurface.eventDetails.status.soonText,
+  },
+} as const;
+
+export const roomAtmosphere = {
+  solo: {
+    auraInner: figmaV2Reference.rooms.solo.auraInner,
+    auraOuter: figmaV2Reference.rooms.solo.auraOuter,
+    mistFrom: figmaV2Reference.rooms.solo.mistFrom,
+    mistTo: figmaV2Reference.rooms.solo.mistTo,
+    panelBackground: figmaV2Reference.rooms.solo.panelBackground,
+    panelBorder: figmaV2Reference.rooms.solo.panelBorder,
+    scriptGlow: figmaV2Reference.rooms.solo.scriptGlow,
+    scriptWord: figmaV2Reference.rooms.solo.scriptWord,
+    selectorBackground: figmaV2Reference.rooms.solo.selectorBackground,
+    selectorBorder: figmaV2Reference.rooms.solo.selectorBorder,
+    transportFill: figmaV2Reference.rooms.solo.transportFill,
+    transportTrack: figmaV2Reference.rooms.solo.transportTrack,
+  },
+  collective: {
+    auraInner: figmaV2Reference.rooms.collective.auraInner,
+    auraOuter: figmaV2Reference.rooms.collective.auraOuter,
+    energy: figmaV2Reference.rooms.collective.energy,
+    liveChipBackground: figmaV2Reference.rooms.collective.liveChipBackground,
+    liveChipBorder: figmaV2Reference.rooms.collective.liveChipBorder,
+    mistFrom: figmaV2Reference.rooms.collective.mistFrom,
+    mistTo: figmaV2Reference.rooms.collective.mistTo,
+    panelBackground: figmaV2Reference.rooms.collective.panelBackground,
+    panelBorder: figmaV2Reference.rooms.collective.panelBorder,
+    scriptGlow: figmaV2Reference.rooms.collective.scriptGlow,
+    scriptWord: figmaV2Reference.rooms.collective.scriptWord,
+    selectorBackground: figmaV2Reference.rooms.collective.selectorBackground,
+    selectorBorder: figmaV2Reference.rooms.collective.selectorBorder,
+    transportFill: figmaV2Reference.rooms.collective.transportFill,
+    transportTrack: figmaV2Reference.rooms.collective.transportTrack,
+  },
+} as const;
+
+export const motion = {
+  amplitude: figmaV2Reference.motion.amplitude,
+  durationMs: figmaV2Reference.motion.durationMs,
+  easing: figmaV2Reference.motion.easing,
+  liveLogo: figmaV2Reference.motion.liveLogo,
+  reduced: figmaV2Reference.motion.reduced,
+  room: figmaV2Reference.motion.room,
+} as const;
+
+export type CollectiveEnergyLevel = keyof typeof roomAtmosphere.collective.energy;

@@ -1,16 +1,19 @@
 import ambientAnimation from '../../assets/lottie/cosmic-ambient.json';
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { Animated, Easing, StyleSheet, View } from 'react-native';
 
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
 
+import { ActionPanel } from '../components/ActionPanel';
 import type { SoloStackParamList } from '../app/navigation/types';
 import { Button } from '../components/Button';
 import { Screen } from '../components/Screen';
-import { SurfaceCard } from '../components/SurfaceCard';
 import { Typography } from '../components/Typography';
+import { SetupSummaryPanel } from '../features/setup/components/SetupSummaryPanel';
+import { SoloSetupHero } from '../features/setup/components/SoloSetupHero';
+import { useReducedMotion } from '../features/rooms/hooks/useReducedMotion';
 import {
   fetchSoloStats,
   fetchUserPreferences,
@@ -19,24 +22,11 @@ import {
   type UserPreferences,
 } from '../lib/api/data';
 import { supabase } from '../lib/supabase';
-import { profileRowGap, sectionGap } from '../theme/layout';
-import { colors } from '../theme/tokens';
+import { sectionGap } from '../theme/layout';
+import { handoffSurface, motion, radii, spacing } from '../theme/tokens';
 
 type SoloSetupNavigation = NativeStackNavigationProp<SoloStackParamList, 'SoloSetup'>;
 type SoloSetupRoute = RouteProp<SoloStackParamList, 'SoloSetup'>;
-
-function SetupStat({ label, value }: { label: string; value: string }) {
-  return (
-    <SurfaceCard radius="md" style={styles.setupStat}>
-      <Typography color={colors.textSecondary} variant="Label">
-        {label}
-      </Typography>
-      <Typography variant="H2" weight="bold">
-        {value}
-      </Typography>
-    </SurfaceCard>
-  );
-}
 
 const defaultPreferences: UserPreferences = {
   highContrastMode: false,
@@ -50,13 +40,36 @@ const defaultPreferences: UserPreferences = {
 export function SoloSetupScreen() {
   const navigation = useNavigation<SoloSetupNavigation>();
   const route = useRoute<SoloSetupRoute>();
+  const reduceMotionEnabled = useReducedMotion();
+  const actionSettle = useMemo(() => new Animated.Value(0), []);
 
   const [preferences, setPreferences] = useState<UserPreferences>(defaultPreferences);
   const [sessionsToday, setSessionsToday] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const palette = handoffSurface.soloSetup;
   const intention = route.params?.intention?.trim() || 'Set your intention on the previous screen';
+
+  useEffect(() => {
+    if (reduceMotionEnabled) {
+      actionSettle.setValue(1);
+      return;
+    }
+
+    actionSettle.setValue(0);
+    const animation = Animated.timing(actionSettle, {
+      duration: motion.durationMs.slow,
+      easing: Easing.out(Easing.cubic),
+      toValue: 1,
+      useNativeDriver: true,
+    });
+    animation.start();
+
+    return () => {
+      animation.stop();
+    };
+  }, [actionSettle, reduceMotionEnabled]);
 
   useEffect(() => {
     let active = true;
@@ -113,71 +126,106 @@ export function SoloSetupScreen() {
     };
   }, []);
 
+  const summaryItems = useMemo(
+    () => [
+      {
+        label: 'Duration',
+        value: `${preferences.preferredSessionMinutes} min`,
+      },
+      {
+        label: 'Breath mode',
+        value: preferences.preferredBreathMode,
+      },
+      {
+        label: 'Ambient',
+        value: preferences.preferredAmbient,
+      },
+      {
+        label: 'Voice',
+        value: preferences.voiceEnabled ? 'Enabled' : 'Muted',
+      },
+    ],
+    [preferences],
+  );
+
+  const actionSettleStyle = reduceMotionEnabled
+    ? styles.noMotion
+    : {
+        opacity: actionSettle.interpolate({
+          inputRange: [0, 1],
+          outputRange: [0.9, 1],
+        }),
+        transform: [
+          {
+            translateY: actionSettle.interpolate({
+              inputRange: [0, 1],
+              outputRange: [8, 0],
+            }),
+          },
+        ],
+      };
+
+  const onStartSession = () => {
+    const nextParams: NonNullable<SoloStackParamList['SoloLive']> = { intention };
+
+    if (route.params?.scriptPreset) {
+      nextParams.scriptPreset = route.params.scriptPreset;
+    }
+    if (route.params?.prayerLibraryItemId) {
+      nextParams.prayerLibraryItemId = route.params.prayerLibraryItemId;
+    }
+    if (route.params?.durationMinutes) {
+      nextParams.durationMinutes = route.params.durationMinutes;
+    }
+    if (route.params?.allowAudioGeneration === true) {
+      nextParams.allowAudioGeneration = true;
+    }
+
+    navigation.navigate('SoloLive', nextParams);
+  };
+
   return (
     <Screen ambientSource={ambientAnimation} contentContainerStyle={styles.content} variant="solo">
-      <Typography variant="H1" weight="bold">
-        Intentional solo ritual
-      </Typography>
-      <Typography color={colors.textSecondary}>
-        Confirm your settings, then begin your guided session.
-      </Typography>
+      <SoloSetupHero intention={intention} loading={loading} sessionsToday={sessionsToday} />
 
-      <SurfaceCard radius="xl" style={styles.section}>
-        <Typography color={colors.textSecondary} variant="Label">
-          Intention
-        </Typography>
-        <Typography variant="H2">{intention}</Typography>
+      <SetupSummaryPanel errorMessage={error} items={summaryItems} loading={loading} />
 
-        {loading ? <ActivityIndicator color={colors.accentMintStart} /> : null}
-
-        <View style={styles.row}>
-          <SetupStat label="Duration" value={`${preferences.preferredSessionMinutes} min`} />
-          <SetupStat label="Breath mode" value={preferences.preferredBreathMode} />
-        </View>
-
-        <View style={styles.row}>
-          <SetupStat label="Ambient" value={preferences.preferredAmbient} />
-          <SetupStat label="Voice" value={preferences.voiceEnabled ? 'Enabled' : 'Muted'} />
-        </View>
-
-        {error ? (
-          <Typography color={colors.danger} variant="Caption">
-            {error}
+      <Animated.View style={actionSettleStyle}>
+        <ActionPanel
+          accessibilityHint="Contains the primary action to start your solo session."
+          accessibilityLabel="Session actions"
+          accessibilityRole="summary"
+          backgroundColor={palette.actions.panelBackground}
+          borderColor={palette.actions.panelBorder}
+        >
+          <Typography allowFontScaling={false} color={palette.actions.hintText} variant="Caption">
+            {loading
+              ? 'Syncing your latest preferences...'
+              : 'You can begin now. Your selected settings are already loaded for this session.'}
           </Typography>
-        ) : null}
 
-        <Button
-          onPress={() => {
-            const nextParams: NonNullable<SoloStackParamList['SoloLive']> = { intention };
+          <View
+            style={[
+              styles.progressChip,
+              {
+                backgroundColor: palette.actions.progressBackground,
+                borderColor: palette.actions.progressBorder,
+              },
+            ]}
+          >
+            <Typography
+              allowFontScaling={false}
+              color={palette.actions.progressText}
+              variant="Caption"
+              weight="bold"
+            >
+              {`${sessionsToday} session${sessionsToday === 1 ? '' : 's'} completed today`}
+            </Typography>
+          </View>
 
-            if (route.params?.scriptPreset) {
-              nextParams.scriptPreset = route.params.scriptPreset;
-            }
-            if (route.params?.prayerLibraryItemId) {
-              nextParams.prayerLibraryItemId = route.params.prayerLibraryItemId;
-            }
-            if (route.params?.durationMinutes) {
-              nextParams.durationMinutes = route.params.durationMinutes;
-            }
-            if (route.params?.allowAudioGeneration === true) {
-              nextParams.allowAudioGeneration = true;
-            }
-
-            navigation.navigate('SoloLive', nextParams);
-          }}
-          title="Start solo session"
-          variant="gold"
-        />
-      </SurfaceCard>
-
-      <SurfaceCard radius="sm" style={styles.section}>
-        <Typography variant="H2" weight="bold">
-          Today&apos;s progress
-        </Typography>
-        <Typography color={colors.textSecondary}>
-          {`${sessionsToday} completed session${sessionsToday === 1 ? '' : 's'} today.`}
-        </Typography>
-      </SurfaceCard>
+          <Button onPress={onStartSession} title="Start solo session" variant="gold" />
+        </ActionPanel>
+      </Animated.View>
     </Screen>
   );
 }
@@ -186,15 +234,14 @@ const styles = StyleSheet.create({
   content: {
     gap: sectionGap,
   },
-  row: {
-    flexDirection: 'row',
-    gap: sectionGap,
+  noMotion: {
+    opacity: 1,
   },
-  section: {
-    gap: sectionGap,
-  },
-  setupStat: {
-    flex: 1,
-    gap: profileRowGap,
+  progressChip: {
+    alignSelf: 'flex-start',
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
   },
 });

@@ -1,7 +1,7 @@
 import ambientAnimation from '../../assets/lottie/cosmic-ambient.json';
 import globeFallbackAnimation from '../../assets/lottie/globe-fallback.json';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Animated, Easing, Pressable, StyleSheet, View } from 'react-native';
 
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -10,25 +10,36 @@ import type { RouteProp } from '@react-navigation/native';
 import LottieView from 'lottie-react-native';
 
 import type { SoloStackParamList } from '../app/navigation/types';
+import { InlineErrorCard } from '../components/InlineErrorCard';
 import { Screen } from '../components/Screen';
 import { SurfaceCard } from '../components/SurfaceCard';
 import { Typography } from '../components/Typography';
 import {
   fetchPrayerScriptVariantByTitle,
+  recordSoloSession,
   fetchUserPreferences,
   prefetchPrayerScriptVariantByTitle,
 } from '../lib/api/data';
-import {
-  generatePrayerAudio,
-  hasPrayerAudioCached,
-  prefetchPrayerAudio,
-  type TimedWord,
-} from '../lib/api/functions';
-import { configureAudioForPlayback, createPlayer, type ManagedAudioPlayer } from '../lib/audio';
+import { prefetchPrayerAudio } from '../lib/api/functions';
 import { supabase } from '../lib/supabase';
 import { figmaV2Reference } from '../theme/figma-v2-reference';
 import { sectionGap } from '../theme/layout';
-import { colors, radii, spacing } from '../theme/tokens';
+import { colors, motion, radii, roomAtmosphere, spacing } from '../theme/tokens';
+import { RoomScriptPanel } from '../features/room-player/components/RoomScriptPanel';
+import { RoomTransportControls } from '../features/room-player/components/RoomTransportControls';
+import { useRoomAudioPlayer } from '../features/room-player/hooks/useRoomAudioPlayer';
+import { SoloAuraField } from '../features/rooms/components/SoloAuraField';
+import { useReducedMotion } from '../features/rooms/hooks/useReducedMotion';
+import {
+  buildPreviewParagraphsFromScript,
+  resolveFallbackParagraphIndex,
+  splitScriptIntoParagraphs,
+} from '../features/room-player/utils/scriptLayout';
+import {
+  findActiveTimedParagraph,
+  findActiveTimedWordIndex,
+  groupTimedWordsIntoParagraphs,
+} from '../features/room-player/utils/timedWords';
 
 type SoloLiveRoute = RouteProp<SoloStackParamList, 'SoloLive'>;
 type SoloNavigation = NativeStackNavigationProp<SoloStackParamList, 'SoloLive'>;
@@ -37,9 +48,8 @@ const VOICE_OPTIONS = ['Oliver', 'Amaya', 'Rainbird', 'Dominic'] as const;
 const MINUTE_OPTIONS = [3, 5, 10] as const;
 const DEFAULT_MINUTE_OPTION: (typeof MINUTE_OPTIONS)[number] = 10;
 const DEFAULT_ELEVENLABS_VOICE_ID = 'V904i8ujLitGpMyoTznT';
-const MAX_SCRIPT_PARAGRAPH_CHARS = 96;
-const MAX_TIMED_WORDS_PER_PARAGRAPH = 14;
 const MAX_SCRIPT_LINES = 4;
+const MIN_RECORDABLE_SESSION_SECONDS = 20;
 const ELEVENLABS_VOICE_ID_BY_LABEL: Partial<Record<(typeof VOICE_OPTIONS)[number], string>> = {
   Oliver: 'jfIS2w2yJi0grJZPyEsk',
   Amaya: 'BFvr34n3gOoz0BAf9Rwn',
@@ -54,229 +64,6 @@ function formatClock(totalSeconds: number) {
     .padStart(1, '0');
   const seconds = (clamped % 60).toString().padStart(2, '0');
   return `${minutes}:${seconds}`;
-}
-
-function sanitizeScriptParagraph(paragraph: string) {
-  const withoutMarkdownHeadings = paragraph
-    .replace(/^\*\*\s*(grounding|prayer|closing)\s*\*\*\s*[:\-–—]?\s*/i, '')
-    .replace(/^(grounding|prayer|closing)\s*[:\-–—]\s*/i, '')
-    .replace(/\*\*/g, '');
-
-  return withoutMarkdownHeadings.trim();
-}
-
-function splitLongParagraph(paragraph: string, maxChars = MAX_SCRIPT_PARAGRAPH_CHARS) {
-  if (paragraph.length <= maxChars) {
-    return [paragraph];
-  }
-
-  const sentences = paragraph
-    .split(/(?<=[.!?])\s+/)
-    .map((sentence) => sentence.trim())
-    .filter((sentence) => sentence.length > 0);
-
-  if (sentences.length <= 1) {
-    return [paragraph];
-  }
-
-  const chunks: string[] = [];
-  let buffer = '';
-
-  for (const sentence of sentences) {
-    const candidate = buffer ? `${buffer} ${sentence}` : sentence;
-    if (candidate.length <= maxChars) {
-      buffer = candidate;
-      continue;
-    }
-
-    if (buffer) {
-      chunks.push(buffer.trim());
-      buffer = sentence;
-    } else {
-      chunks.push(sentence.trim());
-    }
-  }
-
-  if (buffer) {
-    chunks.push(buffer.trim());
-  }
-
-  return chunks.length > 0 ? chunks : [paragraph];
-}
-
-function splitScriptIntoParagraphs(script: string) {
-  const normalized = script.trim();
-  if (!normalized) {
-    return [];
-  }
-
-  const paragraphs = normalized
-    .replace(/\r\n/g, '\n')
-    .split(/\n{2,}/)
-    .map((part) => sanitizeScriptParagraph(part))
-    .filter((part) => part.length > 0);
-
-  if (paragraphs.length > 1) {
-    return paragraphs.flatMap((paragraph) => splitLongParagraph(paragraph));
-  }
-
-  const singleParagraph = paragraphs[0] ?? '';
-  if (!singleParagraph) {
-    return [];
-  }
-
-  const sentences = singleParagraph
-    .split(/(?<=[.!?])\s+/)
-    .map((sentence) => sentence.trim())
-    .filter((sentence) => sentence.length > 0);
-
-  if (sentences.length <= 2) {
-    return [singleParagraph];
-  }
-
-  const fallbackParagraphs: string[] = [];
-  let buffer = '';
-
-  for (const sentence of sentences) {
-    const candidate = buffer ? `${buffer} ${sentence}` : sentence;
-    if (candidate.length <= 240) {
-      buffer = candidate;
-      continue;
-    }
-
-    if (buffer) {
-      fallbackParagraphs.push(buffer.trim());
-      buffer = sentence;
-    } else {
-      fallbackParagraphs.push(sentence.trim());
-    }
-  }
-
-  if (buffer) {
-    fallbackParagraphs.push(buffer.trim());
-  }
-
-  if (fallbackParagraphs.length > 0) {
-    return fallbackParagraphs.flatMap((paragraph) => splitLongParagraph(paragraph));
-  }
-
-  return splitLongParagraph(singleParagraph);
-}
-
-interface TimedWordParagraph {
-  endIndex: number;
-  startIndex: number;
-  words: TimedWord[];
-}
-
-function groupTimedWordsIntoParagraphs(
-  words: TimedWord[],
-  maxWordsPerParagraph = MAX_TIMED_WORDS_PER_PARAGRAPH,
-) {
-  if (words.length === 0) {
-    return [] as TimedWordParagraph[];
-  }
-
-  const paragraphs: TimedWordParagraph[] = [];
-  let current: TimedWord[] = [];
-
-  const flush = () => {
-    if (current.length === 0) {
-      return;
-    }
-
-    paragraphs.push({
-      endIndex: current[current.length - 1]?.index ?? 0,
-      startIndex: current[0]?.index ?? 0,
-      words: current,
-    });
-    current = [];
-  };
-
-  words.forEach((word) => {
-    current.push(word);
-
-    const hasSentenceEnding = /[.!?]["']?$/.test(word.word);
-    const reachedMax = current.length >= maxWordsPerParagraph;
-    const shouldBreak = reachedMax || (hasSentenceEnding && current.length >= 10);
-
-    if (shouldBreak) {
-      flush();
-    }
-  });
-
-  flush();
-  return paragraphs;
-}
-
-function buildPreviewParagraphsFromScript(script: string) {
-  const normalized = script
-    .replace(/\r\n/g, '\n')
-    .split(/\n+/)
-    .map((line) => sanitizeScriptParagraph(line))
-    .join(' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-
-  if (!normalized) {
-    return [] as string[];
-  }
-
-  const words = normalized.split(/\s+/).filter((word) => word.length > 0);
-  if (words.length === 0) {
-    return [] as string[];
-  }
-
-  const pseudoTimedWords: TimedWord[] = words.map((word, index) => ({
-    endSeconds: index + 0.2,
-    index,
-    startSeconds: index,
-    word,
-  }));
-
-  return groupTimedWordsIntoParagraphs(pseudoTimedWords, MAX_TIMED_WORDS_PER_PARAGRAPH).map(
-    (paragraph) =>
-      paragraph.words
-        .map((word) => word.word)
-        .join(' ')
-        .trim(),
-  );
-}
-
-function findActiveTimedWordIndex(words: TimedWord[], elapsedMillis: number) {
-  if (words.length === 0) {
-    return -1;
-  }
-
-  const elapsedSeconds = elapsedMillis / 1000;
-  const first = words[0];
-  const last = words[words.length - 1];
-
-  if (elapsedSeconds <= (first?.startSeconds ?? 0)) {
-    return first?.index ?? 0;
-  }
-
-  if (elapsedSeconds >= (last?.endSeconds ?? 0)) {
-    return last?.index ?? words.length - 1;
-  }
-
-  for (let index = 0; index < words.length; index += 1) {
-    const word = words[index];
-    if (!word) {
-      continue;
-    }
-
-    if (elapsedSeconds >= word.startSeconds && elapsedSeconds <= word.endSeconds) {
-      return word.index;
-    }
-
-    const next = words[index + 1];
-    if (next && elapsedSeconds > word.endSeconds && elapsedSeconds < next.startSeconds) {
-      return next.index;
-    }
-  }
-
-  return last?.index ?? words.length - 1;
 }
 
 function resolveMinuteOption(value: number | null | undefined) {
@@ -301,19 +88,18 @@ export function SoloLiveScreen() {
   const [isMinuteMenuOpen, setIsMinuteMenuOpen] = useState(false);
   const [isInviteOpen, setIsInviteOpen] = useState(false);
   const [isFavorite, setIsFavorite] = useState(false);
-  const [isMuted, setIsMuted] = useState(false);
-  const [isRunning, setIsRunning] = useState(false);
-  const [elapsedMillis, setElapsedMillis] = useState(0);
   const [scriptText, setScriptText] = useState(route.params?.scriptPreset ?? '');
-  const [timedWords, setTimedWords] = useState<TimedWord[]>([]);
   const [loadingScript, setLoadingScript] = useState(false);
-  const [loadingAudio, setLoadingAudio] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const playPulseRef = useRef<LottieView>(null);
   const scriptTextRef = useRef(scriptText);
-  const activePlayerRef = useRef<ManagedAudioPlayer | null>(null);
-  const activePlayerKeyRef = useRef<string | null>(null);
-  const activePlayerUnsubscribeRef = useRef<(() => void) | null>(null);
+  const sessionUserIdRef = useRef<string | null>(null);
+  const recordedSessionAudioKeyRef = useRef<string | null>(null);
+  const reduceMotionEnabled = useReducedMotion();
+  const headerIntro = useMemo(() => new Animated.Value(0), []);
+  const stageIntro = useMemo(() => new Animated.Value(0), []);
+  const transportIntro = useMemo(() => new Animated.Value(0), []);
+  const scriptFocus = useMemo(() => new Animated.Value(0), []);
 
   const scriptLookupTitle = route.params?.intention?.trim() || '';
   const activePrayerTitle = scriptLookupTitle || 'Prayer';
@@ -323,6 +109,31 @@ export function SoloLiveScreen() {
   const resolvedScriptText = scriptText || fallbackScript;
   const totalSeconds = selectedMinutes * 60;
   const totalMillis = totalSeconds * 1000;
+  const activeVoiceId = ELEVENLABS_VOICE_ID_BY_LABEL[selectedVoice] ?? DEFAULT_ELEVENLABS_VOICE_ID;
+  const activeAudioKey = useMemo(
+    () => `${activeVoiceId}|${selectedMinutes}|${resolvedScriptText.trim()}`,
+    [activeVoiceId, resolvedScriptText, selectedMinutes],
+  );
+
+  const {
+    isMuted,
+    isRunning,
+    loadingAudio,
+    pause,
+    play,
+    positionMillis: elapsedMillis,
+    setMuted,
+    stop,
+    timedWords,
+  } = useRoomAudioPlayer({
+    activeAudioKey,
+    allowAudioGeneration,
+    durationMinutes: selectedMinutes,
+    prayerLibraryItemId,
+    scriptText: resolvedScriptText,
+    title: activePrayerTitle,
+    voiceId: activeVoiceId,
+  });
 
   const progress = useMemo(() => {
     if (totalMillis <= 0) {
@@ -342,25 +153,10 @@ export function SoloLiveScreen() {
     () => groupTimedWordsIntoParagraphs(timedWords),
     [timedWords],
   );
-  const activeTimedParagraph = useMemo(() => {
-    if (timedWordParagraphs.length === 0) {
-      return null;
-    }
-
-    if (activeTimedWordIndex < 0) {
-      return timedWordParagraphs[0] ?? null;
-    }
-
-    return (
-      timedWordParagraphs.find(
-        (paragraph) =>
-          activeTimedWordIndex >= paragraph.startIndex &&
-          activeTimedWordIndex <= paragraph.endIndex,
-      ) ??
-      timedWordParagraphs[timedWordParagraphs.length - 1] ??
-      null
-    );
-  }, [activeTimedWordIndex, timedWordParagraphs]);
+  const activeTimedParagraph = useMemo(
+    () => findActiveTimedParagraph(timedWordParagraphs, activeTimedWordIndex),
+    [activeTimedWordIndex, timedWordParagraphs],
+  );
   const scriptParagraphs = useMemo(() => {
     const previewParagraphs = buildPreviewParagraphsFromScript(resolvedScriptText);
     if (previewParagraphs.length > 0) {
@@ -369,23 +165,16 @@ export function SoloLiveScreen() {
 
     return splitScriptIntoParagraphs(resolvedScriptText);
   }, [resolvedScriptText]);
-  const fallbackParagraphIndex = useMemo(() => {
-    if (scriptParagraphs.length <= 1 || totalSeconds <= 0) {
-      return 0;
-    }
-
-    const normalizedProgress = Math.min(0.999999, Math.max(0, elapsedMillis / totalMillis));
-    return Math.min(
-      scriptParagraphs.length - 1,
-      Math.floor(normalizedProgress * scriptParagraphs.length),
-    );
-  }, [elapsedMillis, scriptParagraphs.length, totalMillis, totalSeconds]);
-  const fallbackParagraph = scriptParagraphs[fallbackParagraphIndex] ?? '';
-  const activeVoiceId = ELEVENLABS_VOICE_ID_BY_LABEL[selectedVoice] ?? DEFAULT_ELEVENLABS_VOICE_ID;
-  const activeAudioKey = useMemo(
-    () => `${activeVoiceId}|${selectedMinutes}|${resolvedScriptText.trim()}`,
-    [activeVoiceId, resolvedScriptText, selectedMinutes],
+  const fallbackParagraphIndex = useMemo(
+    () =>
+      resolveFallbackParagraphIndex({
+        elapsedMillis,
+        paragraphCount: scriptParagraphs.length,
+        totalMillis,
+      }),
+    [elapsedMillis, scriptParagraphs.length, totalMillis],
   );
+  const fallbackParagraph = scriptParagraphs[fallbackParagraphIndex] ?? '';
 
   const closeAllSelectors = useCallback(() => {
     setIsVoiceMenuOpen(false);
@@ -393,128 +182,54 @@ export function SoloLiveScreen() {
     setIsInviteOpen(false);
   }, []);
 
-  const disposeActivePlayer = useCallback(() => {
-    activePlayerRef.current?.pause();
-    activePlayerUnsubscribeRef.current?.();
-    activePlayerUnsubscribeRef.current = null;
-    activePlayerRef.current?.dispose();
-    activePlayerRef.current = null;
-    activePlayerKeyRef.current = null;
-  }, []);
-
-  const stopActivePlayback = useCallback(async () => {
-    const activePlayer = activePlayerRef.current;
-    if (!activePlayer) {
+  const recordSessionIfNeeded = useCallback(async () => {
+    if (recordedSessionAudioKeyRef.current === activeAudioKey) {
       return;
     }
 
-    try {
-      await activePlayer.stop();
-    } catch {
-      activePlayer.pause();
+    const durationSeconds = Math.max(0, Math.floor(elapsedMillis / 1000));
+    if (durationSeconds < MIN_RECORDABLE_SESSION_SECONDS) {
+      return;
     }
 
-    setIsRunning(false);
-    setElapsedMillis(0);
-  }, []);
+    let userId = sessionUserIdRef.current;
+    if (!userId) {
+      const { data } = await supabase.auth.getUser();
+      userId = data.user?.id?.trim() || null;
+      sessionUserIdRef.current = userId;
+    }
+
+    if (!userId) {
+      return;
+    }
+
+    const nextScript = resolvedScriptText.trim();
+    if (!nextScript) {
+      return;
+    }
+
+    await recordSoloSession({
+      durationSeconds: Math.min(totalSeconds, durationSeconds),
+      intention: activePrayerTitle,
+      scriptText: nextScript,
+      userId,
+    });
+    recordedSessionAudioKeyRef.current = activeAudioKey;
+  }, [activeAudioKey, activePrayerTitle, elapsedMillis, resolvedScriptText, totalSeconds]);
 
   const onExitSession = useCallback(() => {
     closeAllSelectors();
 
     void (async () => {
-      await stopActivePlayback();
-      disposeActivePlayer();
+      try {
+        await recordSessionIfNeeded();
+      } catch {
+        // Non-blocking; session recording should not block room exit.
+      }
+      await stop();
       navigation.goBack();
     })();
-  }, [closeAllSelectors, disposeActivePlayer, navigation, stopActivePlayback]);
-
-  const ensureAudioPlayer = useCallback(async () => {
-    const nextScript = resolvedScriptText.trim();
-    if (!nextScript) {
-      throw new Error('No script available for this prayer yet.');
-    }
-
-    if (activePlayerRef.current && activePlayerKeyRef.current === activeAudioKey) {
-      return activePlayerRef.current;
-    }
-
-    const shouldShowAudioLoader = !hasPrayerAudioCached({
-      script: nextScript,
-      voiceId: activeVoiceId,
-    });
-    if (shouldShowAudioLoader) {
-      setLoadingAudio(true);
-    }
-
-    try {
-      await configureAudioForPlayback();
-
-      const audioResponse = await generatePrayerAudio({
-        allowGeneration: allowAudioGeneration,
-        durationMinutes: selectedMinutes,
-        language: 'en',
-        ...(prayerLibraryItemId ? { prayerLibraryItemId } : {}),
-        script: nextScript,
-        title: activePrayerTitle,
-        voiceId: activeVoiceId,
-      });
-
-      const audioUrl = audioResponse?.audioUrl?.trim();
-      const audioBase64 = audioResponse?.audioBase64?.trim();
-      const contentType = audioResponse?.contentType?.trim() || 'audio/mpeg';
-      const nextTimedWords = (audioResponse?.wordTimings ?? [])
-        .filter(
-          (word) =>
-            typeof word?.word === 'string' &&
-            Number.isFinite(word?.startSeconds) &&
-            Number.isFinite(word?.endSeconds),
-        )
-        .sort((left, right) => left.startSeconds - right.startSeconds)
-        .map((word, index) => ({
-          ...word,
-          endSeconds: Math.max(word.startSeconds, word.endSeconds),
-          index,
-          startSeconds: Math.max(0, word.startSeconds),
-          word: word.word.trim(),
-        }))
-        .filter((word) => word.word.length > 0);
-
-      if (!audioUrl && !audioBase64) {
-        throw new Error('Audio generation returned an empty payload.');
-      }
-
-      const sourceUri = audioUrl || `data:${contentType};base64,${audioBase64}`;
-      setTimedWords(nextTimedWords);
-
-      disposeActivePlayer();
-
-      const player = createPlayer(sourceUri);
-      activePlayerUnsubscribeRef.current = player.subscribe((status) => {
-        setElapsedMillis(Math.max(0, status.positionMillis));
-        if (status.didJustFinish) {
-          setIsRunning(false);
-        }
-      });
-
-      activePlayerRef.current = player;
-      activePlayerKeyRef.current = activeAudioKey;
-
-      return player;
-    } finally {
-      if (shouldShowAudioLoader) {
-        setLoadingAudio(false);
-      }
-    }
-  }, [
-    activeAudioKey,
-    allowAudioGeneration,
-    activePrayerTitle,
-    activeVoiceId,
-    disposeActivePlayer,
-    prayerLibraryItemId,
-    resolvedScriptText,
-    selectedMinutes,
-  ]);
+  }, [closeAllSelectors, navigation, recordSessionIfNeeded, stop]);
 
   const loadSelectedScript = useCallback(async () => {
     if (!scriptLookupTitle && !prayerLibraryItemId) {
@@ -585,6 +300,8 @@ export function SoloLiveScreen() {
             setSelectedVoice(matched);
           }
         }
+
+        sessionUserIdRef.current = data.user.id;
       } catch {
         // Non-blocking for UI.
       }
@@ -596,6 +313,16 @@ export function SoloLiveScreen() {
       active = false;
     };
   }, [hasRouteDurationMinutes]);
+
+  useEffect(() => {
+    recordedSessionAudioKeyRef.current = null;
+  }, [activeAudioKey]);
+
+  useEffect(() => {
+    return () => {
+      void recordSessionIfNeeded();
+    };
+  }, [recordSessionIfNeeded]);
 
   useEffect(() => {
     void loadSelectedScript();
@@ -644,29 +371,19 @@ export function SoloLiveScreen() {
   ]);
 
   useEffect(() => {
-    setElapsedMillis(0);
-    setTimedWords([]);
-    setIsRunning(false);
-    disposeActivePlayer();
-  }, [activeAudioKey, disposeActivePlayer]);
-
-  useEffect(() => {
-    return () => {
-      void stopActivePlayback();
-      disposeActivePlayer();
-    };
-  }, [disposeActivePlayer, stopActivePlayback]);
-
-  useEffect(() => {
     if (elapsedMillis < totalMillis) {
       return;
     }
 
-    setIsRunning(false);
-    if (activePlayerRef.current) {
-      void activePlayerRef.current.stop();
-    }
-  }, [elapsedMillis, totalMillis]);
+    void (async () => {
+      try {
+        await recordSessionIfNeeded();
+      } catch {
+        // Non-blocking metrics recording.
+      }
+      await stop();
+    })();
+  }, [elapsedMillis, recordSessionIfNeeded, stop, totalMillis]);
 
   useEffect(() => {
     if (!playPulseRef.current) {
@@ -681,27 +398,151 @@ export function SoloLiveScreen() {
     playPulseRef.current.reset();
   }, [isRunning]);
 
+  useEffect(() => {
+    if (reduceMotionEnabled) {
+      headerIntro.setValue(1);
+      stageIntro.setValue(1);
+      transportIntro.setValue(1);
+      return;
+    }
+
+    headerIntro.setValue(0);
+    stageIntro.setValue(0);
+    transportIntro.setValue(0);
+
+    const animation = Animated.parallel([
+      Animated.timing(headerIntro, {
+        duration: motion.room.solo.entryHeaderMs,
+        easing: Easing.out(Easing.cubic),
+        toValue: 1,
+        useNativeDriver: true,
+      }),
+      Animated.sequence([
+        Animated.delay(motion.durationMs.fast),
+        Animated.timing(stageIntro, {
+          duration: motion.room.solo.entryStageMs,
+          easing: Easing.out(Easing.cubic),
+          toValue: 1,
+          useNativeDriver: true,
+        }),
+      ]),
+      Animated.sequence([
+        Animated.delay(motion.durationMs.base),
+        Animated.timing(transportIntro, {
+          duration: motion.room.solo.entryTransportMs,
+          easing: Easing.out(Easing.cubic),
+          toValue: 1,
+          useNativeDriver: true,
+        }),
+      ]),
+    ]);
+
+    animation.start();
+    return () => {
+      animation.stop();
+    };
+  }, [headerIntro, reduceMotionEnabled, stageIntro, transportIntro]);
+
+  useEffect(() => {
+    if (reduceMotionEnabled) {
+      scriptFocus.setValue(0);
+      return;
+    }
+
+    const animation = Animated.timing(scriptFocus, {
+      duration: motion.durationMs.base,
+      easing: Easing.out(Easing.cubic),
+      toValue: isRunning ? 1 : 0,
+      useNativeDriver: true,
+    });
+    animation.start();
+
+    return () => {
+      animation.stop();
+    };
+  }, [isRunning, reduceMotionEnabled, scriptFocus]);
+
   const onTogglePlayback = useCallback(async () => {
     closeAllSelectors();
 
     if (isRunning) {
-      activePlayerRef.current?.pause();
-      setIsRunning(false);
+      pause();
       return;
     }
 
     try {
-      const player = await ensureAudioPlayer();
-      player.play();
-      setIsRunning(true);
+      await play();
       setError(null);
     } catch (nextError) {
       const message =
         nextError instanceof Error ? nextError.message : 'Failed to generate prayer audio.';
       setError(message);
-      setIsRunning(false);
     }
-  }, [closeAllSelectors, ensureAudioPlayer, isRunning]);
+  }, [closeAllSelectors, isRunning, pause, play]);
+
+  const headerIntroStyle = reduceMotionEnabled
+    ? styles.noMotion
+    : {
+        opacity: headerIntro.interpolate({
+          inputRange: [0, 1],
+          outputRange: [0.86, 1],
+        }),
+        transform: [
+          {
+            translateY: headerIntro.interpolate({
+              inputRange: [0, 1],
+              outputRange: [10, 0],
+            }),
+          },
+        ],
+      };
+
+  const stageIntroStyle = reduceMotionEnabled
+    ? styles.noMotion
+    : {
+        opacity: stageIntro.interpolate({
+          inputRange: [0, 1],
+          outputRange: [0.8, 1],
+        }),
+        transform: [
+          {
+            translateY: stageIntro.interpolate({
+              inputRange: [0, 1],
+              outputRange: [14, 0],
+            }),
+          },
+        ],
+      };
+
+  const transportIntroStyle = reduceMotionEnabled
+    ? styles.noMotion
+    : {
+        opacity: transportIntro.interpolate({
+          inputRange: [0, 1],
+          outputRange: [0.82, 1],
+        }),
+        transform: [
+          {
+            translateY: transportIntro.interpolate({
+              inputRange: [0, 1],
+              outputRange: [16, 0],
+            }),
+          },
+        ],
+      };
+
+  const scriptPanelFocusStyle = reduceMotionEnabled
+    ? styles.noMotion
+    : {
+        transform: [
+          {
+            scale: scriptFocus.interpolate({
+              inputRange: [0, 1],
+              outputRange: [1, 1 + motion.amplitude.subtle],
+            }),
+          },
+        ],
+      };
 
   return (
     <Screen
@@ -711,12 +552,25 @@ export function SoloLiveScreen() {
       variant="solo"
       withTabBarInset={false}
     >
-      <Pressable onPress={closeAllSelectors} style={styles.container}>
+      <Pressable
+        accessible={false}
+        importantForAccessibility="no-hide-descendants"
+        onPress={closeAllSelectors}
+        style={styles.container}
+      >
+        <SoloAuraField active />
+
         <View style={styles.topActionsRow}>
           <Pressable
             accessibilityLabel={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+            accessibilityRole="button"
+            accessibilityState={{ selected: isFavorite }}
+            hitSlop={6}
             onPress={() => setIsFavorite((current) => !current)}
-            style={({ pressed }) => [styles.iconCircleButton, pressed && styles.iconButtonPressed]}
+            style={({ pressed }) => [
+              styles.iconCircleButton,
+              !reduceMotionEnabled && pressed && styles.iconButtonPressed,
+            ]}
           >
             <MaterialCommunityIcons
               color={colors.textPrimary}
@@ -726,164 +580,211 @@ export function SoloLiveScreen() {
           </Pressable>
 
           <Pressable
+            accessibilityHint="Closes this solo prayer room."
             accessibilityLabel="Close solo session"
+            accessibilityRole="button"
+            hitSlop={6}
             onPress={onExitSession}
-            style={({ pressed }) => [styles.iconCircleButton, pressed && styles.iconButtonPressed]}
+            style={({ pressed }) => [
+              styles.iconCircleButton,
+              !reduceMotionEnabled && pressed && styles.iconButtonPressed,
+            ]}
           >
             <MaterialCommunityIcons color={colors.textPrimary} name="close" size={24} />
           </Pressable>
         </View>
 
-        <View style={styles.headerBlock}>
-          <Typography
-            allowFontScaling={false}
-            style={styles.prayerTitle}
-            variant="H1"
-            weight="bold"
-          >
-            {activePrayerTitle}
-          </Typography>
-        </View>
-
-        <View style={styles.selectorRow}>
-          <View style={styles.selectorContainer}>
-            <Pressable
-              onPress={(event) => {
-                event.stopPropagation();
-                setIsMinuteMenuOpen(false);
-                setIsVoiceMenuOpen((current) => !current);
-              }}
-              style={({ pressed }) => [styles.selectorButton, pressed && styles.selectorPressed]}
+        <Animated.View style={headerIntroStyle}>
+          <View style={styles.headerBlock}>
+            <Typography
+              accessibilityRole="header"
+              allowFontScaling={false}
+              style={styles.prayerTitle}
+              variant="H1"
+              weight="bold"
             >
-              <View style={styles.voiceAvatar}>
-                <MaterialCommunityIcons color={colors.textPrimary} name="account" size={13} />
-              </View>
-              <Typography
-                adjustsFontSizeToFit
-                allowFontScaling={false}
-                minimumFontScale={0.75}
-                numberOfLines={1}
-                style={styles.selectorValue}
-                variant="Body"
-                weight="bold"
-              >
-                {selectedVoice}
-              </Typography>
-              <MaterialCommunityIcons
-                color={colors.textSecondary}
-                name={isVoiceMenuOpen ? 'chevron-up' : 'chevron-down'}
-                size={24}
-              />
-            </Pressable>
-
-            {isVoiceMenuOpen ? (
-              <SurfaceCard radius="md" style={styles.dropdownMenu}>
-                {VOICE_OPTIONS.map((voice) => (
-                  <Pressable
-                    key={voice}
-                    onPress={(event) => {
-                      event.stopPropagation();
-                      setSelectedVoice(voice);
-                      setIsVoiceMenuOpen(false);
-                    }}
-                    style={({ pressed }) => [
-                      styles.dropdownOption,
-                      selectedVoice === voice && styles.dropdownOptionActive,
-                      pressed && styles.dropdownOptionPressed,
-                    ]}
-                  >
-                    <Typography
-                      allowFontScaling={false}
-                      color={selectedVoice === voice ? colors.textOnSky : colors.textPrimary}
-                      variant="Body"
-                      weight="bold"
-                    >
-                      {voice}
-                    </Typography>
-                  </Pressable>
-                ))}
-              </SurfaceCard>
-            ) : null}
+              {activePrayerTitle}
+            </Typography>
+            <Typography
+              allowFontScaling={false}
+              color={colors.textSecondary}
+              style={styles.soloSubtitle}
+              variant="Caption"
+            >
+              Personal Sanctuary
+            </Typography>
           </View>
 
-          <View style={styles.selectorContainer}>
-            <Pressable
-              onPress={(event) => {
-                event.stopPropagation();
-                setIsVoiceMenuOpen(false);
-                setIsMinuteMenuOpen((current) => !current);
-              }}
-              style={({ pressed }) => [
-                styles.selectorButton,
-                styles.minutesSelectorButton,
-                pressed && styles.selectorPressed,
-              ]}
-            >
-              <Typography
-                adjustsFontSizeToFit
-                allowFontScaling={false}
-                minimumFontScale={0.75}
-                numberOfLines={1}
-                style={styles.selectorValue}
-                variant="Body"
-                weight="bold"
+          <View style={styles.selectorRow}>
+            <View style={styles.selectorContainer}>
+              <Pressable
+                accessibilityHint="Opens voice options for this prayer."
+                accessibilityLabel="Voice selection"
+                accessibilityRole="button"
+                accessibilityState={{ expanded: isVoiceMenuOpen }}
+                onPress={(event) => {
+                  event.stopPropagation();
+                  setIsMinuteMenuOpen(false);
+                  setIsVoiceMenuOpen((current) => !current);
+                }}
+                style={({ pressed }) => [
+                  styles.selectorButton,
+                  !reduceMotionEnabled && pressed && styles.selectorPressed,
+                ]}
               >
-                {`${selectedMinutes} min`}
-              </Typography>
-              <MaterialCommunityIcons
-                color={colors.textSecondary}
-                name={isMinuteMenuOpen ? 'chevron-up' : 'chevron-down'}
-                size={24}
-              />
-            </Pressable>
+                <View style={styles.voiceAvatar}>
+                  <MaterialCommunityIcons color={colors.textPrimary} name="account" size={13} />
+                </View>
+                <Typography
+                  adjustsFontSizeToFit
+                  allowFontScaling={false}
+                  minimumFontScale={0.75}
+                  numberOfLines={1}
+                  style={styles.selectorValue}
+                  variant="Body"
+                  weight="bold"
+                >
+                  {selectedVoice}
+                </Typography>
+                <MaterialCommunityIcons
+                  color={colors.textSecondary}
+                  name={isVoiceMenuOpen ? 'chevron-up' : 'chevron-down'}
+                  size={24}
+                />
+              </Pressable>
 
-            {isMinuteMenuOpen ? (
-              <SurfaceCard radius="md" style={styles.dropdownMenu}>
-                {MINUTE_OPTIONS.map((minutes) => (
-                  <Pressable
-                    key={minutes}
-                    onPress={(event) => {
-                      event.stopPropagation();
-                      setSelectedMinutes(minutes);
-                      setIsMinuteMenuOpen(false);
-                    }}
-                    style={({ pressed }) => [
-                      styles.dropdownOption,
-                      selectedMinutes === minutes && styles.dropdownOptionActive,
-                      pressed && styles.dropdownOptionPressed,
-                    ]}
-                  >
-                    <Typography
-                      allowFontScaling={false}
-                      color={selectedMinutes === minutes ? colors.textOnSky : colors.textPrimary}
-                      variant="Body"
-                      weight="bold"
+              {isVoiceMenuOpen ? (
+                <SurfaceCard radius="md" style={styles.dropdownMenu}>
+                  {VOICE_OPTIONS.map((voice) => (
+                    <Pressable
+                      accessibilityLabel={voice}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: selectedVoice === voice }}
+                      key={voice}
+                      onPress={(event) => {
+                        event.stopPropagation();
+                        setSelectedVoice(voice);
+                        setIsVoiceMenuOpen(false);
+                      }}
+                      style={({ pressed }) => [
+                        styles.dropdownOption,
+                        selectedVoice === voice && styles.dropdownOptionActive,
+                        !reduceMotionEnabled && pressed && styles.dropdownOptionPressed,
+                      ]}
                     >
-                      {`${minutes} min`}
-                    </Typography>
-                  </Pressable>
-                ))}
-              </SurfaceCard>
-            ) : null}
-          </View>
-        </View>
+                      <Typography
+                        allowFontScaling={false}
+                        color={selectedVoice === voice ? colors.textOnSky : colors.textPrimary}
+                        variant="Body"
+                        weight="bold"
+                      >
+                        {voice}
+                      </Typography>
+                    </Pressable>
+                  ))}
+                </SurfaceCard>
+              ) : null}
+            </View>
 
-        <View style={styles.centerBlock}>
+            <View style={styles.selectorContainer}>
+              <Pressable
+                accessibilityHint="Opens duration options for this prayer."
+                accessibilityLabel="Duration selection"
+                accessibilityRole="button"
+                accessibilityState={{ expanded: isMinuteMenuOpen }}
+                onPress={(event) => {
+                  event.stopPropagation();
+                  setIsVoiceMenuOpen(false);
+                  setIsMinuteMenuOpen((current) => !current);
+                }}
+                style={({ pressed }) => [
+                  styles.selectorButton,
+                  styles.minutesSelectorButton,
+                  !reduceMotionEnabled && pressed && styles.selectorPressed,
+                ]}
+              >
+                <Typography
+                  adjustsFontSizeToFit
+                  allowFontScaling={false}
+                  minimumFontScale={0.75}
+                  numberOfLines={1}
+                  style={styles.selectorValue}
+                  variant="Body"
+                  weight="bold"
+                >
+                  {`${selectedMinutes} min`}
+                </Typography>
+                <MaterialCommunityIcons
+                  color={colors.textSecondary}
+                  name={isMinuteMenuOpen ? 'chevron-up' : 'chevron-down'}
+                  size={24}
+                />
+              </Pressable>
+
+              {isMinuteMenuOpen ? (
+                <SurfaceCard radius="md" style={styles.dropdownMenu}>
+                  {MINUTE_OPTIONS.map((minutes) => (
+                    <Pressable
+                      accessibilityLabel={`${minutes} minutes`}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: selectedMinutes === minutes }}
+                      key={minutes}
+                      onPress={(event) => {
+                        event.stopPropagation();
+                        setSelectedMinutes(minutes);
+                        setIsMinuteMenuOpen(false);
+                      }}
+                      style={({ pressed }) => [
+                        styles.dropdownOption,
+                        selectedMinutes === minutes && styles.dropdownOptionActive,
+                        !reduceMotionEnabled && pressed && styles.dropdownOptionPressed,
+                      ]}
+                    >
+                      <Typography
+                        allowFontScaling={false}
+                        color={selectedMinutes === minutes ? colors.textOnSky : colors.textPrimary}
+                        variant="Body"
+                        weight="bold"
+                      >
+                        {`${minutes} min`}
+                      </Typography>
+                    </Pressable>
+                  ))}
+                </SurfaceCard>
+              ) : null}
+            </View>
+          </View>
+        </Animated.View>
+
+        <Animated.View style={[styles.centerBlock, stageIntroStyle]}>
           <Pressable
+            accessibilityHint="Starts or pauses guided prayer audio."
+            accessibilityLabel={isRunning ? 'Pause prayer audio' : 'Play prayer audio'}
+            accessibilityRole="button"
+            accessibilityState={{
+              busy: loadingAudio,
+              disabled: loadingAudio || !resolvedScriptText.trim(),
+              selected: isRunning,
+            }}
             disabled={loadingAudio || !resolvedScriptText.trim()}
             onPress={() => {
               void onTogglePlayback();
             }}
-            style={({ pressed }) => [styles.playPulseTap, pressed && styles.playPressed]}
+            style={({ pressed }) => [
+              styles.playPulseTap,
+              !reduceMotionEnabled && pressed && styles.playPressed,
+            ]}
           >
             <View style={styles.playPulseContainer}>
-              <LottieView
-                autoPlay={false}
-                loop
-                ref={playPulseRef}
-                source={globeFallbackAnimation}
-                style={styles.playPulseLottie}
-              />
+              <View accessible={false} importantForAccessibility="no-hide-descendants">
+                <LottieView
+                  autoPlay={false}
+                  loop
+                  ref={playPulseRef}
+                  source={globeFallbackAnimation}
+                  style={styles.playPulseLottie}
+                />
+              </View>
               <View style={styles.playButtonCore}>
                 <MaterialCommunityIcons
                   color={figmaV2Reference.tabs.activeBorder}
@@ -894,157 +795,67 @@ export function SoloLiveScreen() {
             </View>
           </Pressable>
 
-          <View style={styles.scriptWrap}>
-            {loadingScript && !resolvedScriptText.trim() ? (
-              <Typography allowFontScaling={false} color={colors.textSecondary} variant="Body">
-                Loading prayer script...
-              </Typography>
-            ) : activeTimedParagraph?.words.length ? (
-              <View style={styles.scriptWordFlow}>
-                {activeTimedParagraph.words.map((word) => {
-                  const isActiveWord = word.index === activeTimedWordIndex;
-
-                  return (
-                    <Typography
-                      key={`${word.index}-${word.startSeconds}-${word.word}`}
-                      allowFontScaling={false}
-                      style={[styles.scriptWord, isActiveWord && styles.scriptWordActive]}
-                      variant="H2"
-                      weight={isActiveWord ? 'bold' : 'medium'}
-                    >
-                      {`${word.word} `}
-                    </Typography>
-                  );
-                })}
-              </View>
-            ) : resolvedScriptText ? (
-              <View style={styles.scriptSyncWrap}>
-                <Typography
-                  allowFontScaling={false}
-                  numberOfLines={MAX_SCRIPT_LINES}
-                  style={styles.scriptTextActive}
-                  variant="H2"
-                  weight="bold"
-                >
-                  {fallbackParagraph}
-                </Typography>
-              </View>
-            ) : (
-              <Typography allowFontScaling={false} color={colors.textSecondary} variant="Body">
-                No script available for this prayer yet.
-              </Typography>
-            )}
-          </View>
+          <Animated.View style={scriptPanelFocusStyle}>
+            <View style={styles.scriptPanelCard}>
+              <RoomScriptPanel
+                activeTimedWordIndex={activeTimedWordIndex}
+                activeTimedWords={activeTimedParagraph?.words}
+                fallbackParagraph={fallbackParagraph}
+                loading={loadingScript && !resolvedScriptText.trim()}
+                loadingMessage="Loading prayer script..."
+                maxScriptLines={MAX_SCRIPT_LINES}
+                noScriptMessage="No script available for this prayer yet."
+                scriptSyncWrapStyle={styles.scriptSyncWrap}
+                scriptText={resolvedScriptText}
+                scriptTextActiveStyle={styles.scriptTextActive}
+                scriptWordActiveStyle={styles.scriptWordActive}
+                scriptWordFlowStyle={styles.scriptWordFlow}
+                scriptWordStyle={styles.scriptWord}
+                scriptWrapStyle={styles.scriptWrap}
+              />
+            </View>
+          </Animated.View>
 
           {error ? (
-            <Typography allowFontScaling={false} color={colors.danger} variant="Caption">
-              {error}
-            </Typography>
+            <InlineErrorCard
+              message={error}
+              style={styles.errorCard}
+              title="Could not continue playback"
+            />
           ) : null}
-        </View>
+        </Animated.View>
 
-        <View style={styles.bottomBlock}>
-          <View style={styles.progressTrack}>
-            <View style={[styles.progressFill, { width: `${progress * 100}%` }]} />
-          </View>
-          <View style={styles.progressLabels}>
-            <Typography allowFontScaling={false} variant="H2" weight="bold">
-              {elapsedLabel}
-            </Typography>
-            <Typography allowFontScaling={false} variant="H2" weight="bold">
-              {totalLabel}
-            </Typography>
-          </View>
-
-          {isInviteOpen ? (
-            <SurfaceCard radius="md" style={styles.inviteMenu}>
-              {['Invite your circle', 'Copy invite link', 'Share externally'].map((option) => (
-                <Pressable
-                  key={option}
-                  onPress={(event) => {
-                    event.stopPropagation();
-                    setIsInviteOpen(false);
-                  }}
-                  style={({ pressed }) => [
-                    styles.inviteOption,
-                    pressed && styles.dropdownOptionPressed,
-                  ]}
-                >
-                  <Typography allowFontScaling={false} variant="Body" weight="bold">
-                    {option}
-                  </Typography>
-                </Pressable>
-              ))}
-            </SurfaceCard>
-          ) : null}
-
-          <View style={styles.bottomActionsRow}>
-            <Pressable
-              onPress={() => setIsMuted((current) => !current)}
-              style={({ pressed }) => [styles.bottomIconAction, pressed && styles.selectorPressed]}
-            >
-              <MaterialCommunityIcons
-                color={colors.textPrimary}
-                name={isMuted ? 'volume-off' : 'volume-high'}
-                size={30}
-              />
-              <Typography
-                allowFontScaling={false}
-                color={colors.textSecondary}
-                variant="Body"
-                weight="bold"
-              >
-                {isMuted ? 'Unmute' : 'Mute'}
-              </Typography>
-            </Pressable>
-
-            <Pressable
-              onPress={() => {
-                setElapsedMillis(0);
-                setIsRunning(false);
-                if (activePlayerRef.current) {
-                  void activePlayerRef.current.stop();
-                }
-              }}
-              style={({ pressed }) => [styles.bottomIconAction, pressed && styles.selectorPressed]}
-            >
-              <MaterialCommunityIcons color={colors.textPrimary} name="restore" size={30} />
-              <Typography
-                allowFontScaling={false}
-                color={colors.textSecondary}
-                variant="Body"
-                weight="bold"
-              >
-                Reset
-              </Typography>
-            </Pressable>
-
-            <Pressable
-              onPress={(event) => {
-                event.stopPropagation();
-                setIsInviteOpen((current) => !current);
-              }}
-              style={({ pressed }) => [styles.inviteButton, pressed && styles.selectorPressed]}
-            >
-              <View style={styles.inviteIconCircle}>
-                <MaterialCommunityIcons color={colors.textPrimary} name="account-group" size={16} />
-              </View>
-              <Typography
-                allowFontScaling={false}
-                style={styles.inviteText}
-                variant="H2"
-                weight="bold"
-              >
-                Invite
-              </Typography>
-              <MaterialCommunityIcons
-                color={colors.textSecondary}
-                name={isInviteOpen ? 'chevron-down' : 'chevron-up'}
-                size={20}
-              />
-            </Pressable>
-          </View>
-        </View>
+        <Animated.View style={transportIntroStyle}>
+          <RoomTransportControls
+            isInviteOpen={isInviteOpen}
+            isMuted={isMuted}
+            isRunning={isRunning}
+            leftLabel={elapsedLabel}
+            onReset={() => {
+              void stop();
+            }}
+            onSelectInviteOption={() => setIsInviteOpen(false)}
+            onToggleInvite={() => setIsInviteOpen((current) => !current)}
+            onToggleMute={() => setMuted((current) => !current)}
+            progress={progress}
+            rightLabel={totalLabel}
+            styles={{
+              bottomActionsRow: styles.bottomActionsRow,
+              bottomBlock: styles.bottomBlock,
+              bottomIconAction: styles.bottomIconAction,
+              dropdownOptionPressed: styles.dropdownOptionPressed,
+              inviteButton: styles.inviteButton,
+              inviteIconCircle: styles.inviteIconCircle,
+              inviteMenu: styles.inviteMenu,
+              inviteOption: styles.inviteOption,
+              inviteText: styles.inviteText,
+              progressFill: styles.progressFill,
+              progressLabels: styles.progressLabels,
+              progressTrack: styles.progressTrack,
+              selectorPressed: styles.selectorPressed,
+            }}
+          />
+        </Animated.View>
       </Pressable>
     </Screen>
   );
@@ -1067,6 +878,7 @@ const styles = StyleSheet.create({
     gap: spacing.xxs,
     justifyContent: 'center',
     minWidth: 76,
+    opacity: 0.9,
     paddingHorizontal: spacing.xs,
     paddingVertical: spacing.xs,
   },
@@ -1100,6 +912,10 @@ const styles = StyleSheet.create({
   dropdownOptionPressed: {
     transform: [{ scale: 0.99 }],
   },
+  errorCard: {
+    minHeight: 44,
+    width: '100%',
+  },
   headerBlock: {
     alignItems: 'center',
     gap: spacing.xxs,
@@ -1109,8 +925,8 @@ const styles = StyleSheet.create({
   },
   iconCircleButton: {
     alignItems: 'center',
-    backgroundColor: figmaV2Reference.tabs.activeBackground,
-    borderColor: figmaV2Reference.tabs.activeBorder,
+    backgroundColor: roomAtmosphere.solo.selectorBackground,
+    borderColor: roomAtmosphere.solo.selectorBorder,
     borderRadius: radii.pill,
     borderWidth: 1,
     height: 52,
@@ -1119,8 +935,8 @@ const styles = StyleSheet.create({
   },
   inviteButton: {
     alignItems: 'center',
-    backgroundColor: figmaV2Reference.tabs.activeBackground,
-    borderColor: figmaV2Reference.tabs.activeBorder,
+    backgroundColor: roomAtmosphere.solo.selectorBackground,
+    borderColor: roomAtmosphere.solo.selectorBorder,
     borderRadius: radii.pill,
     borderWidth: 1,
     flexDirection: 'row',
@@ -1154,6 +970,9 @@ const styles = StyleSheet.create({
   minutesSelectorButton: {
     justifyContent: 'center',
   },
+  noMotion: {
+    opacity: 1,
+  },
   playButtonCore: {
     alignItems: 'center',
     backgroundColor: 'transparent',
@@ -1186,8 +1005,8 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   progressFill: {
-    backgroundColor: figmaV2Reference.buttons.sky.from,
-    borderColor: figmaV2Reference.tabs.activeBorder,
+    backgroundColor: roomAtmosphere.solo.transportFill,
+    borderColor: roomAtmosphere.solo.selectorBorder,
     borderRadius: radii.pill,
     borderWidth: 1,
     height: '100%',
@@ -1197,8 +1016,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   progressTrack: {
-    backgroundColor: figmaV2Reference.tabs.activeBackground,
-    borderColor: figmaV2Reference.tabs.activeBorder,
+    backgroundColor: roomAtmosphere.solo.transportTrack,
+    borderColor: roomAtmosphere.solo.selectorBorder,
     borderRadius: radii.pill,
     borderWidth: 1,
     height: 16,
@@ -1206,6 +1025,15 @@ const styles = StyleSheet.create({
   },
   screenContent: {
     flex: 1,
+  },
+  scriptPanelCard: {
+    backgroundColor: roomAtmosphere.solo.panelBackground,
+    borderColor: roomAtmosphere.solo.panelBorder,
+    borderRadius: radii.xl,
+    borderWidth: 1,
+    minHeight: 198,
+    overflow: 'hidden',
+    width: '100%',
   },
   scriptSyncWrap: {
     alignItems: 'center',
@@ -1223,7 +1051,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   scriptWord: {
-    color: colors.textSecondary,
+    color: roomAtmosphere.solo.scriptWord,
     fontSize: 20,
     letterSpacing: 0.1,
     lineHeight: 29,
@@ -1231,7 +1059,7 @@ const styles = StyleSheet.create({
   },
   scriptWordActive: {
     color: colors.textPrimary,
-    textShadowColor: figmaV2Reference.tabs.activeBorder,
+    textShadowColor: roomAtmosphere.solo.scriptGlow,
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 9,
     transform: [{ scale: 1.04 }],
@@ -1259,8 +1087,8 @@ const styles = StyleSheet.create({
   },
   selectorButton: {
     alignItems: 'center',
-    backgroundColor: figmaV2Reference.tabs.activeBackground,
-    borderColor: figmaV2Reference.tabs.activeBorder,
+    backgroundColor: roomAtmosphere.solo.selectorBackground,
+    borderColor: roomAtmosphere.solo.selectorBorder,
     borderRadius: radii.pill,
     borderWidth: 1,
     flexDirection: 'row',
@@ -1277,6 +1105,10 @@ const styles = StyleSheet.create({
   selectorRow: {
     flexDirection: 'row',
     gap: spacing.sm,
+  },
+  soloSubtitle: {
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
   },
   selectorValue: {
     flex: 1,

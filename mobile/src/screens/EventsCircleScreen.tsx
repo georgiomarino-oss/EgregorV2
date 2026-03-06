@@ -4,9 +4,8 @@ import {
   ActivityIndicator,
   Alert,
   Animated,
+  Easing,
   Linking,
-  PanResponder,
-  Pressable,
   StyleSheet,
   TextInput,
   View,
@@ -15,9 +14,15 @@ import {
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 import { Button } from '../components/Button';
+import { LoadingStateCard } from '../components/LoadingStateCard';
+import { RetryPanel } from '../components/RetryPanel';
 import { Screen } from '../components/Screen';
-import { SurfaceCard } from '../components/SurfaceCard';
 import { Typography } from '../components/Typography';
+import { CircleEmptyState } from '../features/circles/components/CircleEmptyState';
+import { CircleHero } from '../features/circles/components/CircleHero';
+import { CircleInvitePanel } from '../features/circles/components/CircleInvitePanel';
+import { CircleMemberRow } from '../features/circles/components/CircleMemberRow';
+import { useReducedMotion } from '../features/rooms/hooks/useReducedMotion';
 import {
   addEventsCircleMember,
   fetchEventsCircleMembers,
@@ -27,136 +32,19 @@ import {
   type PrayerCircleMember,
   type PrayerCircleUserSuggestion,
 } from '../lib/api/data';
-import { HOME_CARD_GAP, PROFILE_ROW_GAP, PROFILE_SECTION_GAP } from '../theme/figmaV2Layout';
-import { colors, radii, spacing } from '../theme/tokens';
-
-const REMOVE_ACTION_WIDTH = 76;
+import { PROFILE_ROW_GAP, PROFILE_SECTION_GAP } from '../theme/figmaV2Layout';
+import { sectionGap } from '../theme/layout';
+import { circleSurface, colors, motion, radii, spacing } from '../theme/tokens';
 
 function makeInviteMessage() {
   return 'Join my Events Circle on Egregor so we can join live events together.';
 }
 
-function SwipeToRemoveRow({
-  member,
-  onRemovePress,
-}: {
-  member: PrayerCircleMember;
-  onRemovePress: (member: PrayerCircleMember) => void;
-}) {
-  const translateX = useMemo(() => new Animated.Value(0), []);
-  const [isOpen, setIsOpen] = useState(false);
-
-  const closeRow = useCallback(() => {
-    setIsOpen(false);
-    Animated.spring(translateX, {
-      bounciness: 0,
-      speed: 16,
-      toValue: 0,
-      useNativeDriver: true,
-    }).start();
-  }, [translateX]);
-
-  const openRow = useCallback(() => {
-    setIsOpen(true);
-    Animated.spring(translateX, {
-      bounciness: 0,
-      speed: 16,
-      toValue: -REMOVE_ACTION_WIDTH,
-      useNativeDriver: true,
-    }).start();
-  }, [translateX]);
-
-  const panResponder = useMemo(
-    () =>
-      PanResponder.create({
-        onMoveShouldSetPanResponder: (_event, gestureState) => {
-          if (member.isOwner) {
-            return false;
-          }
-          return (
-            Math.abs(gestureState.dx) > Math.abs(gestureState.dy) && Math.abs(gestureState.dx) > 6
-          );
-        },
-        onPanResponderMove: (_event, gestureState) => {
-          const base = isOpen ? -REMOVE_ACTION_WIDTH : 0;
-          const next = Math.max(-REMOVE_ACTION_WIDTH, Math.min(0, base + gestureState.dx));
-          translateX.setValue(next);
-        },
-        onPanResponderRelease: (_event, gestureState) => {
-          const shouldOpen =
-            gestureState.vx < -0.35 ||
-            (!isOpen && gestureState.dx < -36) ||
-            (isOpen && gestureState.dx < 14);
-
-          if (shouldOpen) {
-            openRow();
-            return;
-          }
-
-          closeRow();
-        },
-        onPanResponderTerminate: () => {
-          if (isOpen) {
-            openRow();
-            return;
-          }
-          closeRow();
-        },
-      }),
-    [closeRow, isOpen, member.isOwner, openRow, translateX],
-  );
-
-  return (
-    <View style={styles.swipeRowWrap}>
-      {!member.isOwner ? (
-        <View style={styles.removeActionContainer}>
-          <Pressable
-            onPress={() => {
-              closeRow();
-              onRemovePress(member);
-            }}
-            style={({ pressed }) => [styles.removeActionButton, pressed && styles.removePressed]}
-          >
-            <MaterialCommunityIcons color={colors.textPrimary} name="minus" size={18} />
-          </Pressable>
-        </View>
-      ) : null}
-
-      <Animated.View
-        style={[
-          styles.swipeContent,
-          {
-            transform: [{ translateX }],
-          },
-        ]}
-        {...(member.isOwner ? {} : panResponder.panHandlers)}
-      >
-        <SurfaceCard radius="md" style={styles.memberCard} variant="profileRow">
-          <View style={styles.memberRow}>
-            <Typography
-              allowFontScaling={false}
-              numberOfLines={1}
-              style={styles.memberName}
-              weight="medium"
-            >
-              {member.displayName}
-            </Typography>
-            <Typography
-              allowFontScaling={false}
-              color={colors.textSecondary}
-              variant="Caption"
-              weight="bold"
-            >
-              {member.isOwner ? 'Owner' : 'Member'}
-            </Typography>
-          </View>
-        </SurfaceCard>
-      </Animated.View>
-    </View>
-  );
-}
-
 export function EventsCircleScreen() {
+  const palette = circleSurface.events;
+  const reduceMotionEnabled = useReducedMotion();
+  const sectionSettle = useMemo(() => new Animated.Value(0), []);
+
   const initialMembersRef = useRef<PrayerCircleMember[]>(getCachedEventsCircleMembers() ?? []);
   const hasHydratedMembersRef = useRef(initialMembersRef.current.length > 0);
   const [members, setMembers] = useState<PrayerCircleMember[]>(initialMembersRef.current);
@@ -167,6 +55,47 @@ export function EventsCircleScreen() {
   const [searchingUsers, setSearchingUsers] = useState(false);
   const [updatingMemberId, setUpdatingMemberId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (reduceMotionEnabled) {
+      sectionSettle.setValue(1);
+      return;
+    }
+
+    sectionSettle.setValue(0);
+    const animation = Animated.timing(sectionSettle, {
+      duration: motion.durationMs.slow,
+      easing: Easing.out(Easing.cubic),
+      toValue: 1,
+      useNativeDriver: true,
+    });
+    animation.start();
+
+    return () => {
+      animation.stop();
+    };
+  }, [reduceMotionEnabled, sectionSettle]);
+
+  const getSectionStyle = (index: number) => {
+    if (reduceMotionEnabled) {
+      return styles.noMotion;
+    }
+
+    return {
+      opacity: sectionSettle.interpolate({
+        inputRange: [0, 1],
+        outputRange: [0.86, 1],
+      }),
+      transform: [
+        {
+          translateY: sectionSettle.interpolate({
+            inputRange: [0, 1],
+            outputRange: [12 + index * 4, 0],
+          }),
+        },
+      ],
+    };
+  };
 
   const loadMembers = useCallback(async (refresh = false) => {
     if (refresh) {
@@ -281,129 +210,245 @@ export function EventsCircleScreen() {
 
   return (
     <Screen ambientSource={ambientAnimation} contentContainerStyle={styles.content} variant="home">
-      <View style={styles.headerBlock}>
-        <Typography allowFontScaling={false} variant="H1" weight="bold">
-          Events Circle
-        </Typography>
-        <Typography allowFontScaling={false} color={colors.textSecondary}>
-          Add in-app members or invite people externally, then manage your event circle.
-        </Typography>
-      </View>
+      <CircleHero
+        memberCount={members.length}
+        subtitle="Gather the people you trust so entering live collective rooms feels immediate and shared."
+        title="Move as one field"
+        variant="events"
+      />
 
-      <SurfaceCard radius="xl" style={styles.section} variant="homeStat">
-        <Typography allowFontScaling={false} variant="H2" weight="bold">
-          Add members in app
-        </Typography>
+      <Animated.View style={getSectionStyle(0)}>
+        <View
+          style={[
+            styles.sectionCard,
+            {
+              backgroundColor: palette.search.panelBackground,
+              borderColor: palette.search.panelBorder,
+            },
+          ]}
+        >
+          <View style={styles.sectionTitleRow}>
+            <View
+              style={[
+                styles.sectionIcon,
+                {
+                  backgroundColor: palette.member.avatarBackground,
+                  borderColor: palette.member.avatarBorder,
+                },
+              ]}
+            >
+              <MaterialCommunityIcons
+                color={palette.member.avatarText}
+                name="account-plus"
+                size={16}
+              />
+            </View>
+            <View style={styles.sectionTitleWrap}>
+              <Typography
+                allowFontScaling={false}
+                color={palette.search.rowName}
+                variant="Body"
+                weight="bold"
+              >
+                Add members in app
+              </Typography>
+              <Typography
+                allowFontScaling={false}
+                color={palette.search.helperText}
+                variant="Caption"
+              >
+                Search by display name and add people directly to your events circle.
+              </Typography>
+            </View>
+          </View>
 
-        <View style={styles.searchWrap}>
-          <MaterialCommunityIcons color={colors.textSecondary} name="magnify" size={18} />
-          <TextInput
-            onChangeText={setQuery}
-            placeholder="Search users by display name"
-            placeholderTextColor={colors.textCaption}
-            style={styles.searchInput}
-            value={query}
-          />
-        </View>
-
-        {searchingUsers ? <ActivityIndicator color={colors.accentMintStart} /> : null}
-
-        {visibleSuggestions.slice(0, 6).map((user) => (
-          <SurfaceCard
-            key={user.userId}
-            radius="md"
-            style={styles.suggestionRow}
-            variant="profileRow"
+          <View
+            style={[
+              styles.searchWrap,
+              {
+                backgroundColor: palette.search.inputBackground,
+                borderColor: palette.search.inputBorder,
+              },
+            ]}
           >
+            <MaterialCommunityIcons color={palette.search.helperText} name="magnify" size={18} />
+            <TextInput
+              accessibilityHint="Searches by display name."
+              accessibilityLabel="Search users to add to your events circle"
+              onChangeText={setQuery}
+              placeholder="Search users by display name"
+              placeholderTextColor={palette.search.placeholder}
+              style={[styles.searchInput, { color: palette.search.inputText }]}
+              value={query}
+            />
+          </View>
+
+          {searchingUsers ? <ActivityIndicator color={colors.accentMintStart} /> : null}
+
+          {visibleSuggestions.slice(0, 6).map((user) => (
+            <View
+              key={user.userId}
+              style={[
+                styles.suggestionRow,
+                {
+                  backgroundColor: palette.search.rowBackground,
+                  borderColor: palette.search.rowBorder,
+                },
+              ]}
+            >
+              <View style={styles.suggestionTextWrap}>
+                <Typography
+                  allowFontScaling={false}
+                  color={palette.search.rowName}
+                  numberOfLines={1}
+                  variant="Body"
+                  weight="bold"
+                >
+                  {user.displayName}
+                </Typography>
+                <Typography
+                  allowFontScaling={false}
+                  color={palette.search.rowMeta}
+                  variant="Caption"
+                >
+                  Add to your live-room allies
+                </Typography>
+              </View>
+              <Button
+                loading={updatingMemberId === user.userId}
+                onPress={() => void onAddMember(user.userId)}
+                title="Add"
+                variant="sky"
+              />
+            </View>
+          ))}
+
+          {query.trim().length > 0 && !searchingUsers && visibleSuggestions.length === 0 ? (
+            <CircleEmptyState
+              body="Try another name or invite people externally to build your events circle."
+              iconName="account-search"
+              title="No matching users found"
+              variant="events"
+            />
+          ) : null}
+        </View>
+      </Animated.View>
+
+      <Animated.View style={getSectionStyle(1)}>
+        <CircleInvitePanel
+          iconName="account-multiple-plus"
+          subtitle="Invite people outside the app so your next live event room starts with trusted presence."
+          title="Invite externally"
+          variant="events"
+        >
+          <View style={styles.inviteRow}>
+            <Button
+              onPress={() => void onInviteWhatsApp()}
+              title="Invite via WhatsApp"
+              variant="primary"
+            />
+            <Button
+              onPress={() => void onInviteEmail()}
+              title="Invite via Email"
+              variant="secondary"
+            />
+          </View>
+        </CircleInvitePanel>
+      </Animated.View>
+
+      <Animated.View style={getSectionStyle(2)}>
+        <View
+          style={[
+            styles.sectionCard,
+            {
+              backgroundColor: palette.member.panelBackground,
+              borderColor: palette.member.panelBorder,
+            },
+          ]}
+        >
+          <View style={styles.membersHeaderRow}>
             <Typography
               allowFontScaling={false}
-              numberOfLines={1}
-              style={styles.suggestionName}
-              weight="medium"
+              color={palette.member.rowName}
+              variant="H2"
+              weight="bold"
             >
-              {user.displayName}
+              Circle members
             </Typography>
-            <Button
-              loading={updatingMemberId === user.userId}
-              onPress={() => void onAddMember(user.userId)}
-              title="Add"
-              variant="sky"
+            <View
+              style={[
+                styles.countPill,
+                {
+                  backgroundColor: palette.hero.statBackground,
+                  borderColor: palette.hero.statBorder,
+                },
+              ]}
+            >
+              <Typography
+                allowFontScaling={false}
+                color={palette.hero.statValue}
+                variant="Caption"
+                weight="bold"
+              >
+                {members.length}
+              </Typography>
+            </View>
+          </View>
+
+          {loadingMembers ? (
+            <LoadingStateCard
+              compact
+              minHeight={96}
+              style={styles.memberLoadingCard}
+              subtitle="Syncing your events circle members."
+              title="Loading members"
             />
-          </SurfaceCard>
-        ))}
+          ) : null}
 
-        {query.trim().length > 0 && !searchingUsers && visibleSuggestions.length === 0 ? (
-          <Typography allowFontScaling={false} color={colors.textCaption} variant="Caption">
-            No matching users found.
-          </Typography>
-        ) : null}
-      </SurfaceCard>
+          {!loadingMembers && members.length === 0 ? (
+            <CircleEmptyState
+              body="Invite someone from search or share your invite link to activate your events circle."
+              iconName="earth"
+              title="Your events circle is empty"
+              variant="events"
+            />
+          ) : null}
 
-      <SurfaceCard radius="xl" style={styles.section} variant="homeAlert">
-        <Typography allowFontScaling={false} variant="H2" weight="bold">
-          Invite external users
-        </Typography>
-        <View style={styles.inviteRow}>
+          {!loadingMembers
+            ? members.map((member, index) => (
+                <CircleMemberRow
+                  key={member.userId}
+                  member={member}
+                  onRemovePress={onConfirmRemove}
+                  orderIndex={index}
+                  updating={updatingMemberId === member.userId}
+                  variant="events"
+                />
+              ))
+            : null}
+
           <Button
-            onPress={() => void onInviteWhatsApp()}
-            title="Invite via WhatsApp"
-            variant="primary"
-          />
-          <Button
-            onPress={() => void onInviteEmail()}
-            title="Invite via Email"
+            loading={refreshingMembers}
+            onPress={() => void loadMembers(true)}
+            title="Refresh members"
             variant="secondary"
           />
         </View>
-      </SurfaceCard>
-
-      <SurfaceCard radius="xl" style={styles.section} variant="homeStat">
-        <View style={styles.membersHeaderRow}>
-          <Typography allowFontScaling={false} variant="H2" weight="bold">
-            Circle members
-          </Typography>
-          <Typography
-            allowFontScaling={false}
-            color={colors.textSecondary}
-            variant="Caption"
-            weight="bold"
-          >
-            {members.length}
-          </Typography>
-        </View>
-
-        {loadingMembers ? <ActivityIndicator color={colors.accentMintStart} /> : null}
-
-        {!loadingMembers && members.length === 0 ? (
-          <Typography allowFontScaling={false} color={colors.textCaption} variant="Caption">
-            Your circle is empty.
-          </Typography>
-        ) : null}
-
-        {!loadingMembers
-          ? members.map((member) => (
-              <SwipeToRemoveRow
-                key={member.userId}
-                member={member}
-                onRemovePress={onConfirmRemove}
-              />
-            ))
-          : null}
-
-        <Button
-          loading={refreshingMembers}
-          onPress={() => void loadMembers(true)}
-          title="Refresh members"
-          variant="secondary"
-        />
-      </SurfaceCard>
+      </Animated.View>
 
       {error ? (
-        <SurfaceCard radius="sm" style={styles.section} variant="homeAlert">
-          <Typography allowFontScaling={false} color={colors.danger} variant="Caption">
-            {error}
-          </Typography>
-        </SurfaceCard>
+        <Animated.View style={getSectionStyle(3)}>
+          <RetryPanel
+            loading={refreshingMembers}
+            message={error}
+            onRetry={() => {
+              void loadMembers(true);
+            }}
+            retryLabel="Retry"
+            style={styles.errorCard}
+            title="Could not load events circle"
+          />
+        </Animated.View>
       ) : null}
     </Screen>
   );
@@ -411,87 +456,84 @@ export function EventsCircleScreen() {
 
 const styles = StyleSheet.create({
   content: {
-    gap: HOME_CARD_GAP,
-    paddingBottom: HOME_CARD_GAP,
+    gap: sectionGap,
+    paddingBottom: sectionGap,
   },
-  headerBlock: {
-    gap: PROFILE_ROW_GAP,
+  countPill: {
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    minWidth: 30,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+  },
+  errorCard: {
+    minHeight: 46,
   },
   inviteRow: {
     gap: PROFILE_ROW_GAP,
-  },
-  memberCard: {
-    minHeight: 44,
-  },
-  memberName: {
-    flex: 1,
-  },
-  memberRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: spacing.sm,
-    justifyContent: 'space-between',
   },
   membersHeaderRow: {
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
-  removeActionButton: {
-    alignItems: 'center',
-    backgroundColor: colors.danger,
-    borderRadius: radii.pill,
-    height: 38,
-    justifyContent: 'center',
-    width: 38,
+  memberLoadingCard: {
+    backgroundColor: circleSurface.events.member.panelBackground,
+    borderColor: circleSurface.events.member.panelBorder,
   },
-  removeActionContainer: {
-    alignItems: 'center',
-    bottom: 0,
-    justifyContent: 'center',
-    position: 'absolute',
-    right: 0,
-    top: 0,
-    width: REMOVE_ACTION_WIDTH,
-  },
-  removePressed: {
-    transform: [{ scale: 0.96 }],
+  noMotion: {
+    opacity: 1,
   },
   searchInput: {
-    color: colors.textPrimary,
     flex: 1,
     paddingVertical: 0,
   },
   searchWrap: {
     alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderColor: colors.borderMedium,
     borderRadius: radii.md,
     borderWidth: 1,
     flexDirection: 'row',
     gap: spacing.xs,
-    minHeight: 44,
+    minHeight: 46,
     paddingHorizontal: spacing.sm,
   },
-  section: {
+  sectionCard: {
+    borderRadius: radii.xl,
+    borderWidth: 1,
     gap: PROFILE_SECTION_GAP,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
   },
-  suggestionName: {
+  sectionIcon: {
+    alignItems: 'center',
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    height: 28,
+    justifyContent: 'center',
+    width: 28,
+  },
+  sectionTitleRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: spacing.xs,
+  },
+  sectionTitleWrap: {
     flex: 1,
+    gap: 2,
   },
   suggestionRow: {
     alignItems: 'center',
+    borderRadius: radii.md,
+    borderWidth: 1,
     flexDirection: 'row',
     gap: spacing.sm,
     justifyContent: 'space-between',
+    minHeight: 52,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
   },
-  swipeContent: {
-    borderRadius: radii.md,
-  },
-  swipeRowWrap: {
-    borderRadius: radii.md,
-    minHeight: 44,
-    overflow: 'hidden',
-    position: 'relative',
+  suggestionTextWrap: {
+    flex: 1,
+    gap: 2,
   },
 });

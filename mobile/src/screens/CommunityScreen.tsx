@@ -1,29 +1,23 @@
 import ambientAnimation from '../../assets/lottie/cosmic-ambient.json';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet } from 'react-native';
 
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import type { CommunityStackParamList } from '../app/navigation/types';
-import { Button } from '../components/Button';
 import { Screen } from '../components/Screen';
-import { SurfaceCard } from '../components/SurfaceCard';
-import { Typography } from '../components/Typography';
+import { CircleEntryCards } from '../features/community/components/CircleEntryCards';
+import { CommunityAlertFeed } from '../features/community/components/CommunityAlertFeed';
+import { GlobalPulseHero } from '../features/community/components/GlobalPulseHero';
+import { LiveMetricsPanel } from '../features/community/components/LiveMetricsPanel';
 import {
   fetchCommunitySnapshot,
   getCachedCommunitySnapshot,
   type CommunitySnapshot,
 } from '../lib/api/data';
 import { supabase } from '../lib/supabase';
-import {
-  HOME_CARD_GAP,
-  PROFILE_ROW_GAP,
-  PROFILE_SECTION_GAP,
-  SUBTITLE_TO_MAINCARD_GAP,
-  TITLE_TO_SUBTITLE_GAP,
-} from '../theme/figmaV2Layout';
-import { colors, radii } from '../theme/tokens';
+import { sectionGap } from '../theme/layout';
 
 type CommunityNavigation = NativeStackNavigationProp<CommunityStackParamList, 'CommunityHome'>;
 
@@ -117,133 +111,55 @@ export function CommunityScreen() {
 
   const prayerCircleCount = snapshot?.liveEvents ?? 0;
   const eventsCircleCount = snapshot?.events.length ?? 0;
+  const alerts = snapshot?.alerts ?? [];
+  const emptyState = !loading && alerts.length === 0;
 
   return (
     <Screen ambientSource={ambientAnimation} contentContainerStyle={styles.content} variant="home">
-      <View style={styles.headerBlock}>
-        <Typography allowFontScaling={false} variant="H1" weight="bold">
-          Global pulse
-        </Typography>
-        <Typography allowFontScaling={false} color={colors.textSecondary}>
-          Live awareness feed with direct access to active collective rooms.
-        </Typography>
-      </View>
+      <GlobalPulseHero
+        liveEvents={snapshot?.liveEvents ?? 0}
+        strongestLiveEventTitle={snapshot?.strongestLiveEventTitle ?? null}
+      />
 
-      <SurfaceCard radius="xl" style={styles.section} variant="homeStat">
-        {loading && !snapshot ? (
-          <ActivityIndicator color={colors.accentMintStart} />
-        ) : (
-          <>
-            <Typography allowFontScaling={false} variant="Metric" weight="bold">
-              {snapshot?.uniqueActiveParticipants ?? 0}
-            </Typography>
-            <Typography allowFontScaling={false} color={colors.textLabel} variant="Label">
-              Participants Online
-            </Typography>
+      <LiveMetricsPanel
+        countries={snapshot?.countries ?? 0}
+        liveEvents={snapshot?.liveEvents ?? 0}
+        loading={loading && !snapshot}
+        onPrimaryAction={onPrimaryAction}
+        primaryActionTitle={
+          snapshot?.strongestLiveEventTitle ? 'Join strongest live room' : 'Explore events'
+        }
+        uniqueActiveParticipants={snapshot?.uniqueActiveParticipants ?? 0}
+      />
 
-            <View style={styles.row}>
-              <SurfaceCard radius="md" style={styles.metricCard} variant="homeStatSmall">
-                <Typography allowFontScaling={false} color={colors.textBodySoft} variant="Label">
-                  Live events
-                </Typography>
-                <Typography allowFontScaling={false} variant="H2" weight="bold">
-                  {snapshot?.liveEvents ?? 0}
-                </Typography>
-              </SurfaceCard>
-              <SurfaceCard radius="md" style={styles.metricCard} variant="homeStatSmall">
-                <Typography allowFontScaling={false} color={colors.textBodySoft} variant="Label">
-                  Countries
-                </Typography>
-                <Typography allowFontScaling={false} variant="H2" weight="bold">
-                  {snapshot?.countries ?? 0}
-                </Typography>
-              </SurfaceCard>
-            </View>
-
-            <Button
-              onPress={onPrimaryAction}
-              title={
-                snapshot?.strongestLiveEventTitle ? 'Join strongest live room' : 'Explore events'
-              }
-              variant="primary"
-            />
-          </>
-        )}
-      </SurfaceCard>
-
-      {error ? (
-        <SurfaceCard radius="sm" style={styles.feedCard} variant="homeAlert">
-          <Typography allowFontScaling={false} variant="H2" weight="bold">
-            Could not load community feed
-          </Typography>
-          <Typography allowFontScaling={false} color={colors.textCaption} variant="Caption">
-            {error}
-          </Typography>
-        </SurfaceCard>
-      ) : null}
-
-      {!loading && (snapshot?.alerts.length ?? 0) === 0 ? (
+      {emptyState ? (
         <>
-          <View style={styles.row}>
-            <Pressable
-              onPress={() => navigation.navigate('PrayerCircle')}
-              style={({ pressed }) => [styles.metricCardPressable, pressed && styles.pressedScale]}
-            >
-              <SurfaceCard radius="md" style={styles.metricCard} variant="homeStatSmall">
-                <Typography allowFontScaling={false} color={colors.textBodySoft} variant="Label">
-                  Prayer Circle
-                </Typography>
-                <Typography allowFontScaling={false} variant="H2" weight="bold">
-                  {prayerCircleCount}
-                </Typography>
-              </SurfaceCard>
-            </Pressable>
-            <Pressable
-              onPress={() => navigation.navigate('EventsCircle')}
-              style={({ pressed }) => [styles.metricCardPressable, pressed && styles.pressedScale]}
-            >
-              <SurfaceCard
-                contentPadding={10}
-                radius="md"
-                style={[styles.metricCard, styles.eventsCircleCardCompact]}
-                variant="homeStatSmall"
-              >
-                <Typography allowFontScaling={false} color={colors.textBodySoft} variant="Label">
-                  Events Circle
-                </Typography>
-                <Typography allowFontScaling={false} variant="H2" weight="bold">
-                  {eventsCircleCount}
-                </Typography>
-              </SurfaceCard>
-            </Pressable>
-          </View>
-
-          <SurfaceCard radius="sm" style={styles.feedCard} variant="homeAlert">
-            <Typography allowFontScaling={false} variant="H2" weight="bold">
-              No live alerts right now
-            </Typography>
-            <Typography allowFontScaling={false} color={colors.textCaption} variant="Caption">
-              New event updates appear here as soon as rooms go live.
-            </Typography>
-          </SurfaceCard>
+          <CircleEntryCards
+            eventsCircleCount={eventsCircleCount}
+            onOpenEventsCircle={() => navigation.navigate('EventsCircle')}
+            onOpenPrayerCircle={() => navigation.navigate('PrayerCircle')}
+            prayerCircleCount={prayerCircleCount}
+          />
+          <CommunityAlertFeed
+            alerts={alerts}
+            emptyState
+            errorMessage={error}
+            onOpenEventDetails={openEventDetails}
+            onRetry={() => {
+              void loadSnapshot();
+            }}
+          />
         </>
       ) : (
-        snapshot?.alerts.map((alert) => (
-          <Pressable
-            key={alert.eventId}
-            onPress={() => openEventDetails(alert.eventId)}
-            style={({ pressed }) => [styles.pressable, pressed && styles.pressedScale]}
-          >
-            <SurfaceCard radius="sm" style={styles.feedCard} variant="homeAlert">
-              <Typography allowFontScaling={false} variant="H2" weight="bold">
-                {alert.title}
-              </Typography>
-              <Typography allowFontScaling={false} color={colors.textCaption} variant="Caption">
-                {alert.subtitle}
-              </Typography>
-            </SurfaceCard>
-          </Pressable>
-        ))
+        <CommunityAlertFeed
+          alerts={alerts}
+          emptyState={false}
+          errorMessage={error}
+          onOpenEventDetails={openEventDetails}
+          onRetry={() => {
+            void loadSnapshot();
+          }}
+        />
       )}
     </Screen>
   );
@@ -251,38 +167,7 @@ export function CommunityScreen() {
 
 const styles = StyleSheet.create({
   content: {
-    gap: HOME_CARD_GAP,
-    paddingBottom: HOME_CARD_GAP,
-  },
-  feedCard: {
-    gap: PROFILE_ROW_GAP,
-  },
-  headerBlock: {
-    gap: TITLE_TO_SUBTITLE_GAP,
-    marginBottom: SUBTITLE_TO_MAINCARD_GAP,
-  },
-  metricCard: {
-    flex: 1,
-    gap: PROFILE_ROW_GAP,
-  },
-  metricCardPressable: {
-    flex: 1,
-    borderRadius: radii.md,
-  },
-  eventsCircleCardCompact: {
-    minHeight: 56,
-  },
-  pressedScale: {
-    transform: [{ scale: 0.99 }],
-  },
-  pressable: {
-    borderRadius: radii.sm,
-  },
-  row: {
-    flexDirection: 'row',
-    gap: HOME_CARD_GAP,
-  },
-  section: {
-    gap: PROFILE_SECTION_GAP,
+    gap: sectionGap,
+    paddingBottom: sectionGap,
   },
 });
