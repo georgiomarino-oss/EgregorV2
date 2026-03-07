@@ -43,6 +43,7 @@ export function CircleHero({ memberCount, subtitle, title, variant }: CircleHero
   const reduceMotionEnabled = useReducedMotion();
   const settle = useMemo(() => new Animated.Value(0), []);
   const palette = circleSurface[variant].hero;
+  const isPrayer = variant === 'prayer';
 
   useEffect(() => {
     if (reduceMotionEnabled) {
@@ -99,6 +100,29 @@ export function CircleHero({ memberCount, subtitle, title, variant }: CircleHero
           style={StyleSheet.absoluteFill}
         />
         <View pointerEvents="none" style={[styles.glow, { backgroundColor: palette.glow }]} />
+        {isPrayer ? (
+          <>
+            <View
+              pointerEvents="none"
+              style={[styles.prayerBeam, { backgroundColor: palette.titleGlow }]}
+            />
+            <View
+              pointerEvents="none"
+              style={[styles.prayerHalo, { borderColor: palette.statBorder }]}
+            />
+          </>
+        ) : (
+          <>
+            <View
+              pointerEvents="none"
+              style={[styles.eventsOrbit, { borderColor: palette.statBorder }]}
+            />
+            <View
+              pointerEvents="none"
+              style={[styles.eventsNode, { backgroundColor: palette.statValue }]}
+            />
+          </>
+        )}
 
         <View style={styles.topRow}>
           <View
@@ -201,6 +225,25 @@ const styles = StyleSheet.create({
   glow: {
     ...StyleSheet.absoluteFillObject,
   },
+  eventsNode: {
+    borderRadius: radii.pill,
+    height: 8,
+    opacity: 0.86,
+    position: 'absolute',
+    right: 52,
+    top: 24,
+    width: 8,
+  },
+  eventsOrbit: {
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    height: 112,
+    opacity: 0.42,
+    position: 'absolute',
+    right: -28,
+    top: -18,
+    width: 112,
+  },
   memberContext: {
     alignSelf: 'flex-start',
     borderRadius: radii.pill,
@@ -218,6 +261,26 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.md,
+  },
+  prayerBeam: {
+    borderRadius: radii.pill,
+    height: 140,
+    left: 44,
+    opacity: 0.28,
+    position: 'absolute',
+    top: -98,
+    transform: [{ rotate: '8deg' }],
+    width: 70,
+  },
+  prayerHalo: {
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    height: 94,
+    left: -24,
+    opacity: 0.34,
+    position: 'absolute',
+    top: 18,
+    width: 94,
   },
   statPill: {
     alignItems: 'flex-end',

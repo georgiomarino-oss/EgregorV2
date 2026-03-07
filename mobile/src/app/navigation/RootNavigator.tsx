@@ -70,20 +70,29 @@ function CommunityStackNavigator({ initialRouteName }: CommunityStackNavigatorPr
 }
 
 interface EventsStackNavigatorProps {
+  eventDetailsInitialParams?: EventsStackParamList['EventDetails'];
   eventRoomInitialParams?: EventsStackParamList['EventRoom'];
   initialRouteName?: keyof EventsStackParamList;
 }
 
 function EventsStackNavigator({
+  eventDetailsInitialParams,
   eventRoomInitialParams,
   initialRouteName,
 }: EventsStackNavigatorProps) {
   const navigatorProps = initialRouteName ? { initialRouteName } : {};
+  const eventDetailsProps = eventDetailsInitialParams
+    ? { initialParams: eventDetailsInitialParams }
+    : {};
   const eventRoomProps = eventRoomInitialParams ? { initialParams: eventRoomInitialParams } : {};
   return (
     <EventsStack.Navigator {...navigatorProps} screenOptions={sharedStackOptions}>
       <EventsStack.Screen name="EventsHome" component={EventsScreen} />
-      <EventsStack.Screen name="EventDetails" component={EventDetailsScreen} />
+      <EventsStack.Screen
+        name="EventDetails"
+        component={EventDetailsScreen}
+        {...eventDetailsProps}
+      />
       <EventsStack.Screen name="EventRoom" component={EventRoomScreen} {...eventRoomProps} />
     </EventsStack.Navigator>
   );
@@ -161,6 +170,9 @@ function MainTabs({ captureTarget }: MainTabsProps) {
       >
         {() => (
           <EventsStackNavigator
+            {...(captureTarget?.eventDetailsParams
+              ? { eventDetailsInitialParams: captureTarget.eventDetailsParams }
+              : {})}
             {...(captureTarget?.eventsRoute ? { initialRouteName: captureTarget.eventsRoute } : {})}
             {...(captureTarget?.eventRoomParams
               ? { eventRoomInitialParams: captureTarget.eventRoomParams }

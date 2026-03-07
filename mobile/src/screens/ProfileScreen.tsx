@@ -4,7 +4,8 @@ import { Animated, PanResponder, StyleSheet } from 'react-native';
 import type { User } from '@supabase/supabase-js';
 
 import { ActionPanel } from '../components/ActionPanel';
-import { Button } from '../components/Button';
+import { SecondaryButton } from '../components/AppButtons';
+import { Badge } from '../components/Badge';
 import { InlineErrorCard } from '../components/InlineErrorCard';
 import { RetryPanel } from '../components/RetryPanel';
 import { Screen } from '../components/Screen';
@@ -541,6 +542,7 @@ export function ProfileScreen() {
         borderColor={profileSurface.utility.panelBorder}
         style={styles.utilityPanel}
       >
+        <Badge label="Secure account" tone="success" />
         <Typography
           allowFontScaling={false}
           color={profileSurface.utility.title}
@@ -556,7 +558,7 @@ export function ProfileScreen() {
         >
           Sign out at any time while your journal and progress remain synced.
         </Typography>
-        <Button loading={loadingSignOut} onPress={onSignOut} title="Sign out" variant="secondary" />
+        <SecondaryButton loading={loadingSignOut} onPress={onSignOut} title="Sign out" />
       </ActionPanel>
 
       {error ? (

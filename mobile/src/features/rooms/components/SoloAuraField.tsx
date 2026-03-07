@@ -9,22 +9,26 @@ import { useReducedMotion } from '../hooks/useReducedMotion';
 
 interface SoloAuraFieldProps {
   active?: boolean;
+  mode?: 'host' | 'participant' | 'solo';
 }
 
 const FIELD_VIEWBOX = 1000;
 
-export function SoloAuraField({ active = true }: SoloAuraFieldProps) {
+export function SoloAuraField({ active = true, mode = 'solo' }: SoloAuraFieldProps) {
   const reduceMotionEnabled = useReducedMotion();
   const breathe = useMemo(() => new Animated.Value(0), []);
   const drift = useMemo(() => new Animated.Value(0), []);
+  const syncWave = useMemo(() => new Animated.Value(0), []);
   const mistOpacity = active ? 1 : 0.42;
 
   useEffect(() => {
     if (!active || reduceMotionEnabled) {
       breathe.stopAnimation();
       drift.stopAnimation();
+      syncWave.stopAnimation();
       breathe.setValue(0);
       drift.setValue(0);
+      syncWave.setValue(0);
       return;
     }
 
@@ -73,14 +77,34 @@ export function SoloAuraField({ active = true }: SoloAuraFieldProps) {
       { resetBeforeIteration: true },
     );
 
+    const syncLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(syncWave, {
+          duration: motion.durationMs.ritual,
+          easing: Easing.inOut(Easing.sin),
+          toValue: 1,
+          useNativeDriver: true,
+        }),
+        Animated.timing(syncWave, {
+          duration: motion.durationMs.ritual,
+          easing: Easing.inOut(Easing.sin),
+          toValue: 0,
+          useNativeDriver: true,
+        }),
+      ]),
+      { resetBeforeIteration: true },
+    );
+
     loop.start();
     driftLoop.start();
+    syncLoop.start();
 
     return () => {
       loop.stop();
       driftLoop.stop();
+      syncLoop.stop();
     };
-  }, [active, breathe, drift, reduceMotionEnabled]);
+  }, [active, breathe, drift, reduceMotionEnabled, syncWave]);
 
   const auraOpacity = !active
     ? 0.16
@@ -123,6 +147,31 @@ export function SoloAuraField({ active = true }: SoloAuraFieldProps) {
       : breathe.interpolate({
           inputRange: [0, 1],
           outputRange: [0.18, 0.34],
+        });
+
+  const syncOpacity = !active
+    ? 0.16
+    : reduceMotionEnabled
+      ? 0.56
+      : syncWave.interpolate({
+          inputRange: [0, 1],
+          outputRange: [0.34, 0.72],
+        });
+
+  const syncScale = reduceMotionEnabled
+    ? 1
+    : syncWave.interpolate({
+        inputRange: [0, 1],
+        outputRange: [0.98, 1.04],
+      });
+
+  const hostBeaconOpacity = !active
+    ? 0.12
+    : reduceMotionEnabled
+      ? 0.4
+      : syncWave.interpolate({
+          inputRange: [0, 1],
+          outputRange: [0.2, 0.56],
         });
 
   return (
@@ -214,6 +263,21 @@ export function SoloAuraField({ active = true }: SoloAuraFieldProps) {
       </Animated.View>
 
       <Animated.View style={[styles.innerGlow, { opacity: innerGlowOpacity }]} />
+
+      {mode === 'participant' ? (
+        <Animated.View
+          style={[styles.syncOverlay, { opacity: syncOpacity, transform: [{ scale: syncScale }] }]}
+        >
+          <View style={styles.syncNodeHost} />
+          <View style={styles.syncTether} />
+          <View style={styles.syncWave} />
+          <View style={styles.syncNodeParticipant} />
+        </Animated.View>
+      ) : null}
+
+      {mode === 'host' ? (
+        <Animated.View style={[styles.hostBeacon, { opacity: hostBeaconOpacity }]} />
+      ) : null}
     </View>
   );
 }
@@ -222,9 +286,65 @@ const styles = StyleSheet.create({
   centerAura: {
     ...StyleSheet.absoluteFillObject,
   },
+  hostBeacon: {
+    alignSelf: 'center',
+    backgroundColor: 'rgba(255, 218, 166, 0.16)',
+    borderColor: 'rgba(255, 218, 166, 0.46)',
+    borderRadius: 120,
+    borderWidth: 1,
+    bottom: 192,
+    height: 220,
+    position: 'absolute',
+    width: 220,
+  },
   innerGlow: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: roomAtmosphere.solo.mistFrom,
+  },
+  syncNodeHost: {
+    backgroundColor: 'rgba(249, 211, 156, 0.94)',
+    borderColor: 'rgba(255, 226, 182, 0.92)',
+    borderRadius: 37,
+    borderWidth: 1,
+    height: 74,
+    left: 52,
+    position: 'absolute',
+    top: 40,
+    width: 74,
+  },
+  syncNodeParticipant: {
+    backgroundColor: 'rgba(181, 223, 255, 0.92)',
+    borderColor: 'rgba(199, 234, 255, 0.9)',
+    borderRadius: 37,
+    borderWidth: 1,
+    bottom: 38,
+    height: 74,
+    position: 'absolute',
+    right: 52,
+    width: 74,
+  },
+  syncOverlay: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  syncTether: {
+    backgroundColor: 'rgba(159, 214, 255, 0.56)',
+    borderRadius: 8,
+    height: 10,
+    left: 110,
+    position: 'absolute',
+    top: 152,
+    transform: [{ rotate: '-29deg' }],
+    width: 170,
+  },
+  syncWave: {
+    borderColor: 'rgba(255, 218, 166, 0.6)',
+    borderRadius: 92,
+    borderWidth: 1,
+    height: 184,
+    left: 88,
+    position: 'absolute',
+    top: 108,
+    width: 184,
   },
   veilAura: {
     ...StyleSheet.absoluteFillObject,

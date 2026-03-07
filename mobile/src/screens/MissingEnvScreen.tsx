@@ -1,8 +1,10 @@
 import ambientAnimation from '../../assets/lottie/cosmic-ambient.json';
 import { StyleSheet } from 'react-native';
 
-import { Button } from '../components/Button';
+import { SecondaryButton } from '../components/AppButtons';
+import { LiveLogo } from '../components/LiveLogo';
 import { Screen } from '../components/Screen';
+import { StateSurface } from '../components/StateSurface';
 import { SurfaceCard } from '../components/SurfaceCard';
 import { Typography } from '../components/Typography';
 import { sectionGap } from '../theme/layout';
@@ -28,12 +30,36 @@ export function MissingEnvScreen({
       variant="auth"
       withTabBarInset={false}
     >
+      <LiveLogo size={46} />
       <Typography variant="H1" weight="bold">
-        Missing Environment Values
+        Environment check
       </Typography>
       <Typography color={colors.textSecondary}>
-        Egregor v2 needs environment configuration before startup.
+        We paused startup while validating required runtime services.
       </Typography>
+
+      {hasBlockingIssues ? (
+        <StateSurface
+          actionLabel="Review required keys"
+          body="One or more required service variables are missing."
+          kind="error"
+          title="Cannot continue yet"
+        />
+      ) : missingOptional.length > 0 ? (
+        <StateSurface
+          actionLabel="Continue in fallback"
+          body="Optional keys are missing. Expo fallback mode is available."
+          kind="empty"
+          {...(onContinueWithoutOptional ? { onAction: onContinueWithoutOptional } : {})}
+          title="Optional configuration missing"
+        />
+      ) : (
+        <StateSurface
+          body="All required and optional environment keys are present."
+          kind="empty"
+          title="Environment verified"
+        />
+      )}
 
       <SurfaceCard style={styles.section}>
         <Typography variant="H2" weight="bold">
@@ -72,14 +98,10 @@ export function MissingEnvScreen({
 
       <SurfaceCard style={styles.section}>
         <Typography color={colors.textSecondary}>
-          Add values to `mobile/.env`, restart Metro, and relaunch the app.
+          Add values to `mobile/.env`, restart Metro, then relaunch Egregor.
         </Typography>
         {!hasBlockingIssues && missingOptional.length > 0 && onContinueWithoutOptional ? (
-          <Button
-            onPress={onContinueWithoutOptional}
-            title="Continue In Fallback Mode"
-            variant="secondary"
-          />
+          <SecondaryButton onPress={onContinueWithoutOptional} title="Continue In Fallback Mode" />
         ) : null}
       </SurfaceCard>
     </Screen>

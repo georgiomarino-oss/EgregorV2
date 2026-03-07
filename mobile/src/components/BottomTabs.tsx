@@ -8,7 +8,7 @@ import Svg, { Path } from 'react-native-svg';
 import { cssAngleToLinearPoints } from '../theme/gradient';
 import { figmaV2Reference } from '../theme/figma-v2-reference';
 import { tabBarInsetX } from '../theme/layout';
-import { colors, radii, spacing } from '../theme/tokens';
+import { colors, navigationSurface, radii, spacing } from '../theme/tokens';
 
 const TAB_ICON_SIZE = 23;
 
@@ -87,6 +87,12 @@ export function BottomTabs({ descriptors, navigation, state }: BottomTabBarProps
         start={points.start}
         style={styles.container}
       >
+        <View
+          accessible={false}
+          importantForAccessibility="no-hide-descendants"
+          pointerEvents="none"
+          style={styles.containerGlow}
+        />
         {state.routes.map((route, index) => {
           const isFocused = state.index === index;
           const descriptor = descriptors[route.key];
@@ -143,11 +149,18 @@ export function BottomTabs({ descriptors, navigation, state }: BottomTabBarProps
 
 const styles = StyleSheet.create({
   container: {
+    backgroundColor: navigationSurface.tabBar.backgroundFrom,
+    borderColor: navigationSurface.tabBar.border,
     borderRadius: radii.lg,
-    borderWidth: 0,
+    borderWidth: figmaV2Reference.tabs.containerBorderWidth,
     flexDirection: 'row',
     gap: spacing.xs,
+    overflow: 'hidden',
     padding: spacing.xs,
+  },
+  containerGlow: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: navigationSurface.tabBar.glow,
   },
   iconBubble: {
     alignItems: 'center',

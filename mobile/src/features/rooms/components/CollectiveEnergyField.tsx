@@ -19,6 +19,7 @@ export function CollectiveEnergyField({ energyLevel, isLive }: CollectiveEnergyF
   const primaryPulse = useMemo(() => new Animated.Value(0), []);
   const secondaryPulse = useMemo(() => new Animated.Value(0), []);
   const depthShift = useMemo(() => new Animated.Value(0), []);
+  const nodeOrbit = useMemo(() => new Animated.Value(0), []);
 
   const preset = roomAtmosphere.collective.energy[energyLevel];
   const liveIntensity =
@@ -30,9 +31,11 @@ export function CollectiveEnergyField({ energyLevel, isLive }: CollectiveEnergyF
       primaryPulse.stopAnimation();
       secondaryPulse.stopAnimation();
       depthShift.stopAnimation();
+      nodeOrbit.stopAnimation();
       primaryPulse.setValue(0);
       secondaryPulse.setValue(0);
       depthShift.setValue(0);
+      nodeOrbit.setValue(0);
       return;
     }
 
@@ -90,16 +93,30 @@ export function CollectiveEnergyField({ energyLevel, isLive }: CollectiveEnergyF
       { resetBeforeIteration: true },
     );
 
+    const orbitLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(nodeOrbit, {
+          duration: 8600,
+          easing: Easing.linear,
+          toValue: 1,
+          useNativeDriver: true,
+        }),
+      ]),
+      { resetBeforeIteration: true },
+    );
+
     primaryLoop.start();
     secondaryLoop.start();
     depthLoop.start();
+    orbitLoop.start();
 
     return () => {
       primaryLoop.stop();
       secondaryLoop.stop();
       depthLoop.stop();
+      orbitLoop.stop();
     };
-  }, [depthShift, isLive, preset, primaryPulse, reduceMotionEnabled, secondaryPulse]);
+  }, [depthShift, isLive, nodeOrbit, preset, primaryPulse, reduceMotionEnabled, secondaryPulse]);
 
   const primaryOpacity = !isLive
     ? preset.fieldOpacity * 0.09
@@ -152,6 +169,22 @@ export function CollectiveEnergyField({ energyLevel, isLive }: CollectiveEnergyF
         inputRange: [0, 0.5, 1],
         outputRange: [2, -2.4, 2],
       });
+
+  const orbitRotate = reduceMotionEnabled
+    ? '0deg'
+    : nodeOrbit.interpolate({
+        inputRange: [0, 1],
+        outputRange: ['0deg', '360deg'],
+      });
+
+  const nodeOpacity = !isLive
+    ? 0.28
+    : reduceMotionEnabled
+      ? 0.54
+      : primaryPulse.interpolate({
+          inputRange: [0, 1],
+          outputRange: [0.36, 0.74],
+        });
 
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
@@ -271,6 +304,23 @@ export function CollectiveEnergyField({ energyLevel, isLive }: CollectiveEnergyF
           />
         </Svg>
       </Animated.View>
+
+      <Animated.View
+        style={[
+          styles.collectiveRingWrap,
+          {
+            opacity: nodeOpacity,
+            transform: [{ rotate: orbitRotate }],
+          },
+        ]}
+      >
+        <View style={styles.collectiveRingStrong} />
+        <View style={styles.collectiveRingSoft} />
+        <View style={[styles.presenceNode, styles.presenceNodeA]} />
+        <View style={[styles.presenceNode, styles.presenceNodeB]} />
+        <View style={[styles.presenceNodeMuted, styles.presenceNodeC]} />
+        <View style={[styles.presenceNodeMuted, styles.presenceNodeD]} />
+      </Animated.View>
     </View>
   );
 }
@@ -281,5 +331,64 @@ const styles = StyleSheet.create({
   },
   energyLayer: {
     ...StyleSheet.absoluteFillObject,
+  },
+  collectiveRingSoft: {
+    borderColor: 'rgba(147, 223, 255, 0.3)',
+    borderRadius: 110,
+    borderWidth: 1,
+    height: 220,
+    position: 'absolute',
+    width: 220,
+  },
+  collectiveRingStrong: {
+    borderColor: 'rgba(147, 223, 255, 0.62)',
+    borderRadius: 82,
+    borderWidth: 1,
+    height: 164,
+    left: 28,
+    position: 'absolute',
+    top: 28,
+    width: 164,
+  },
+  collectiveRingWrap: {
+    alignSelf: 'center',
+    bottom: 124,
+    height: 220,
+    position: 'absolute',
+    width: 220,
+  },
+  presenceNode: {
+    backgroundColor: '#C2EEFF',
+    borderColor: 'rgba(209, 241, 255, 0.9)',
+    borderRadius: 6,
+    borderWidth: 1,
+    height: 12,
+    position: 'absolute',
+    width: 12,
+  },
+  presenceNodeA: {
+    left: 4,
+    top: 86,
+  },
+  presenceNodeB: {
+    right: 4,
+    top: 114,
+  },
+  presenceNodeC: {
+    bottom: 10,
+    left: 90,
+  },
+  presenceNodeD: {
+    right: 80,
+    top: 6,
+  },
+  presenceNodeMuted: {
+    backgroundColor: 'rgba(194, 238, 255, 0.52)',
+    borderColor: 'rgba(194, 238, 255, 0.62)',
+    borderRadius: 5,
+    borderWidth: 1,
+    height: 10,
+    position: 'absolute',
+    width: 10,
   },
 });

@@ -6,12 +6,15 @@ import { AppRoot } from './src/app/AppRoot';
 import type { CaptureNavigationTarget } from './src/app/navigation/types';
 
 function parseCaptureTargetFromHash(): CaptureNavigationTarget | undefined {
+  if (!__DEV__) {
+    return undefined;
+  }
+
   if (typeof window === 'undefined') {
     return undefined;
   }
 
-  const locationHash =
-    typeof window.location?.hash === 'string' ? window.location.hash : undefined;
+  const locationHash = typeof window.location?.hash === 'string' ? window.location.hash : undefined;
 
   if (!locationHash) {
     return undefined;
@@ -19,11 +22,12 @@ function parseCaptureTargetFromHash(): CaptureNavigationTarget | undefined {
 
   const hash = locationHash.startsWith('#') ? locationHash.slice(1) : locationHash;
 
-  if (!hash || !hash.includes('figmacapture=')) {
+  if (!hash || (!hash.includes('figmacapture=') && !hash.includes('figmatarget='))) {
     return undefined;
   }
 
   const params = new URLSearchParams(hash);
+  const quickTargetParam = params.get('figmatarget')?.trim().toLowerCase();
   const tabParam = params.get('figmatab')?.trim().toLowerCase();
   const rootParam = params.get('figmaroot')?.trim().toLowerCase();
   const soloRouteParam = params.get('figmasoloroute')?.trim().toLowerCase();
@@ -66,8 +70,55 @@ function parseCaptureTargetFromHash(): CaptureNavigationTarget | undefined {
   };
 
   const target: CaptureNavigationTarget = {};
+  const captureEventStartAt = new Date(Date.now() + 3 * 60 * 1000).toISOString();
+  const quickTargetMap: Record<string, CaptureNavigationTarget> = {
+    auth: { root: 'auth' },
+    communityhome: { root: 'main', tab: 'CommunityTab', communityRoute: 'CommunityHome' },
+    entry: { root: 'entry' },
+    eventscircle: { root: 'main', tab: 'CommunityTab', communityRoute: 'EventsCircle' },
+    eventdetails: {
+      eventDetailsParams: { eventId: '__capture__' },
+      eventsRoute: 'EventDetails',
+      root: 'main',
+      tab: 'EventsTab',
+    },
+    eventroom: {
+      eventRoomParams: {
+        durationMinutes: 10,
+        eventTitle: 'Global Harmonic Prayer',
+        scheduledStartAt: captureEventStartAt,
+        scriptText:
+          'Breathe together in one steady rhythm. Let gratitude rise and settle through the room. Hold one intention for healing and peace.',
+      },
+      eventsRoute: 'EventRoom',
+      root: 'main',
+      tab: 'EventsTab',
+    },
+    eventshome: { root: 'main', tab: 'EventsTab', eventsRoute: 'EventsHome' },
+    missingenv: { root: 'missingEnv' },
+    prayercircle: { root: 'main', tab: 'CommunityTab', communityRoute: 'PrayerCircle' },
+    profile: { root: 'main', tab: 'ProfileTab', profileRoute: 'ProfileHome' },
+    solohost: {
+      root: 'main',
+      soloParams: { captureSharedRole: 'host' },
+      soloRoute: 'SoloLive',
+      tab: 'SoloTab',
+    },
+    soloparticipant: {
+      root: 'main',
+      soloParams: { captureSharedRole: 'participant', sharedSessionId: 'capture-preview' },
+      soloRoute: 'SoloLive',
+      tab: 'SoloTab',
+    },
+  };
+  if (quickTargetParam && quickTargetMap[quickTargetParam]) {
+    return quickTargetMap[quickTargetParam];
+  }
+
   const mappedRoot: CaptureNavigationTarget['root'] =
     rootParam === 'auth' ? 'auth' : rootParam === 'main' ? 'main' : undefined;
+  const mappedExtendedRoot: CaptureNavigationTarget['root'] =
+    rootParam === 'entry' ? 'entry' : rootParam === 'missingenv' ? 'missingEnv' : mappedRoot;
   const mappedTab = tabParam ? tabMap[tabParam] : undefined;
   const mappedSoloRoute = soloRouteParam ? soloRouteMap[soloRouteParam] : undefined;
   const mappedEventsRoute = eventsRouteParam ? eventsRouteMap[eventsRouteParam] : undefined;
@@ -76,8 +127,8 @@ function parseCaptureTargetFromHash(): CaptureNavigationTarget | undefined {
     ? communityRouteMap[communityRouteParam]
     : undefined;
 
-  if (mappedRoot) {
-    target.root = mappedRoot;
+  if (mappedExtendedRoot) {
+    target.root = mappedExtendedRoot;
   }
   if (mappedTab) {
     target.tab = mappedTab;
@@ -95,6 +146,26 @@ function parseCaptureTargetFromHash(): CaptureNavigationTarget | undefined {
     target.communityRoute = mappedCommunityRoute;
   }
 
+  const soloPreviewRoleParam = params.get('figmasolopreview')?.trim().toLowerCase();
+  if (soloPreviewRoleParam === 'participant' || soloPreviewRoleParam === 'host') {
+    const soloParams: NonNullable<CaptureNavigationTarget['soloParams']> = {
+      captureSharedRole: soloPreviewRoleParam,
+    };
+    if (soloPreviewRoleParam === 'participant') {
+      soloParams.sharedSessionId = 'capture-preview';
+    }
+    target.soloParams = soloParams;
+    if (!target.soloRoute) {
+      target.soloRoute = 'SoloLive';
+    }
+    if (!target.tab) {
+      target.tab = 'SoloTab';
+    }
+    if (!target.root) {
+      target.root = 'main';
+    }
+  }
+
   if (Object.keys(target).length === 0) {
     return undefined;
   }
@@ -106,6 +177,10 @@ export default function App() {
   const captureTarget = useMemo(() => parseCaptureTargetFromHash(), []);
 
   useEffect(() => {
+    if (!__DEV__) {
+      return;
+    }
+
     if (typeof window === 'undefined' || typeof document === 'undefined') {
       return;
     }
@@ -113,7 +188,10 @@ export default function App() {
     const locationHash =
       typeof window.location?.hash === 'string' ? window.location.hash : undefined;
 
-    if (!locationHash || !locationHash.includes('figmacapture=')) {
+    if (
+      !locationHash ||
+      (!locationHash.includes('figmacapture=') && !locationHash.includes('figmatarget='))
+    ) {
       return;
     }
 

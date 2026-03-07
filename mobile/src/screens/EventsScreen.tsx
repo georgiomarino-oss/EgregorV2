@@ -6,7 +6,10 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import type { EventsStackParamList } from '../app/navigation/types';
+import { AlertBanner } from '../components/AlertBanner';
+import { GhostButton } from '../components/AppButtons';
 import { Screen } from '../components/Screen';
+import { ToastCard } from '../components/ToastCard';
 import { getDeviceTimeZoneLabel } from '../lib/dateTime';
 import { spacing } from '../theme/tokens';
 import { EmbeddedGlobeCard } from '../features/events/components/EmbeddedGlobeCard';
@@ -152,6 +155,15 @@ export function EventsScreen() {
         upcomingCount={upcomingCount}
       />
 
+      {operationError ? (
+        <AlertBanner
+          action={<GhostButton onPress={() => setOperationError(null)} title="Dismiss" />}
+          message={operationError}
+          title="Event alerts unavailable"
+          tone="warning"
+        />
+      ) : null}
+
       <EmbeddedGlobeCard
         activePresence={activePresence}
         allScheduledEvents={allScheduledEvents}
@@ -193,6 +205,10 @@ export function EventsScreen() {
         subscribedKeys={subscribedKeys}
         updatingSubscriptionKey={updatingSubscriptionKey}
       />
+
+      {updatingSubscriptionKey ? (
+        <ToastCard message="Syncing event alert preferences..." title="Event alerts" />
+      ) : null}
     </Screen>
   );
 }

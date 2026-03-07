@@ -16,6 +16,7 @@ export type SoloStackParamList = {
   SoloLive:
     | {
         allowAudioGeneration?: boolean;
+        captureSharedRole?: 'host' | 'participant';
         durationMinutes?: number;
         intention?: string;
         prayerLibraryItemId?: string;
@@ -64,9 +65,10 @@ export type ProfileStackParamList = {
 
 export interface CaptureNavigationTarget {
   communityRoute?: keyof CommunityStackParamList;
+  eventDetailsParams?: EventsStackParamList['EventDetails'];
   eventRoomParams?: EventsStackParamList['EventRoom'];
   eventsRoute?: keyof EventsStackParamList;
-  root?: 'auth' | 'main';
+  root?: 'auth' | 'entry' | 'main' | 'missingEnv';
   profileRoute?: keyof ProfileStackParamList;
   soloParams?: SoloStackParamList['SoloLive'];
   soloRoute?: keyof SoloStackParamList;

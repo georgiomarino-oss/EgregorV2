@@ -13,7 +13,7 @@ import { figmaV2Reference } from '../theme/figma-v2-reference';
 import { interaction, radii } from '../theme/tokens';
 import { Typography } from './Typography';
 
-type ButtonVariant = 'primary' | 'secondary' | 'gold' | 'sky';
+type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'gold' | 'sky';
 
 interface ButtonProps {
   accessibilityHint?: string;
@@ -41,6 +41,10 @@ const gradientByVariant: Record<
     ],
     locations: [0, 1],
   },
+  ghost: {
+    colors: ['rgba(0,0,0,0)', 'rgba(0,0,0,0)'],
+    locations: [0, 1],
+  },
   gold: {
     colors: [figmaV2Reference.buttons.gold.from, figmaV2Reference.buttons.gold.to],
     locations: [0, 1],
@@ -54,6 +58,7 @@ const gradientByVariant: Record<
 const textColorByVariant: Record<ButtonVariant, string> = {
   primary: figmaV2Reference.buttons.mint.text,
   secondary: figmaV2Reference.buttons.secondary.text,
+  ghost: figmaV2Reference.buttons.secondary.text,
   gold: figmaV2Reference.buttons.gold.text,
   sky: figmaV2Reference.buttons.sky.text,
 };
@@ -104,6 +109,7 @@ export function Button({
             style={[
               styles.gradient,
               variant === 'secondary' && styles.secondaryBorder,
+              variant === 'ghost' && styles.ghostBorder,
               variant === 'gold' && styles.goldBorder,
               variant === 'sky' && styles.skyBorder,
             ]}
@@ -160,6 +166,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     minHeight: interaction.button.minHeight,
     paddingHorizontal: interaction.button.paddingX,
+  },
+  ghostBorder: {
+    backgroundColor: 'rgba(10, 31, 46, 0.34)',
+    borderColor: figmaV2Reference.buttons.secondary.border,
+    borderWidth: 0.7,
   },
   label: {
     letterSpacing: 0.26,

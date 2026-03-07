@@ -286,5 +286,86 @@ export const motion = {
   room: figmaV2Reference.motion.room,
 } as const;
 
+export const signatureMoments = {
+  appEntry: {
+    baseBackground: '#04060C',
+    beamCore: '#E6F6FF',
+    beamGlow: 'rgba(133, 214, 255, 0.34)',
+    beamOuter: 'rgba(133, 214, 255, 0)',
+    portalCore: '#B6EAFF',
+    portalRing: 'rgba(173, 228, 255, 0.62)',
+    invocationGlow: 'rgba(255, 213, 154, 0.22)',
+    panelBackground: 'rgba(9, 29, 45, 0.86)',
+    panelBorder: 'rgba(118, 174, 207, 0.54)',
+    statusText: '#D9EEFB',
+  },
+  collectiveField: {
+    ringStrong: 'rgba(147, 223, 255, 0.62)',
+    ringSoft: 'rgba(147, 223, 255, 0.3)',
+    presenceNode: '#C2EEFF',
+    presenceNodeMuted: 'rgba(194, 238, 255, 0.52)',
+    stageGlow: 'rgba(255, 204, 133, 0.2)',
+    stageScrim: 'rgba(6, 18, 30, 0.52)',
+  },
+  sharedSync: {
+    hostNode: '#F9D39C',
+    participantNode: '#B5DFFF',
+    tetherCore: '#9FD6FF',
+    tetherGlow: 'rgba(159, 214, 255, 0.32)',
+    wave: 'rgba(255, 218, 166, 0.56)',
+    supportText: '#D8EAF8',
+  },
+  fallback: {
+    lowEndStaticOpacity: 0.64,
+    reducedMotionDriftPx: 0,
+  },
+} as const;
+
+export const semanticState = {
+  active: {
+    background: 'rgba(24, 66, 95, 0.84)',
+    border: 'rgba(120, 186, 221, 0.7)',
+    text: colors.textPrimary,
+  },
+  disabled: {
+    background: 'rgba(11, 30, 45, 0.72)',
+    border: 'rgba(93, 132, 160, 0.44)',
+    text: colors.textMuted,
+  },
+  error: {
+    background: feedbackSurface.errorPanelBackground,
+    border: feedbackSurface.errorPanelBorder,
+    text: feedbackSurface.errorTitle,
+  },
+  loading: {
+    background: feedbackSurface.loadingPanelBackground,
+    border: feedbackSurface.loadingPanelBorder,
+    text: feedbackSurface.loadingTitle,
+  },
+  success: {
+    background: 'rgba(64, 215, 184, 0.2)',
+    border: 'rgba(85, 222, 194, 0.62)',
+    text: '#D6FBF2',
+  },
+  warning: {
+    background: feedbackSurface.warningPanelBackground,
+    border: feedbackSurface.warningPanelBorder,
+    text: feedbackSurface.warningTitle,
+  },
+} as const;
+
+export const navigationSurface = {
+  topBar: {
+    background: 'rgba(6, 26, 40, 0.78)',
+    border: 'rgba(104, 153, 184, 0.52)',
+  },
+  tabBar: {
+    backgroundFrom: figmaV2Reference.tabs.containerGradient.colors[0],
+    backgroundTo: figmaV2Reference.tabs.containerGradient.colors[1],
+    border: figmaV2Reference.tabs.containerBorder,
+    glow: 'rgba(121, 201, 238, 0.16)',
+  },
+} as const;
+
 export type CollectiveEnergyLevel = keyof typeof roomAtmosphere.collective.energy;
 export type LiveLogoContext = keyof typeof liveLogoPalette;

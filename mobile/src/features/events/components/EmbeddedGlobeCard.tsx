@@ -462,14 +462,30 @@ export function EmbeddedGlobeCard({
 
   const mapFallbackReason = useMemo(() => {
     if (!clientEnv.mapboxToken) {
-      return 'Missing EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN in mobile/.env.';
+      return 'Live hotspots are available in list mode while globe rendering is unavailable.';
     }
 
     if (!mapboxReady) {
-      return 'Mapbox globe needs a development build because Expo Go does not include @rnmapbox/maps.';
+      return 'Globe view is unavailable on this runtime, but the event feed remains fully active.';
     }
 
     return '';
+  }, [mapboxReady]);
+
+  const mapFallbackDetail = useMemo(() => {
+    if (!__DEV__) {
+      return null;
+    }
+
+    if (!clientEnv.mapboxToken) {
+      return 'Developer note: set EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN to enable map rendering.';
+    }
+
+    if (!mapboxReady) {
+      return 'Developer note: @rnmapbox/maps requires a native development build. Expo Go fallback is active.';
+    }
+
+    return null;
   }, [mapboxReady]);
 
   const markGlobeInteraction = useCallback(() => {
@@ -784,15 +800,73 @@ export function EmbeddedGlobeCard({
           onPress={openGlobeFullscreen}
           style={fallbackWrapStyle}
         >
-          <LottieView autoPlay loop source={globeFallbackAnimation} style={styles.globeAnimation} />
-          <Typography
-            allowFontScaling={false}
-            color={colors.textSecondary}
-            style={styles.mapFallbackText}
-            variant="Caption"
-          >
-            {mapFallbackReason}
-          </Typography>
+          <View style={styles.globeFallbackPanel}>
+            <View style={styles.globeFallbackBadge}>
+              <MaterialCommunityIcons
+                color={eventsSurface.globe.legendText}
+                name="earth"
+                size={14}
+              />
+              <Typography
+                allowFontScaling={false}
+                color={eventsSurface.globe.legendText}
+                style={styles.globeFallbackBadgeText}
+                variant="Caption"
+                weight="bold"
+              >
+                Globe fallback
+              </Typography>
+            </View>
+            <LottieView
+              autoPlay
+              loop
+              source={globeFallbackAnimation}
+              style={styles.globeAnimation}
+            />
+            <Typography
+              allowFontScaling={false}
+              style={styles.globeFallbackTitle}
+              variant="Body"
+              weight="bold"
+            >
+              Global map preview unavailable
+            </Typography>
+            <Typography
+              allowFontScaling={false}
+              color={colors.textSecondary}
+              style={styles.mapFallbackText}
+              variant="Caption"
+            >
+              {mapFallbackReason}
+            </Typography>
+            {mapFallbackDetail ? (
+              <Typography
+                allowFontScaling={false}
+                color={eventsSurface.occurrence.itemMeta}
+                style={styles.globeFallbackDetail}
+                variant="Caption"
+              >
+                {mapFallbackDetail}
+              </Typography>
+            ) : null}
+            {!isFullscreenMode ? (
+              <View style={styles.globeFallbackHintRow}>
+                <MaterialCommunityIcons
+                  color={eventsSurface.occurrence.ctaText}
+                  name="arrow-expand-all"
+                  size={14}
+                />
+                <Typography
+                  allowFontScaling={false}
+                  color={eventsSurface.occurrence.ctaText}
+                  variant="Caption"
+                  weight="bold"
+                >
+                  Open immersive view
+                </Typography>
+              </View>
+            ) : null}
+          </View>
         </Pressable>
       );
     },
@@ -806,6 +880,7 @@ export function EmbeddedGlobeCard({
       handleFullscreenMapPress,
       handleInlineMapPress,
       liveRingGeoJson,
+      mapFallbackDetail,
       mapFallbackReason,
       mapboxReady,
       markGlobeInteraction,
@@ -1501,17 +1576,62 @@ const styles = StyleSheet.create({
   },
   globeFallbackWrap: {
     alignItems: 'center',
-    gap: spacing.xs,
     justifyContent: 'center',
     width: '100%',
   },
   globeFallbackWrapFullscreen: {
     alignItems: 'center',
     flex: 1,
-    gap: spacing.sm,
     justifyContent: 'center',
     paddingHorizontal: spacing.lg,
     width: '100%',
+  },
+  globeFallbackBadge: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: eventsSurface.globe.legendBackground,
+    borderColor: eventsSurface.globe.legendBorder,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: spacing.xxs,
+    paddingHorizontal: spacing.xs,
+    paddingVertical: 3,
+  },
+  globeFallbackBadgeText: {
+    textTransform: 'none',
+  },
+  globeFallbackDetail: {
+    maxWidth: 300,
+    textAlign: 'center',
+  },
+  globeFallbackHintRow: {
+    alignItems: 'center',
+    backgroundColor: eventsSurface.occurrence.ctaBackground,
+    borderColor: eventsSurface.occurrence.ctaBorder,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: spacing.xxs,
+    paddingHorizontal: spacing.xs,
+    paddingVertical: 4,
+  },
+  globeFallbackPanel: {
+    alignItems: 'center',
+    backgroundColor: eventsSurface.globe.cardBackground,
+    borderColor: eventsSurface.globe.cardBorder,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    gap: spacing.xs,
+    maxWidth: 340,
+    minHeight: 260,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm,
+    width: '100%',
+  },
+  globeFallbackTitle: {
+    color: eventsSurface.occurrence.itemTitle,
+    textAlign: 'center',
   },
   globeMap: {
     backgroundColor: 'transparent',

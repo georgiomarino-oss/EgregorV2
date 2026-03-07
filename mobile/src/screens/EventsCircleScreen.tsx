@@ -7,16 +7,19 @@ import {
   Easing,
   Linking,
   StyleSheet,
-  TextInput,
   View,
 } from 'react-native';
 
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
-import { Button } from '../components/Button';
+import { Badge } from '../components/Badge';
+import { PrimaryButton, SecondaryButton } from '../components/AppButtons';
 import { LoadingStateCard } from '../components/LoadingStateCard';
 import { RetryPanel } from '../components/RetryPanel';
 import { Screen } from '../components/Screen';
+import { SegmentedTabs } from '../components/SegmentedTabs';
+import { TextField } from '../components/TextField';
+import { ToastCard } from '../components/ToastCard';
 import { Typography } from '../components/Typography';
 import { CircleEmptyState } from '../features/circles/components/CircleEmptyState';
 import { CircleHero } from '../features/circles/components/CircleHero';
@@ -54,6 +57,8 @@ export function EventsCircleScreen() {
   const [refreshingMembers, setRefreshingMembers] = useState(false);
   const [searchingUsers, setSearchingUsers] = useState(false);
   const [updatingMemberId, setUpdatingMemberId] = useState<string | null>(null);
+  const [manageTab, setManageTab] = useState<'invite' | 'search'>('search');
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -145,11 +150,28 @@ export function EventsCircleScreen() {
     };
   }, [query]);
 
+  useEffect(() => {
+    if (!toastMessage) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      setToastMessage(null);
+    }, 2600);
+
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [toastMessage]);
+
   const memberIds = useMemo(() => new Set(members.map((member) => member.userId)), [members]);
   const visibleSuggestions = useMemo(
     () => suggestions.filter((suggestion) => !memberIds.has(suggestion.userId)),
     [memberIds, suggestions],
   );
+  const suggestionsBadgeLabel = searchingUsers
+    ? 'Searching'
+    : `${Math.min(visibleSuggestions.length, 6)} matches`;
 
   const onAddMember = async (userId: string) => {
     setUpdatingMemberId(userId);
@@ -157,6 +179,7 @@ export function EventsCircleScreen() {
       await addEventsCircleMember(userId);
       await loadMembers(true);
       setError(null);
+      setToastMessage('Member added to your events circle.');
     } catch (nextError) {
       setError(
         nextError instanceof Error ? nextError.message : 'Could not add user to events circle.',
@@ -182,6 +205,7 @@ export function EventsCircleScreen() {
                 await removeEventsCircleMember(member.userId);
                 await loadMembers(true);
                 setError(null);
+                setToastMessage(`${member.displayName} removed from your events circle.`);
               } catch (nextError) {
                 setError(nextError instanceof Error ? nextError.message : 'Could not remove user.');
               } finally {
@@ -200,12 +224,14 @@ export function EventsCircleScreen() {
     const webUrl = `https://wa.me/?text=${text}`;
     const canOpenApp = await Linking.canOpenURL(appUrl);
     await Linking.openURL(canOpenApp ? appUrl : webUrl);
+    setToastMessage('Invite opened in WhatsApp.');
   };
 
   const onInviteEmail = async () => {
     const subject = encodeURIComponent('Join my Events Circle on Egregor');
     const body = encodeURIComponent(makeInviteMessage());
     await Linking.openURL(`mailto:?subject=${subject}&body=${body}`);
+    setToastMessage('Invite draft opened in email.');
   };
 
   return (
@@ -218,145 +244,180 @@ export function EventsCircleScreen() {
       />
 
       <Animated.View style={getSectionStyle(0)}>
-        <View
-          style={[
-            styles.sectionCard,
-            {
-              backgroundColor: palette.search.panelBackground,
-              borderColor: palette.search.panelBorder,
-            },
+        <SegmentedTabs
+          activeKey={manageTab}
+          onChange={(nextKey) => {
+            setManageTab(nextKey === 'invite' ? 'invite' : 'search');
+          }}
+          options={[
+            { key: 'search', label: 'Add In App' },
+            { key: 'invite', label: 'Invite Externally' },
           ]}
-        >
-          <View style={styles.sectionTitleRow}>
-            <View
-              style={[
-                styles.sectionIcon,
-                {
-                  backgroundColor: palette.member.avatarBackground,
-                  borderColor: palette.member.avatarBorder,
-                },
-              ]}
-            >
-              <MaterialCommunityIcons
-                color={palette.member.avatarText}
-                name="account-plus"
-                size={16}
-              />
-            </View>
-            <View style={styles.sectionTitleWrap}>
-              <Typography
-                allowFontScaling={false}
-                color={palette.search.rowName}
-                variant="Body"
-                weight="bold"
-              >
-                Add members in app
-              </Typography>
-              <Typography
-                allowFontScaling={false}
-                color={palette.search.helperText}
-                variant="Caption"
-              >
-                Search by display name and add people directly to your events circle.
-              </Typography>
-            </View>
-          </View>
-
-          <View
-            style={[
-              styles.searchWrap,
-              {
-                backgroundColor: palette.search.inputBackground,
-                borderColor: palette.search.inputBorder,
-              },
-            ]}
-          >
-            <MaterialCommunityIcons color={palette.search.helperText} name="magnify" size={18} />
-            <TextInput
-              accessibilityHint="Searches by display name."
-              accessibilityLabel="Search users to add to your events circle"
-              onChangeText={setQuery}
-              placeholder="Search users by display name"
-              placeholderTextColor={palette.search.placeholder}
-              style={[styles.searchInput, { color: palette.search.inputText }]}
-              value={query}
-            />
-          </View>
-
-          {searchingUsers ? <ActivityIndicator color={colors.accentMintStart} /> : null}
-
-          {visibleSuggestions.slice(0, 6).map((user) => (
-            <View
-              key={user.userId}
-              style={[
-                styles.suggestionRow,
-                {
-                  backgroundColor: palette.search.rowBackground,
-                  borderColor: palette.search.rowBorder,
-                },
-              ]}
-            >
-              <View style={styles.suggestionTextWrap}>
-                <Typography
-                  allowFontScaling={false}
-                  color={palette.search.rowName}
-                  numberOfLines={1}
-                  variant="Body"
-                  weight="bold"
-                >
-                  {user.displayName}
-                </Typography>
-                <Typography
-                  allowFontScaling={false}
-                  color={palette.search.rowMeta}
-                  variant="Caption"
-                >
-                  Add to your live-room allies
-                </Typography>
-              </View>
-              <Button
-                loading={updatingMemberId === user.userId}
-                onPress={() => void onAddMember(user.userId)}
-                title="Add"
-                variant="sky"
-              />
-            </View>
-          ))}
-
-          {query.trim().length > 0 && !searchingUsers && visibleSuggestions.length === 0 ? (
-            <CircleEmptyState
-              body="Try another name or invite people externally to build your events circle."
-              iconName="account-search"
-              title="No matching users found"
-              variant="events"
-            />
-          ) : null}
-        </View>
+          style={styles.segmentedTabs}
+        />
       </Animated.View>
 
       <Animated.View style={getSectionStyle(1)}>
-        <CircleInvitePanel
-          iconName="account-multiple-plus"
-          subtitle="Invite people outside the app so your next live event room starts with trusted presence."
-          title="Invite externally"
-          variant="events"
+        <View
+          style={[
+            styles.collectiveCard,
+            {
+              backgroundColor: palette.hero.statBackground,
+              borderColor: palette.hero.statBorder,
+            },
+          ]}
         >
-          <View style={styles.inviteRow}>
-            <Button
-              onPress={() => void onInviteWhatsApp()}
-              title="Invite via WhatsApp"
-              variant="primary"
-            />
-            <Button
-              onPress={() => void onInviteEmail()}
-              title="Invite via Email"
-              variant="secondary"
-            />
+          <View style={styles.collectiveTitleRow}>
+            <MaterialCommunityIcons color={palette.hero.badgeText} name="earth" size={16} />
+            <Typography
+              allowFontScaling={false}
+              color={palette.hero.badgeText}
+              variant="Caption"
+              weight="bold"
+            >
+              Collective readiness
+            </Typography>
           </View>
-        </CircleInvitePanel>
+          <Typography
+            allowFontScaling={false}
+            color={palette.hero.statValue}
+            variant="Body"
+            weight="bold"
+          >
+            Build your outward event ally network.
+          </Typography>
+          <Typography allowFontScaling={false} color={palette.hero.statLabel} variant="Caption">
+            Events Circle emphasizes shared entry into live rooms, global momentum, and coordinated
+            participation.
+          </Typography>
+        </View>
       </Animated.View>
 
-      <Animated.View style={getSectionStyle(2)}>
+      {manageTab === 'search' ? (
+        <Animated.View style={getSectionStyle(2)}>
+          <View
+            style={[
+              styles.sectionCard,
+              {
+                backgroundColor: palette.search.panelBackground,
+                borderColor: palette.search.panelBorder,
+              },
+            ]}
+          >
+            <View style={styles.sectionTitleRow}>
+              <View
+                style={[
+                  styles.sectionIcon,
+                  {
+                    backgroundColor: palette.member.avatarBackground,
+                    borderColor: palette.member.avatarBorder,
+                  },
+                ]}
+              >
+                <MaterialCommunityIcons
+                  color={palette.member.avatarText}
+                  name="account-plus"
+                  size={16}
+                />
+              </View>
+              <View style={styles.sectionTitleWrap}>
+                <Typography
+                  allowFontScaling={false}
+                  color={palette.search.rowName}
+                  variant="Body"
+                  weight="bold"
+                >
+                  Add members in app
+                </Typography>
+                <Typography
+                  allowFontScaling={false}
+                  color={palette.search.helperText}
+                  variant="Caption"
+                >
+                  Search by display name and add people directly to your events circle.
+                </Typography>
+              </View>
+              <Badge label={suggestionsBadgeLabel} tone={searchingUsers ? 'loading' : 'active'} />
+            </View>
+
+            <TextField
+              accessibilityHint="Searches by display name."
+              accessibilityLabel="Search users to add to your events circle"
+              autoCapitalize="none"
+              autoCorrect={false}
+              helperText={searchingUsers ? 'Searching users...' : 'Search by display name'}
+              label="Member search"
+              onChangeText={setQuery}
+              placeholder="Search users by display name"
+              value={query}
+            />
+
+            {searchingUsers ? <ActivityIndicator color={colors.accentMintStart} /> : null}
+
+            {visibleSuggestions.slice(0, 6).map((user) => (
+              <View
+                key={user.userId}
+                style={[
+                  styles.suggestionRow,
+                  {
+                    backgroundColor: palette.search.rowBackground,
+                    borderColor: palette.search.rowBorder,
+                  },
+                ]}
+              >
+                <View style={styles.suggestionTextWrap}>
+                  <Typography
+                    allowFontScaling={false}
+                    color={palette.search.rowName}
+                    numberOfLines={1}
+                    variant="Body"
+                    weight="bold"
+                  >
+                    {user.displayName}
+                  </Typography>
+                  <Typography
+                    allowFontScaling={false}
+                    color={palette.search.rowMeta}
+                    variant="Caption"
+                  >
+                    Add to your live-room allies
+                  </Typography>
+                </View>
+                <PrimaryButton
+                  loading={updatingMemberId === user.userId}
+                  onPress={() => void onAddMember(user.userId)}
+                  title="Add"
+                />
+              </View>
+            ))}
+
+            {query.trim().length > 0 && !searchingUsers && visibleSuggestions.length === 0 ? (
+              <CircleEmptyState
+                body="Try another name or invite people externally to build your events circle."
+                iconName="account-search"
+                title="No matching users found"
+                variant="events"
+              />
+            ) : null}
+          </View>
+        </Animated.View>
+      ) : (
+        <Animated.View style={getSectionStyle(2)}>
+          <CircleInvitePanel
+            iconName="account-multiple-plus"
+            subtitle="Invite people outside the app so your next live event room starts with trusted presence."
+            title="Invite externally"
+            variant="events"
+          >
+            <View style={styles.inviteRow}>
+              <PrimaryButton onPress={() => void onInviteWhatsApp()} title="Invite via WhatsApp" />
+              <SecondaryButton onPress={() => void onInviteEmail()} title="Invite via Email" />
+            </View>
+          </CircleInvitePanel>
+        </Animated.View>
+      )}
+
+      <Animated.View style={getSectionStyle(3)}>
         <View
           style={[
             styles.sectionCard,
@@ -427,17 +488,16 @@ export function EventsCircleScreen() {
               ))
             : null}
 
-          <Button
+          <SecondaryButton
             loading={refreshingMembers}
             onPress={() => void loadMembers(true)}
             title="Refresh members"
-            variant="secondary"
           />
         </View>
       </Animated.View>
 
       {error ? (
-        <Animated.View style={getSectionStyle(3)}>
+        <Animated.View style={getSectionStyle(4)}>
           <RetryPanel
             loading={refreshingMembers}
             message={error}
@@ -448,6 +508,12 @@ export function EventsCircleScreen() {
             style={styles.errorCard}
             title="Could not load events circle"
           />
+        </Animated.View>
+      ) : null}
+
+      {toastMessage ? (
+        <Animated.View style={getSectionStyle(5)}>
+          <ToastCard message={toastMessage} title="Events circle updated" />
         </Animated.View>
       ) : null}
     </Screen>
@@ -484,18 +550,20 @@ const styles = StyleSheet.create({
   noMotion: {
     opacity: 1,
   },
-  searchInput: {
-    flex: 1,
-    paddingVertical: 0,
-  },
-  searchWrap: {
-    alignItems: 'center',
-    borderRadius: radii.md,
+  collectiveCard: {
+    borderRadius: radii.lg,
     borderWidth: 1,
-    flexDirection: 'row',
-    gap: spacing.xs,
-    minHeight: 46,
+    gap: spacing.xxs,
     paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm,
+  },
+  collectiveTitleRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: spacing.xxs,
+  },
+  segmentedTabs: {
+    width: '100%',
   },
   sectionCard: {
     borderRadius: radii.xl,

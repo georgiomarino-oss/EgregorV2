@@ -1,16 +1,17 @@
 import ambientAnimation from '../../assets/lottie/cosmic-ambient.json';
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, StyleSheet, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, StyleSheet, View } from 'react-native';
 
-import { Button } from '../components/Button';
+import { PrimaryButton, SecondaryButton } from '../components/AppButtons';
+import { Badge } from '../components/Badge';
 import { LiveLogo } from '../components/LiveLogo';
 import { Screen } from '../components/Screen';
 import { SurfaceCard } from '../components/SurfaceCard';
+import { TextField } from '../components/TextField';
 import { Typography } from '../components/Typography';
 import { supabase } from '../lib/supabase';
-import { figmaV2Reference } from '../theme/figma-v2-reference';
 import { sectionGap } from '../theme/layout';
-import { colors, radii, spacing, typography } from '../theme/tokens';
+import { colors, spacing } from '../theme/tokens';
 
 type AuthMode = 'signIn' | 'signUp';
 
@@ -88,34 +89,33 @@ export function AuthScreen() {
           <Typography variant="H1" weight="bold">
             Enter the collective field
           </Typography>
+          <Badge label={isSignIn ? 'Returning member' : 'New account'} tone="active" />
           <Typography color={colors.textSecondary} style={styles.subtitle} variant="Body">
-            Sign in to join live healing rooms and personalized solo rituals.
+            {isSignIn
+              ? 'Sign in to continue your live healing rooms and solo rituals.'
+              : 'Create your account to begin solo rituals and shared collective sessions.'}
           </Typography>
         </View>
 
         <SurfaceCard radius="xl" style={styles.card} variant="authForm">
           <View style={styles.form}>
-            <Typography variant="Label">Email</Typography>
-            <TextInput
+            <TextField
               autoCapitalize="none"
               autoComplete="email"
               keyboardType="email-address"
+              label="Email"
               onChangeText={setEmail}
               placeholder="you@example.com"
-              placeholderTextColor={colors.textSecondary}
-              style={styles.input}
               value={email}
             />
 
-            <Typography variant="Label">Password</Typography>
-            <TextInput
+            <TextField
               autoCapitalize="none"
               autoComplete="password"
+              label="Password"
               onChangeText={setPassword}
               placeholder="********"
-              placeholderTextColor={colors.textSecondary}
               secureTextEntry
-              style={styles.input}
               value={password}
             />
           </View>
@@ -127,11 +127,14 @@ export function AuthScreen() {
           ) : null}
 
           <View style={styles.actions}>
-            <Button loading={loading} onPress={onSubmit} title={isSignIn ? 'Sign in' : 'Sign up'} />
-            <Button
+            <PrimaryButton
+              loading={loading}
+              onPress={onSubmit}
+              title={isSignIn ? 'Sign in' : 'Sign up'}
+            />
+            <SecondaryButton
               onPress={() => setMode(isSignIn ? 'signUp' : 'signIn')}
               title={isSignIn ? 'Create account' : 'Back to sign in'}
-              variant="secondary"
             />
           </View>
         </SurfaceCard>
@@ -155,17 +158,6 @@ const styles = StyleSheet.create({
   header: {
     gap: spacing.sm,
     marginBottom: sectionGap,
-  },
-  input: {
-    backgroundColor: figmaV2Reference.inputs.auth.background,
-    borderColor: figmaV2Reference.inputs.auth.border,
-    borderRadius: radii.sm,
-    borderWidth: 1,
-    color: figmaV2Reference.inputs.auth.text,
-    fontFamily: typography.family.regular,
-    fontSize: typography.size.body,
-    minHeight: 42,
-    paddingHorizontal: spacing.md,
   },
   keyboardAvoiding: {
     flex: 1,

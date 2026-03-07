@@ -5,7 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 
 import { LiveLogo } from '../../../components/LiveLogo';
 import { Typography } from '../../../components/Typography';
-import { communitySurface, motion, radii, spacing } from '../../../theme/tokens';
+import { communitySurface, motion, radii, signatureMoments, spacing } from '../../../theme/tokens';
 import { useReducedMotion } from '../../rooms/hooks/useReducedMotion';
 
 interface GlobalPulseHeroProps {
@@ -63,6 +63,8 @@ export function GlobalPulseHero({ liveEvents, strongestLiveEventTitle }: GlobalP
           start={{ x: 0, y: 0 }}
           style={StyleSheet.absoluteFill}
         />
+        <View pointerEvents="none" style={styles.collectiveBeam} />
+        <View pointerEvents="none" style={styles.collectiveRing} />
         <View pointerEvents="none" style={styles.heroGlow} />
 
         <View style={styles.topRow}>
@@ -125,6 +127,26 @@ export function GlobalPulseHero({ liveEvents, strongestLiveEventTitle }: GlobalP
 const styles = StyleSheet.create({
   badgeText: {
     textTransform: 'none',
+  },
+  collectiveBeam: {
+    backgroundColor: signatureMoments.collectiveField.stageGlow,
+    borderRadius: 220,
+    height: 188,
+    left: 64,
+    position: 'absolute',
+    top: -128,
+    transform: [{ rotate: '8deg' }],
+    width: 188,
+  },
+  collectiveRing: {
+    borderColor: signatureMoments.collectiveField.ringSoft,
+    borderRadius: 68,
+    borderWidth: 1,
+    height: 136,
+    position: 'absolute',
+    right: -28,
+    top: 14,
+    width: 136,
   },
   heroGlow: {
     ...StyleSheet.absoluteFillObject,

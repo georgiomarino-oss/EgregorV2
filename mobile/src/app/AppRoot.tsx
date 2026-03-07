@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { Sora_400Regular, Sora_500Medium, Sora_700Bold } from '@expo-google-fonts/sora';
 import { DarkTheme, NavigationContainer, type LinkingOptions } from '@react-navigation/native';
@@ -7,7 +7,7 @@ import { useFonts } from 'expo-font';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
-import { Typography } from '../components/Typography';
+import { AppEntryMoment } from '../components/AppEntryMoment';
 import { envValidation } from '../lib/env';
 import { colors } from '../theme/tokens';
 import { MissingEnvScreen } from '../screens/MissingEnvScreen';
@@ -82,6 +82,13 @@ const linking: LinkingOptions<RootStackParamList> = {
               SoloLive: {
                 parse: {
                   allowAudioGeneration: (value: string) => value === 'true',
+                  captureSharedRole: (value: string) => {
+                    if (!__DEV__) {
+                      return undefined;
+                    }
+
+                    return value === 'host' || value === 'participant' ? value : undefined;
+                  },
                   durationMinutes: (value: string) => {
                     const parsed = Number(value);
                     return Number.isFinite(parsed) ? parsed : undefined;
@@ -121,6 +128,7 @@ interface AppRootProps {
 
 export function AppRoot({ captureTarget }: AppRootProps) {
   const [continueWithoutOptionalEnv, setContinueWithoutOptionalEnv] = useState(false);
+  const runtimeCaptureTarget = __DEV__ ? captureTarget : undefined;
   const [fontsLoaded] = useFonts({
     Sora_400Regular,
     Sora_500Medium,
@@ -131,9 +139,39 @@ export function AppRoot({ captureTarget }: AppRootProps) {
     return (
       <View style={styles.loadingContainer}>
         <StatusBar style="light" />
-        <ActivityIndicator color={colors.accentMintStart} size="large" />
-        <Typography color={colors.textSecondary}>Loading cosmic UI...</Typography>
+        <AppEntryMoment
+          status="Aligning sacred surfaces..."
+          subtitle="Gathering your sanctuary before entry."
+          title="Egregor"
+        />
       </View>
+    );
+  }
+
+  if (runtimeCaptureTarget?.root === 'entry') {
+    return (
+      <SafeAreaProvider>
+        <StatusBar style="light" />
+        <View style={styles.loadingContainer}>
+          <AppEntryMoment
+            status="Ceremonial invocation and route alignment"
+            subtitle="Entering the field."
+            title="Egregor"
+          />
+        </View>
+      </SafeAreaProvider>
+    );
+  }
+
+  if (runtimeCaptureTarget?.root === 'missingEnv') {
+    return (
+      <SafeAreaProvider>
+        <StatusBar style="light" />
+        <MissingEnvScreen
+          missingOptional={['EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN']}
+          missingRequired={['EXPO_PUBLIC_SUPABASE_URL']}
+        />
+      </SafeAreaProvider>
     );
   }
 
@@ -157,7 +195,7 @@ export function AppRoot({ captureTarget }: AppRootProps) {
     <SafeAreaProvider>
       <NavigationContainer linking={linking} theme={navigationTheme}>
         <StatusBar style="light" />
-        <AuthGate {...(captureTarget ? { captureTarget } : {})} />
+        <AuthGate {...(runtimeCaptureTarget ? { captureTarget: runtimeCaptureTarget } : {})} />
       </NavigationContainer>
     </SafeAreaProvider>
   );
