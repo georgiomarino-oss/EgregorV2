@@ -1,0 +1,4 @@
+servicePrefix=False
+secretPrefix=False
+anonPrefix=True
+projectRef=True

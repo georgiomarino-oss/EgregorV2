@@ -1,0 +1,62 @@
+{
+  "runId": "rc2-1772901385014",
+  "startedAt": "2026-03-07T16:36:25.015Z",
+  "users": {
+    "host": {
+      "email": "host.rc2-1772901385014@example.test",
+      "userId": "de7febf1-8aef-46fa-99e7-c66a67d7907f"
+    },
+    "participant": {
+      "email": "participant.rc2-1772901385014@example.test",
+      "userId": "43309ac5-ca34-48d0-8d45-e877757f74db"
+    },
+    "outsider": {
+      "email": "outsider.rc2-1772901385014@example.test",
+      "userId": "272f2dfd-533a-4611-919e-e052160a7c2b"
+    }
+  },
+  "checks": {
+    "host_start": {
+      "pass": true,
+      "detail": "Host created session and joined as host."
+    },
+    "participant_join": {
+      "pass": true,
+      "detail": "Participant join succeeded under RLS."
+    },
+    "sync": {
+      "pass": true,
+      "detail": "Participant observed host playback state update."
+    },
+    "background_resume": {
+      "pass": true,
+      "detail": "Participant presence recovered after background/resume simulation."
+    },
+    "host_end_cleanup": {
+      "pass": true,
+      "detail": "Host ended session and participant rows were deactivated."
+    },
+    "unauthorized_rejoin_after_end": {
+      "pass": true,
+      "detail": "new row violates row-level security policy for table \"shared_solo_session_participants\""
+    },
+    "authenticated_non_member_denial": {
+      "pass": true,
+      "detail": "new row violates row-level security policy for table \"shared_solo_session_participants\""
+    },
+    "post_end_read_scope": {
+      "pass": true,
+      "detail": "Participant no longer has shared session visibility after host cleanup."
+    }
+  },
+  "artifacts": {
+    "circleId": "db38bd0d-99ee-4773-b282-a35bad4ae4d6",
+    "sessionId": "72c7b4c4-c051-4f15-9b99-e89677b61bd0"
+  },
+  "summary": {
+    "allChecksPass": true,
+    "totalChecks": 8,
+    "passedChecks": 8
+  },
+  "finishedAt": "2026-03-07T16:36:27.787Z"
+}
