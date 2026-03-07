@@ -772,6 +772,51 @@ function isMissingTableMessage(message: string, tableName: string) {
   );
 }
 
+function logReleaseSafeError(context: string, safeMessage: string, rawMessage: string) {
+  if (!__DEV__) {
+    return;
+  }
+
+  if (safeMessage === rawMessage) {
+    return;
+  }
+
+  console.warn(`[Egregor][${context}]`, safeMessage, rawMessage);
+}
+
+function toSharedSoloReleaseSafeMessage(error: unknown, fallback: string, context: string) {
+  const rawMessage = toSupabaseErrorMessage(error, fallback);
+  const normalized = rawMessage.toLowerCase();
+
+  let safeMessage = fallback;
+
+  if (
+    isMissingTableMessage(rawMessage, 'shared_solo_session_participants') ||
+    isMissingTableMessage(rawMessage, 'shared_solo_sessions')
+  ) {
+    safeMessage = 'Shared sessions are temporarily unavailable. Please try again shortly.';
+  } else if (
+    normalized.includes('permission') ||
+    normalized.includes('forbidden') ||
+    normalized.includes('not allowed')
+  ) {
+    safeMessage = 'You do not have access to this shared session.';
+  } else if (
+    normalized.includes('invalid') &&
+    (normalized.includes('session') || normalized.includes('shared'))
+  ) {
+    safeMessage = 'This shared session link is invalid.';
+  } else if (
+    normalized.includes('not found') &&
+    (normalized.includes('session') || normalized.includes('shared'))
+  ) {
+    safeMessage = 'This shared session is no longer available.';
+  }
+
+  logReleaseSafeError(context, safeMessage, rawMessage);
+  return safeMessage;
+}
+
 function mapEventRow(row: EventRow, participants: number): AppEvent {
   return {
     countryCode: row.country_code,
@@ -2454,7 +2499,13 @@ export async function createSharedSoloSession(input: {
     .single();
 
   if (error) {
-    throw new Error(toSupabaseErrorMessage(error, 'Failed to create shared solo session.'));
+    throw new Error(
+      toSharedSoloReleaseSafeMessage(
+        error,
+        'Unable to start a shared session right now.',
+        'createSharedSoloSession',
+      ),
+    );
   }
 
   const row = data as SharedSoloSessionRow;
@@ -2477,9 +2528,10 @@ export async function createSharedSoloSession(input: {
 
   if (participantError) {
     throw new Error(
-      toSupabaseErrorMessage(
+      toSharedSoloReleaseSafeMessage(
         participantError,
-        'Failed to initialize shared solo session participants.',
+        'Unable to initialize shared session participants.',
+        'createSharedSoloSession.participants',
       ),
     );
   }
@@ -2525,7 +2577,11 @@ export async function findReusableSharedSoloSession(input: {
   const { data, error } = await query.maybeSingle();
   if (error) {
     throw new Error(
-      toSupabaseErrorMessage(error, 'Failed to check existing shared solo sessions.'),
+      toSharedSoloReleaseSafeMessage(
+        error,
+        'Unable to check existing shared sessions right now.',
+        'findReusableSharedSoloSession',
+      ),
     );
   }
 
@@ -2562,7 +2618,11 @@ export async function fetchSharedSoloSessionSnapshot(
 
   if (sessionResponse.error) {
     throw new Error(
-      toSupabaseErrorMessage(sessionResponse.error, 'Failed to load shared solo session.'),
+      toSharedSoloReleaseSafeMessage(
+        sessionResponse.error,
+        'Unable to load this shared session.',
+        'fetchSharedSoloSessionSnapshot.session',
+      ),
     );
   }
 
@@ -2572,9 +2632,10 @@ export async function fetchSharedSoloSessionSnapshot(
 
   if (participantsResponse.error) {
     throw new Error(
-      toSupabaseErrorMessage(
+      toSharedSoloReleaseSafeMessage(
         participantsResponse.error,
-        'Failed to load shared solo session participants.',
+        'Unable to load shared session participants.',
+        'fetchSharedSoloSessionSnapshot.participants',
       ),
     );
   }
@@ -2619,7 +2680,13 @@ export async function joinSharedSoloSession(input: { sessionId: string; userId: 
   );
 
   if (error) {
-    throw new Error(toSupabaseErrorMessage(error, 'Failed to join shared solo session.'));
+    throw new Error(
+      toSharedSoloReleaseSafeMessage(
+        error,
+        'Unable to join the shared session right now.',
+        'joinSharedSoloSession',
+      ),
+    );
   }
 }
 
@@ -2640,7 +2707,13 @@ export async function leaveSharedSoloSession(sessionId: string, userId: string) 
     .eq('user_id', normalizedUserId);
 
   if (error) {
-    throw new Error(toSupabaseErrorMessage(error, 'Failed to leave shared solo session.'));
+    throw new Error(
+      toSharedSoloReleaseSafeMessage(
+        error,
+        'Unable to leave the shared session right now.',
+        'leaveSharedSoloSession',
+      ),
+    );
   }
 }
 
@@ -2662,7 +2735,13 @@ export async function refreshSharedSoloSessionPresence(sessionId: string, userId
     .eq('is_active', true);
 
   if (error) {
-    throw new Error(toSupabaseErrorMessage(error, 'Failed to refresh shared session presence.'));
+    throw new Error(
+      toSharedSoloReleaseSafeMessage(
+        error,
+        'Unable to refresh shared session presence.',
+        'refreshSharedSoloSessionPresence',
+      ),
+    );
   }
 }
 
@@ -2709,7 +2788,13 @@ export async function updateSharedSoloSessionHostState(input: {
     .eq('host_user_id', normalizedHostUserId);
 
   if (error) {
-    throw new Error(toSupabaseErrorMessage(error, 'Failed to sync shared solo session state.'));
+    throw new Error(
+      toSharedSoloReleaseSafeMessage(
+        error,
+        'Unable to sync shared session state right now.',
+        'updateSharedSoloSessionHostState',
+      ),
+    );
   }
 }
 
@@ -2741,7 +2826,11 @@ export async function endSharedSoloSession(sessionId: string, hostUserId: string
 
   if (error) {
     throw new Error(
-      toSupabaseErrorMessage(error, 'Failed to clean up shared solo session participants.'),
+      toSharedSoloReleaseSafeMessage(
+        error,
+        'Unable to finalize shared session cleanup.',
+        'endSharedSoloSession',
+      ),
     );
   }
 }

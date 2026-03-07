@@ -122,6 +122,39 @@ function toContextLabel(statusTone: EventDetailsStatusTone) {
   return 'Scheduled collective room';
 }
 
+function toEventDetailsSafeErrorMessage(error: unknown, fallback: string) {
+  const rawMessage =
+    error instanceof Error ? error.message : typeof error === 'string' ? error : fallback;
+  const normalized = rawMessage.toLowerCase();
+
+  let safeMessage = fallback;
+
+  if (
+    normalized.includes('schema cache') ||
+    normalized.includes('relation') ||
+    normalized.includes('does not exist')
+  ) {
+    safeMessage = 'Event details are temporarily unavailable. Please try again shortly.';
+  } else if (
+    normalized.includes('permission') ||
+    normalized.includes('forbidden') ||
+    normalized.includes('not allowed')
+  ) {
+    safeMessage = 'You do not have access to this event.';
+  } else if (
+    normalized.includes('not found') &&
+    (normalized.includes('event') || normalized.includes('template'))
+  ) {
+    safeMessage = 'This event is no longer available.';
+  }
+
+  if (__DEV__ && safeMessage !== rawMessage) {
+    console.warn('[Egregor][EventDetails]', safeMessage, rawMessage);
+  }
+
+  return safeMessage;
+}
+
 export function EventDetailsScreen() {
   const navigation = useNavigation<EventsNavigation>();
   const route = useRoute<EventDetailsRoute>();
@@ -141,6 +174,7 @@ export function EventDetailsScreen() {
   const [loading, setLoading] = useState(!(initialEventTemplate || initialEvent));
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const isCapturePreview = __DEV__ && route.params?.eventId?.trim() === '__capture__';
 
   const palette = handoffSurface.eventDetails;
 
@@ -191,6 +225,30 @@ export function EventDetailsScreen() {
     }
 
     try {
+      if (isCapturePreview) {
+        const startsAt = new Date(Date.now() + 14 * 60 * 1000).toISOString();
+        setEvent({
+          countryCode: 'GB',
+          description:
+            'A guided collective room for coherent intention, healing focus, and calm global presence.',
+          durationMinutes: 12,
+          hostNote:
+            'Breathe into shared stillness, hold one clear intention, and let the field settle together.',
+          id: '__capture__',
+          participants: 142,
+          region: 'Europe',
+          startsAt,
+          status: 'scheduled',
+          subtitle: 'Collective resonance session',
+          title: 'Global Harmonic Prayer',
+          visibility: 'public',
+        });
+        setEventTemplate(null);
+        hasInitialDetailsRef.current = true;
+        setError(null);
+        return;
+      }
+
       const eventTemplateId = route.params?.eventTemplateId;
       if (eventTemplateId) {
         const selectedTemplate = await fetchEventLibraryItemById(eventTemplateId);
@@ -224,11 +282,18 @@ export function EventDetailsScreen() {
       hasInitialDetailsRef.current = true;
       setError(null);
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : 'Failed to load event details.');
+      setError(
+        toEventDetailsSafeErrorMessage(nextError, 'Unable to load event details right now.'),
+      );
     } finally {
       setLoading(false);
     }
-  }, [route.params?.eventId, route.params?.eventTemplateId, hasInitialDetailsRef]);
+  }, [
+    hasInitialDetailsRef,
+    isCapturePreview,
+    route.params?.eventId,
+    route.params?.eventTemplateId,
+  ]);
 
   const refreshEvent = useCallback(async () => {
     setRefreshing(true);
@@ -244,6 +309,10 @@ export function EventDetailsScreen() {
   }, [loadEvent]);
 
   useEffect(() => {
+    if (isCapturePreview) {
+      return;
+    }
+
     const interval = setInterval(() => {
       void loadEvent();
     }, 15000);
@@ -251,9 +320,13 @@ export function EventDetailsScreen() {
     return () => {
       clearInterval(interval);
     };
-  }, [loadEvent]);
+  }, [isCapturePreview, loadEvent]);
 
   useEffect(() => {
+    if (isCapturePreview) {
+      return;
+    }
+
     const channel = supabase
       .channel('event-details-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'events' }, () => {
@@ -267,7 +340,7 @@ export function EventDetailsScreen() {
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [loadEvent]);
+  }, [isCapturePreview, loadEvent]);
 
   const eventStatusTone = event ? toStatusTone(event) : null;
   const eventMetaItems: EventDetailsMetaItem[] = event

@@ -113,6 +113,50 @@ function resolveMinuteOption(value: number | null | undefined) {
   return DEFAULT_MINUTE_OPTION;
 }
 
+function toSoloLiveSafeErrorMessage(error: unknown, fallback: string) {
+  const rawMessage =
+    error instanceof Error ? error.message : typeof error === 'string' ? error : fallback;
+  const normalized = rawMessage.toLowerCase();
+
+  let safeMessage = fallback;
+
+  if (
+    normalized.includes('schema cache') ||
+    normalized.includes('relation') ||
+    normalized.includes('does not exist')
+  ) {
+    safeMessage = 'Shared sessions are temporarily unavailable. Please try again shortly.';
+  } else if (
+    normalized.includes('permission') ||
+    normalized.includes('forbidden') ||
+    normalized.includes('not allowed')
+  ) {
+    safeMessage = 'You do not have access to this shared session.';
+  } else if (
+    normalized.includes('not found') &&
+    (normalized.includes('session') || normalized.includes('shared'))
+  ) {
+    safeMessage = 'This shared session is no longer available.';
+  } else if (
+    normalized.includes('invalid') &&
+    (normalized.includes('session') || normalized.includes('shared'))
+  ) {
+    safeMessage = 'This shared session link is invalid.';
+  } else if (
+    normalized.includes('quota_exceeded') ||
+    normalized.includes('credits remaining') ||
+    normalized.includes('credits')
+  ) {
+    safeMessage = 'Audio generation is temporarily unavailable. Continue with the guided text.';
+  }
+
+  if (__DEV__ && safeMessage !== rawMessage) {
+    console.warn('[Egregor][SoloLive]', safeMessage, rawMessage);
+  }
+
+  return safeMessage;
+}
+
 export function SoloLiveScreen() {
   const navigation = useNavigation<SoloNavigation>();
   const route = useRoute<SoloLiveRoute>();
@@ -179,7 +223,25 @@ export function SoloLiveScreen() {
     sharedSession && sessionUserId && sharedSession.hostUserId === sessionUserId,
   );
   const isSharedParticipant = Boolean(isSharedSessionActive && sharedSession && !isSharedHost);
+  const captureSharedRole = route.params?.captureSharedRole;
+  const isSharedParticipantVisual = isSharedParticipant || captureSharedRole === 'participant';
+  const isSharedHostVisual = isSharedHost || captureSharedRole === 'host';
+  const soloFieldMode: 'host' | 'participant' | 'solo' = isSharedParticipantVisual
+    ? 'participant'
+    : isSharedHostVisual
+      ? 'host'
+      : 'solo';
   const sharedJoinedCount = sharedParticipants.length;
+  const modeBadgeLabel = isSharedParticipantVisual
+    ? 'Participant sync'
+    : isSharedHostVisual
+      ? 'Host lead'
+      : 'Personal sanctuary';
+  const modeBadgeDetail = isSharedParticipantVisual
+    ? `Tethered to host cadence - ${Math.max(sharedJoinedCount, 2)} joined`
+    : isSharedHostVisual
+      ? `Guiding shared session - ${Math.max(sharedJoinedCount, 2)} joined`
+      : 'Center and begin your own ritual';
 
   const {
     ensureAudioPlayer,
@@ -448,7 +510,9 @@ export function SoloLiveScreen() {
       }
       setError(null);
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : 'Failed to load prayer script.');
+      setError(
+        toSoloLiveSafeErrorMessage(nextError, 'Unable to load this prayer script right now.'),
+      );
     } finally {
       setLoadingScript(false);
     }
@@ -621,11 +685,12 @@ export function SoloLiveScreen() {
           return;
         }
 
-        const message =
-          nextError instanceof Error
-            ? nextError.message
-            : 'Could not join this shared prayer session.';
-        setError(message);
+        setError(
+          toSoloLiveSafeErrorMessage(
+            nextError,
+            'Could not join this shared prayer session right now.',
+          ),
+        );
         return;
       }
 
@@ -1037,9 +1102,9 @@ export function SoloLiveScreen() {
       await play();
       setError(null);
     } catch (nextError) {
-      const message =
-        nextError instanceof Error ? nextError.message : 'Failed to generate prayer audio.';
-      setError(message);
+      setError(
+        toSoloLiveSafeErrorMessage(nextError, 'Unable to start audio for this prayer right now.'),
+      );
     }
   }, [closeAllSelectors, isRunning, isSharedParticipant, pause, play]);
 
@@ -1118,7 +1183,14 @@ export function SoloLiveScreen() {
           {
             scale: scriptFocus.interpolate({
               inputRange: [0, 1],
-              outputRange: [1, 1 + motion.amplitude.medium],
+              outputRange: [
+                1,
+                isSharedHostVisual
+                  ? 1 + motion.amplitude.pronounced
+                  : isSharedParticipantVisual
+                    ? 1 + motion.amplitude.subtle
+                    : 1 + motion.amplitude.medium,
+              ],
             }),
           },
         ],
@@ -1277,10 +1349,10 @@ export function SoloLiveScreen() {
             title: 'Invite to Solo Prayer',
           });
         } catch (nextError) {
-          const detail =
-            nextError instanceof Error
-              ? nextError.message
-              : 'Unable to share the invite right now.';
+          const detail = toSoloLiveSafeErrorMessage(
+            nextError,
+            'Unable to share the invite right now.',
+          );
           Alert.alert('Invite failed', detail);
         }
       })();
@@ -1312,7 +1384,7 @@ export function SoloLiveScreen() {
           isVeryCompactHeight && styles.containerVeryCompact,
         ]}
       >
-        <SoloAuraField active={isRunning} />
+        <SoloAuraField active={isRunning} mode={soloFieldMode} />
 
         <View
           style={[
@@ -1380,9 +1452,36 @@ export function SoloLiveScreen() {
                 Personal Sanctuary
               </Typography>
             </View>
-            {isSharedSessionActive ? (
+            <View
+              style={[
+                styles.modeBadge,
+                isSharedHostVisual
+                  ? styles.modeBadgeHost
+                  : isSharedParticipantVisual
+                    ? styles.modeBadgeParticipant
+                    : styles.modeBadgeSolo,
+              ]}
+            >
+              <Typography
+                allowFontScaling={false}
+                color={colors.textPrimary}
+                variant="Caption"
+                weight="bold"
+              >
+                {modeBadgeLabel}
+              </Typography>
+              <Typography
+                allowFontScaling={false}
+                color={colors.textSecondary}
+                style={styles.modeBadgeDetail}
+                variant="Caption"
+              >
+                {modeBadgeDetail}
+              </Typography>
+            </View>
+            {isSharedSessionActive || isSharedParticipantVisual || isSharedHostVisual ? (
               <View style={styles.sharedSessionRow}>
-                <LiveLogo context={isSharedHost ? 'solo' : 'eventRoom'} size={12} />
+                <LiveLogo context={isSharedHostVisual ? 'solo' : 'eventRoom'} size={12} />
                 <Typography
                   allowFontScaling={false}
                   color={colors.textSecondary}
@@ -1390,9 +1489,9 @@ export function SoloLiveScreen() {
                   variant="Caption"
                   weight="bold"
                 >
-                  {isSharedHost
-                    ? `Shared prayer • ${sharedJoinedCount} joined`
-                    : `Shared with host • ${sharedJoinedCount} joined`}
+                  {isSharedHostVisual
+                    ? `Shared prayer - ${Math.max(sharedJoinedCount, 2)} joined`
+                    : `Synced with host - ${Math.max(sharedJoinedCount, 2)} joined`}
                 </Typography>
               </View>
             ) : null}
@@ -1635,6 +1734,24 @@ export function SoloLiveScreen() {
                   isVeryCompactHeight && styles.centerHaloInnerVeryCompact,
                 ]}
               />
+              {isSharedHostVisual ? (
+                <View
+                  accessible={false}
+                  importantForAccessibility="no-hide-descendants"
+                  style={styles.hostLeadRing}
+                />
+              ) : null}
+              {isSharedParticipantVisual ? (
+                <View
+                  accessible={false}
+                  importantForAccessibility="no-hide-descendants"
+                  style={styles.participantTether}
+                >
+                  <View style={styles.participantNode} />
+                  <View style={styles.participantLine} />
+                  <View style={styles.participantNode} />
+                </View>
+              ) : null}
               <View
                 style={[
                   styles.playButtonCore,
@@ -1643,8 +1760,18 @@ export function SoloLiveScreen() {
                 ]}
               >
                 <MaterialCommunityIcons
-                  color={roomAtmosphere.solo.transportFill}
-                  name={isRunning ? 'pause' : 'play'}
+                  color={
+                    isSharedParticipantVisual
+                      ? colors.accentSkyStart
+                      : roomAtmosphere.solo.transportFill
+                  }
+                  name={
+                    isSharedParticipantVisual
+                      ? 'access-point-network'
+                      : isRunning
+                        ? 'pause'
+                        : 'play'
+                  }
                   size={36}
                 />
               </View>
@@ -2022,8 +2149,55 @@ const styles = StyleSheet.create({
   minutesSelectorButton: {
     justifyContent: 'center',
   },
+  modeBadge: {
+    alignItems: 'center',
+    borderRadius: radii.md,
+    borderWidth: 0.7,
+    gap: 1,
+    marginTop: spacing.xxs,
+    minHeight: 34,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xxs,
+  },
+  modeBadgeDetail: {
+    textAlign: 'center',
+    textTransform: 'none',
+  },
+  modeBadgeHost: {
+    backgroundColor: 'rgba(73, 53, 31, 0.58)',
+    borderColor: colors.accentSoftGoldStart,
+  },
+  modeBadgeParticipant: {
+    backgroundColor: 'rgba(25, 45, 66, 0.6)',
+    borderColor: colors.accentSkyStart,
+  },
+  modeBadgeSolo: {
+    backgroundColor: roomAtmosphere.solo.selectorBackground,
+    borderColor: roomAtmosphere.solo.selectorBorder,
+  },
   noMotion: {
     opacity: 1,
+  },
+  participantLine: {
+    backgroundColor: colors.accentSkyStart,
+    borderRadius: radii.pill,
+    height: 2,
+    opacity: 0.58,
+    width: 24,
+  },
+  participantNode: {
+    backgroundColor: colors.accentSkyStart,
+    borderRadius: radii.pill,
+    height: 4,
+    opacity: 0.82,
+    width: 4,
+  },
+  participantTether: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 5,
+    position: 'absolute',
+    top: 28,
   },
   playButtonCore: {
     alignItems: 'center',
@@ -2224,6 +2398,15 @@ const styles = StyleSheet.create({
   selectorRowVeryCompact: {
     gap: spacing.xxs,
     marginTop: spacing.xxs,
+  },
+  hostLeadRing: {
+    borderColor: colors.accentSoftGoldStart,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    height: '94%',
+    opacity: 0.44,
+    position: 'absolute',
+    width: '94%',
   },
   sharedJoinNotice: {
     letterSpacing: 0.2,

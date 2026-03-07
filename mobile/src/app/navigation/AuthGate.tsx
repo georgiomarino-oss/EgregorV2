@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, Linking, StyleSheet, View } from 'react-native';
+import { AppState, Linking, StyleSheet, View } from 'react-native';
 
 import type { Session } from '@supabase/supabase-js';
 
-import { Typography } from '../../components/Typography';
+import { AppEntryMoment } from '../../components/AppEntryMoment';
 import { prefetchCoreAppData, updateAppUserPresence } from '../../lib/api/data';
 import { prefetchEventAndPrayerAudioArtifacts } from '../../lib/artifactPrefetch';
 import { parseInviteCaptureTarget } from '../../lib/invite';
@@ -188,10 +188,18 @@ export function AuthGate({ captureTarget }: AuthGateProps) {
   }
 
   if (initializing) {
+    const deepLinkStatus =
+      pendingInviteTarget && !session
+        ? 'Invite link detected. Preparing secure handoff.'
+        : 'Verifying secure session.';
+
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator color={colors.accentMintStart} size="large" />
-        <Typography style={styles.loadingText}>Syncing your circle...</Typography>
+        <AppEntryMoment
+          status={deepLinkStatus}
+          subtitle="Invocation gate active. Entering your sanctuary."
+          title="Entering your circle"
+        />
       </View>
     );
   }
@@ -206,13 +214,8 @@ export function AuthGate({ captureTarget }: AuthGateProps) {
 
 const styles = StyleSheet.create({
   loadingContainer: {
-    alignItems: 'center',
     backgroundColor: colors.bgHomeStart,
     flex: 1,
-    gap: 12,
-    justifyContent: 'center',
-  },
-  loadingText: {
-    color: colors.textSecondary,
+    justifyContent: 'flex-start',
   },
 });

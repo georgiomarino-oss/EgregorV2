@@ -85,9 +85,15 @@ function formatClock(totalSeconds: number) {
 
 function formatCountdownPhrase(totalSeconds: number) {
   const clamped = Math.max(0, Math.floor(totalSeconds));
+  const days = Math.floor(clamped / 86_400);
   const hours = Math.floor(clamped / 3600);
   const minutes = Math.floor((clamped % 3600) / 60);
   const seconds = clamped % 60;
+
+  if (days > 0) {
+    const remainingHours = Math.floor((clamped % 86_400) / 3600);
+    return `${days}d ${remainingHours}h`;
+  }
 
   if (hours > 0) {
     return `${hours}h ${minutes.toString().padStart(2, '0')}m`;
@@ -105,6 +111,43 @@ function buildFallbackEventScript(description?: string | null, hostNote?: string
     .filter((value): value is string => Boolean(value && value.length > 0))
     .join('\n\n')
     .trim();
+}
+
+function toEventRoomSafeErrorMessage(error: unknown, fallback: string) {
+  const rawMessage =
+    error instanceof Error ? error.message : typeof error === 'string' ? error : fallback;
+  const normalized = rawMessage.toLowerCase();
+
+  let safeMessage = fallback;
+
+  if (
+    normalized.includes('quota_exceeded') ||
+    normalized.includes('credits remaining') ||
+    normalized.includes('credits')
+  ) {
+    safeMessage = 'Audio generation is temporarily unavailable. Continue with the guided text.';
+  } else if (normalized.includes('no pre-generated audio artifact')) {
+    safeMessage = 'Audio is not ready for this room yet. Continue with the guided text.';
+  } else if (
+    normalized.includes('schema cache') ||
+    normalized.includes('relation') ||
+    normalized.includes('does not exist')
+  ) {
+    safeMessage = 'Room services are temporarily unavailable. Please try again shortly.';
+  } else if (normalized.includes('permission') || normalized.includes('forbidden')) {
+    safeMessage = 'You do not have access to this room.';
+  } else if (
+    normalized.includes('not found') &&
+    (normalized.includes('event') || normalized.includes('room'))
+  ) {
+    safeMessage = 'This room is no longer available.';
+  }
+
+  if (__DEV__ && safeMessage !== rawMessage) {
+    console.warn('[Egregor][EventRoom]', safeMessage, rawMessage);
+  }
+
+  return safeMessage;
 }
 
 export function EventRoomScreen() {
@@ -173,15 +216,17 @@ export function EventRoomScreen() {
   const scriptFocus = useMemo(() => new Animated.Value(0), []);
   const liveMetaPulse = useMemo(() => new Animated.Value(0), []);
 
-  const startMillis = useMemo(() => new Date(eventStartAt).getTime(), [eventStartAt]);
+  const parsedStartMillis = useMemo(() => new Date(eventStartAt).getTime(), [eventStartAt]);
+  const hasValidStartMillis = Number.isFinite(parsedStartMillis);
+  const startMillis = hasValidStartMillis ? parsedStartMillis : nowTick;
   const durationMillis = useMemo(
     () => Math.max(1, eventDurationMinutes) * 60 * 1000,
     [eventDurationMinutes],
   );
   const endMillis = useMemo(() => startMillis + durationMillis, [durationMillis, startMillis]);
 
-  const hasStarted = Number.isFinite(startMillis) ? nowTick >= startMillis : true;
-  const hasEnded = Number.isFinite(endMillis) ? nowTick >= endMillis : false;
+  const hasStarted = nowTick >= startMillis;
+  const hasEnded = nowTick >= endMillis;
   const remainingUntilStartMillis = Math.max(0, startMillis - nowTick);
   const remainingEventMillis = hasStarted ? Math.max(0, endMillis - nowTick) : durationMillis;
   const elapsedFromScheduleMillis = hasStarted
@@ -227,7 +272,9 @@ export function EventRoomScreen() {
 
   const elapsedLabel = formatClock(activeElapsedMillis / 1000);
   const remainingLabel = formatClock(remainingEventMillis / 1000);
-  const startCountdownPhrase = formatCountdownPhrase(remainingUntilStartMillis / 1000);
+  const startCountdownPhrase = hasValidStartMillis
+    ? formatCountdownPhrase(remainingUntilStartMillis / 1000)
+    : 'soon';
   const isVeryCompactHeight = viewportHeight <= 700;
   const isCompactHeight = viewportHeight <= 780;
   const isNarrowWidth = viewportWidth <= 360;
@@ -304,9 +351,7 @@ export function EventRoomScreen() {
     try {
       await startPlaybackAtScheduleOffset();
     } catch (nextError) {
-      const message =
-        nextError instanceof Error ? nextError.message : 'Failed to start event audio.';
-      setError(message);
+      setError(toEventRoomSafeErrorMessage(nextError, 'Unable to start room audio right now.'));
     }
   }, [closeAllSelectors, hasEnded, hasStarted, isRunning, pause, startPlaybackAtScheduleOffset]);
 
@@ -483,7 +528,7 @@ export function EventRoomScreen() {
         if (!active) {
           return;
         }
-        setError(nextError instanceof Error ? nextError.message : 'Failed to load event room.');
+        setError(toEventRoomSafeErrorMessage(nextError, 'Unable to load this room right now.'));
       } finally {
         if (active) {
           setLoadingEvent(false);
@@ -623,9 +668,7 @@ export function EventRoomScreen() {
     autoStartTriggeredRef.current = true;
 
     void startPlaybackAtScheduleOffset().catch((nextError) => {
-      const message =
-        nextError instanceof Error ? nextError.message : 'Failed to start event audio.';
-      setError(message);
+      setError(toEventRoomSafeErrorMessage(nextError, 'Unable to start room audio right now.'));
     });
   }, [hasEnded, hasStarted, loadingEvent, startPlaybackAtScheduleOffset]);
 
@@ -842,10 +885,10 @@ export function EventRoomScreen() {
             title: 'Invite to Live Event',
           });
         } catch (nextError) {
-          const detail =
-            nextError instanceof Error
-              ? nextError.message
-              : 'Unable to share the invite right now.';
+          const detail = toEventRoomSafeErrorMessage(
+            nextError,
+            'Unable to share the invite right now.',
+          );
           Alert.alert('Invite failed', detail);
         }
       })();

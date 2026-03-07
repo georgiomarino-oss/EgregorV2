@@ -25,6 +25,42 @@ interface UseRoomAudioPlayerInput {
 
 type MutedUpdater = boolean | ((current: boolean) => boolean);
 
+function toAudioPlaybackSafeMessage(error: unknown) {
+  const rawMessage =
+    error instanceof Error
+      ? error.message
+      : typeof error === 'string'
+        ? error
+        : 'Audio is unavailable right now.';
+  const normalized = rawMessage.toLowerCase();
+
+  if (
+    normalized.includes('quota_exceeded') ||
+    normalized.includes('credits remaining') ||
+    normalized.includes('credits')
+  ) {
+    return 'Audio generation is temporarily unavailable. Continue with the guided text.';
+  }
+
+  if (normalized.includes('no pre-generated audio artifact')) {
+    return 'Audio is not ready for this room yet. Continue with the guided text.';
+  }
+
+  if (
+    normalized.includes('schema cache') ||
+    normalized.includes('relation') ||
+    normalized.includes('does not exist')
+  ) {
+    return 'Audio services are temporarily unavailable. Please try again shortly.';
+  }
+
+  if (normalized.includes('empty payload')) {
+    return 'Audio is unavailable for this session right now.';
+  }
+
+  return 'Audio is unavailable right now. Continue with the guided text.';
+}
+
 export function useRoomAudioPlayer({
   activeAudioKey,
   allowAudioGeneration,
@@ -84,15 +120,30 @@ export function useRoomAudioPlayer({
     try {
       await configureAudioForPlayback();
 
-      const audioResponse = await generatePrayerAudio({
-        allowGeneration: allowAudioGeneration,
-        durationMinutes,
-        language,
-        ...(prayerLibraryItemId ? { prayerLibraryItemId } : {}),
-        script: nextScript,
-        ...(title?.trim() ? { title: title.trim() } : {}),
-        voiceId,
-      });
+      let audioResponse: Awaited<ReturnType<typeof generatePrayerAudio>>;
+      try {
+        audioResponse = await generatePrayerAudio({
+          allowGeneration: allowAudioGeneration,
+          durationMinutes,
+          language,
+          ...(prayerLibraryItemId ? { prayerLibraryItemId } : {}),
+          script: nextScript,
+          ...(title?.trim() ? { title: title.trim() } : {}),
+          voiceId,
+        });
+      } catch (error) {
+        const safeMessage = toAudioPlaybackSafeMessage(error);
+        if (__DEV__) {
+          const rawMessage =
+            error instanceof Error
+              ? error.message
+              : typeof error === 'string'
+                ? error
+                : 'Unknown audio generation failure.';
+          console.warn('[Egregor][AudioPlayback]', safeMessage, rawMessage);
+        }
+        throw new Error(safeMessage);
+      }
 
       const audioUrl = audioResponse?.audioUrl?.trim();
       const audioBase64 = audioResponse?.audioBase64?.trim();
