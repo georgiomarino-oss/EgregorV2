@@ -31,6 +31,7 @@ import {
   type CircleMembershipRole,
 } from '../lib/api/circles';
 import { blockUser, submitModerationReport } from '../lib/api/safety';
+import { MOBILE_ANALYTICS_EVENTS, trackMobileEvent } from '../lib/observability';
 import { buildSupportRouteMetadata } from '../lib/support';
 import { supabase } from '../lib/supabase';
 import { sectionGap } from '../theme/layout';
@@ -213,6 +214,10 @@ export function CircleDetailsScreen({ navigation, route }: Props) {
       });
       setSelectedMember(null);
       setToast(`${selectedMember.displayName} was blocked.`);
+      trackMobileEvent(MOBILE_ANALYTICS_EVENTS.TRUST_ACTION_BLOCK, {
+        source: 'circle_details',
+        target_type: 'user',
+      });
       await load(true);
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : 'Failed to block member.');
@@ -230,7 +235,7 @@ export function CircleDetailsScreen({ navigation, route }: Props) {
     try {
       const supportRouting = buildSupportRouteMetadata({
         source: 'moderation_report',
-        surface: 'profile',
+        surface: 'circle_details',
       });
       await submitModerationReport({
         details: `Reported from circle member management for circle ${circleId}.`,
@@ -240,7 +245,12 @@ export function CircleDetailsScreen({ navigation, route }: Props) {
         targetId: selectedMember.userId,
         targetType: 'user',
       });
+      setSelectedMember(null);
       setToast(`Reported ${selectedMember.displayName}.`);
+      trackMobileEvent(MOBILE_ANALYTICS_EVENTS.TRUST_ACTION_REPORT, {
+        source: 'circle_details',
+        target_type: 'user',
+      });
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : 'Failed to submit report.');
     } finally {
@@ -257,7 +267,7 @@ export function CircleDetailsScreen({ navigation, route }: Props) {
     try {
       const supportRouting = buildSupportRouteMetadata({
         source: 'moderation_report',
-        surface: 'profile',
+        surface: 'circle_details',
       });
       await submitModerationReport({
         details: `Circle report submitted from CircleDetails for ${circleId}.`,
@@ -268,6 +278,10 @@ export function CircleDetailsScreen({ navigation, route }: Props) {
         targetType: 'circle',
       });
       setToast('Circle report submitted.');
+      trackMobileEvent(MOBILE_ANALYTICS_EVENTS.TRUST_ACTION_REPORT, {
+        source: 'circle_details',
+        target_type: 'circle',
+      });
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : 'Failed to report circle.');
     } finally {
@@ -280,6 +294,10 @@ export function CircleDetailsScreen({ navigation, route }: Props) {
     try {
       await revokeCircleInvite({ invitationId: invite.invitationId });
       setToast('Invitation revoked.');
+      trackMobileEvent(MOBILE_ANALYTICS_EVENTS.CIRCLE_INVITE_REVOKED, {
+        circle_id: circleId,
+        invitation_id: invite.invitationId,
+      });
       await load(true);
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : 'Failed to revoke invitation.');

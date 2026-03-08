@@ -44,10 +44,17 @@ Deploy after linking your project:
 ```bash
 supabase functions deploy generate-prayer-script --project-ref <project-ref>
 supabase functions deploy generate-prayer-audio --project-ref <project-ref>
+supabase functions deploy dispatch-notification-queue --project-ref <project-ref>
 ```
 
 Set secrets in Supabase (recommended):
 
 ```bash
-supabase secrets set OPENAI_API_KEY=... ELEVENLABS_API_KEY=... --project-ref <project-ref>
+supabase secrets set OPENAI_API_KEY=... ELEVENLABS_API_KEY=... NOTIFICATION_DISPATCH_SHARED_SECRET=... --project-ref <project-ref>
 ```
+
+## Release hardening docs
+
+Phase 6A release/operator docs live in:
+
+- `mobile/docs/release/`

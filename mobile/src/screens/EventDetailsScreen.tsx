@@ -1,5 +1,5 @@
 import ambientAnimation from '../../assets/lottie/cosmic-ambient.json';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, StyleSheet, View } from 'react-native';
 
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -41,6 +41,7 @@ import {
 } from '../lib/notifications/registerDevicePushTarget';
 import { buildSupportRouteMetadata } from '../lib/support';
 import { supabase } from '../lib/supabase';
+import { MOBILE_ANALYTICS_EVENTS, trackMobileEvent } from '../lib/observability';
 import { sectionGap } from '../theme/layout';
 import { sectionVisualThemes, spacing } from '../theme/tokens';
 
@@ -114,6 +115,7 @@ export function EventDetailsScreen() {
   >('unsupported');
   const [syncingNotificationPermission, setSyncingNotificationPermission] = useState(false);
   const [reportingOccurrence, setReportingOccurrence] = useState(false);
+  const viewedOccurrenceIdRef = useRef<string | null>(null);
 
   const resolvedState = useMemo(() => {
     if (!occurrence) {
@@ -190,10 +192,17 @@ export function EventDetailsScreen() {
     try {
       if (nextEnabled && notificationPermissionState === 'undetermined') {
         setSyncingNotificationPermission(true);
+        trackMobileEvent(MOBILE_ANALYTICS_EVENTS.NOTIFICATION_PERMISSION_TRIGGERED, {
+          source: 'event_details_reminder_toggle',
+        });
         const permissionResult = await requestNotificationPermissionAndRegisterCurrentDevice({
           registrationSource: 'event_details_reminder',
         });
         setNotificationPermissionState(permissionResult.permissionState);
+        trackMobileEvent(MOBILE_ANALYTICS_EVENTS.NOTIFICATION_PERMISSION_RESULT, {
+          permission_state: permissionResult.permissionState,
+          source: 'event_details_reminder_toggle',
+        });
       }
 
       await setEventNotificationSubscription({
@@ -203,6 +212,11 @@ export function EventDetailsScreen() {
       });
       setReminderEnabled(nextEnabled);
       setError(null);
+      trackMobileEvent(MOBILE_ANALYTICS_EVENTS.LIVE_REMINDER_TOGGLED, {
+        enabled: nextEnabled,
+        occurrence_id: occurrence.occurrenceId,
+        permission_state: notificationPermissionState,
+      });
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : 'Could not update reminder.');
     } finally {
@@ -220,7 +234,7 @@ export function EventDetailsScreen() {
     try {
       const supportRouting = buildSupportRouteMetadata({
         source: 'moderation_report',
-        surface: 'event_room',
+        surface: 'event_details',
       });
       await submitModerationReport({
         details: `Live occurrence report submitted for ${occurrence.occurrenceId}.`,
@@ -231,6 +245,10 @@ export function EventDetailsScreen() {
         targetType: 'event_occurrence',
       });
       setError(null);
+      trackMobileEvent(MOBILE_ANALYTICS_EVENTS.TRUST_ACTION_REPORT, {
+        source: 'event_details',
+        target_type: 'event_occurrence',
+      });
       Alert.alert('Report submitted', 'This live room report was added to moderation review.');
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : 'Could not submit report.');
@@ -258,11 +276,18 @@ export function EventDetailsScreen() {
   const onReminderStatusAction = useCallback(() => {
     if (notificationPermission.action === 'request_permission') {
       setSyncingNotificationPermission(true);
+      trackMobileEvent(MOBILE_ANALYTICS_EVENTS.NOTIFICATION_PERMISSION_TRIGGERED, {
+        source: 'event_details_permission_notice',
+      });
       void requestNotificationPermissionAndRegisterCurrentDevice({
         registrationSource: 'event_details_reminder',
       })
         .then((result) => {
           setNotificationPermissionState(result.permissionState);
+          trackMobileEvent(MOBILE_ANALYTICS_EVENTS.NOTIFICATION_PERMISSION_RESULT, {
+            permission_state: result.permissionState,
+            source: 'event_details_permission_notice',
+          });
         })
         .catch((nextError) => {
           setError(
@@ -287,6 +312,20 @@ export function EventDetailsScreen() {
   useEffect(() => {
     void loadOccurrence();
   }, [loadOccurrence]);
+
+  useEffect(() => {
+    const occurrenceId = occurrence?.occurrenceId?.trim();
+    if (!occurrence || !occurrenceId || viewedOccurrenceIdRef.current === occurrenceId) {
+      return;
+    }
+
+    viewedOccurrenceIdRef.current = occurrenceId;
+    trackMobileEvent(MOBILE_ANALYTICS_EVENTS.LIVE_DETAILS_VIEWED, {
+      occurrence_id: occurrenceId,
+      room_id: occurrence.roomId ?? null,
+      status: occurrence.status,
+    });
+  }, [occurrence?.occurrenceId, occurrence?.roomId, occurrence?.status]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -363,8 +402,8 @@ export function EventDetailsScreen() {
                 resolvedState === 'live'
                   ? 'The room is active now.'
                   : resolvedState === 'ended'
-                    ? 'This session has ended.'
-                    : 'You can enter the waiting room before the session goes live.'
+                    ? 'This live room has ended.'
+                    : 'You can enter the waiting room before this room goes live.'
               }
               subtitleColor={sectionVisualThemes.live.nav.labelIdle}
               title="Room actions"
@@ -375,6 +414,11 @@ export function EventDetailsScreen() {
               <Button
                 disabled={resolvedState === 'ended'}
                 onPress={() => {
+                  trackMobileEvent(MOBILE_ANALYTICS_EVENTS.LIVE_DETAILS_JOIN_PRESSED, {
+                    occurrence_id: occurrence.occurrenceId,
+                    resolved_state: resolvedState,
+                    room_id: occurrence.roomId ?? null,
+                  });
                   const roomScriptText =
                     occurrence.seriesPurpose?.trim() || occurrence.seriesDescription?.trim() || '';
                   const roomParams: EventsStackParamList['EventRoom'] = {

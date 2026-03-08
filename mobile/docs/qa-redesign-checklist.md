@@ -207,6 +207,22 @@ Use this checklist for manual iOS + Android smoke QA before commit/release.
 - Highest-risk interaction:
   - Host starts shared solo -> shares deep link -> participant joins mid-playback -> both background/resume -> host ends -> non-member attempts access.
 
+## 16) Phase 6A release hardening checks
+- Verify:
+  - Reminder permission prompts are contextual (Event Details, Event Room, Profile) and not auth-gate forced.
+  - Invite/reminder queue rows transition through dispatch states (`pending` -> `processing` -> `sent`/`failed` or retry back to `pending`).
+  - Room join success/failure and trust actions (report/block/unblock) complete without misleading UI state.
+  - Account deletion request initiation shows status-aware behavior and blocks duplicate active requests.
+- Regression risks:
+  - Notification worker failing silently when secrets are missing.
+  - Permission state copy diverging from actual OS permission state.
+  - Analytics/crash initialization missing in release env while appearing normal in dev.
+- Platform watch:
+  - Android 13+ notification permission variants and settings redirect behavior.
+  - iOS push permission/status behavior (manual verification required if iOS native project is generated outside this repo snapshot).
+- Highest-risk interaction:
+  - Live details -> save reminder -> join room -> report room -> account deletion request initiation in one signed-in session.
+
 ## Exit criteria
 - All high-risk interactions above pass on at least one iOS and one Android device.
 - No route/param regressions observed.

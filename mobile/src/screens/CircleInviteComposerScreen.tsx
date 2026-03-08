@@ -33,6 +33,7 @@ import {
   toInviteStatusTone,
   toRoleLabel,
 } from '../features/circles/invitePresentation';
+import { MOBILE_ANALYTICS_EVENTS, trackMobileEvent } from '../lib/observability';
 
 type Props = NativeStackScreenProps<CommunityStackParamList, 'CircleInviteComposer'>;
 type InviteMode = 'existing' | 'external';
@@ -142,6 +143,11 @@ export function CircleInviteComposerScreen({ route }: Props) {
       setLatestInvite(invite);
       setSuccessMessage('Invite created and pending acceptance.');
       setError(null);
+      trackMobileEvent(MOBILE_ANALYTICS_EVENTS.CIRCLE_INVITE_CREATED, {
+        channel: 'in_app',
+        circle_id: circleId,
+        role_to_grant: roleToGrant,
+      });
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : 'Failed to create invite.');
     } finally {
@@ -168,6 +174,11 @@ export function CircleInviteComposerScreen({ route }: Props) {
       setSuccessMessage('Invite link created.');
       setError(null);
       setExternalContact('');
+      trackMobileEvent(MOBILE_ANALYTICS_EVENTS.CIRCLE_INVITE_CREATED, {
+        channel: 'link',
+        circle_id: circleId,
+        role_to_grant: roleToGrant,
+      });
     } catch (nextError) {
       setError(
         nextError instanceof Error ? nextError.message : 'Failed to create external invite.',

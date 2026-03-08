@@ -63,6 +63,7 @@ import {
   buildSupportRouteMetadata,
 } from '../lib/support';
 import { supabase } from '../lib/supabase';
+import { MOBILE_ANALYTICS_EVENTS, trackMobileEvent } from '../lib/observability';
 import { PROFILE_SECTION_GAP } from '../theme/figmaV2Layout';
 import { profileSurface, spacing } from '../theme/tokens';
 
@@ -669,10 +670,17 @@ export function ProfileScreen() {
       try {
         if (enabled && notificationPermissionState === 'undetermined') {
           setSyncingNotificationPermission(true);
+          trackMobileEvent(MOBILE_ANALYTICS_EVENTS.NOTIFICATION_PERMISSION_TRIGGERED, {
+            source: 'profile_notification_toggle',
+          });
           const permissionResult = await requestNotificationPermissionAndRegisterCurrentDevice({
             registrationSource: 'profile_notifications',
           });
           setNotificationPermissionState(permissionResult.permissionState);
+          trackMobileEvent(MOBILE_ANALYTICS_EVENTS.NOTIFICATION_PERMISSION_RESULT, {
+            permission_state: permissionResult.permissionState,
+            source: 'profile_notification_toggle',
+          });
         }
 
         await updateNotificationPreferences({
@@ -686,6 +694,13 @@ export function ProfileScreen() {
           [key]: enabled,
         }));
         setNotificationSettingsError(null);
+        if (category === 'occurrence_reminder') {
+          trackMobileEvent(MOBILE_ANALYTICS_EVENTS.LIVE_REMINDER_TOGGLED, {
+            category,
+            enabled,
+            source: 'profile_notifications',
+          });
+        }
       } catch (nextError) {
         setNotificationSettingsError(
           nextError instanceof Error ? nextError.message : 'Failed to update notification settings.',
@@ -702,12 +717,19 @@ export function ProfileScreen() {
     const presentation = describeNotificationPermissionState(notificationPermissionState);
     if (presentation.action === 'request_permission') {
       setSyncingNotificationPermission(true);
+      trackMobileEvent(MOBILE_ANALYTICS_EVENTS.NOTIFICATION_PERMISSION_TRIGGERED, {
+        source: 'profile_notification_permission_card',
+      });
       try {
         const permissionResult = await requestNotificationPermissionAndRegisterCurrentDevice({
           registrationSource: 'profile_notifications',
         });
         setNotificationPermissionState(permissionResult.permissionState);
         setNotificationSettingsError(null);
+        trackMobileEvent(MOBILE_ANALYTICS_EVENTS.NOTIFICATION_PERMISSION_RESULT, {
+          permission_state: permissionResult.permissionState,
+          source: 'profile_notification_permission_card',
+        });
       } catch (nextError) {
         setNotificationSettingsError(
           nextError instanceof Error ? nextError.message : 'Could not enable notifications.',
@@ -771,6 +793,10 @@ export function ProfileScreen() {
         }),
       );
       setSafetyError(null);
+      trackMobileEvent(MOBILE_ANALYTICS_EVENTS.TRUST_ACTION_UNBLOCK, {
+        source: 'profile_safety_panel',
+        target_type: 'user',
+      });
     } catch (nextError) {
       setSafetyError(nextError instanceof Error ? nextError.message : 'Failed to unblock user.');
     } finally {
@@ -843,6 +869,10 @@ export function ProfileScreen() {
       const status = await getAccountDeletionStatus();
       setDeletionStatus(status);
       setDeletionError(null);
+      trackMobileEvent(MOBILE_ANALYTICS_EVENTS.ACCOUNT_DELETION_REQUESTED, {
+        source: 'profile_account_deletion',
+        status: status?.status ?? null,
+      });
     } catch (nextError) {
       setDeletionError(
         nextError instanceof Error

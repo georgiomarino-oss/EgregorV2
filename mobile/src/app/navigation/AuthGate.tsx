@@ -8,6 +8,12 @@ import { prefetchCoreAppData, updateAppUserPresence } from '../../lib/api/data';
 import { prefetchEventAndPrayerAudioArtifacts } from '../../lib/artifactPrefetch';
 import { parseInviteCaptureTarget } from '../../lib/invite';
 import { registerCurrentDevicePushTarget } from '../../lib/notifications/registerDevicePushTarget';
+import {
+  MOBILE_ANALYTICS_EVENTS,
+  setAnalyticsUser,
+  setCrashReportingUser,
+  trackMobileEvent,
+} from '../../lib/observability';
 import { supabase } from '../../lib/supabase';
 import { colors } from '../../theme/tokens';
 import { RootNavigator } from './RootNavigator';
@@ -32,6 +38,17 @@ export function AuthGate({ captureTarget }: AuthGateProps) {
   }, [session]);
 
   useEffect(() => {
+    const userId = session?.user?.id?.trim() || null;
+    setAnalyticsUser(userId);
+    setCrashReportingUser(userId);
+    if (userId) {
+      trackMobileEvent(MOBILE_ANALYTICS_EVENTS.AUTH_SESSION_ACTIVE, {
+        source: 'auth_gate_session',
+      });
+    }
+  }, [session?.user?.id]);
+
+  useEffect(() => {
     if (captureTarget || forcedAuthState !== null) {
       return;
     }
@@ -48,6 +65,11 @@ export function AuthGate({ captureTarget }: AuthGateProps) {
       }
 
       setPendingInviteTarget((current) => current ?? parsedTarget);
+      if (parsedTarget.communityRoute === 'InviteDecision') {
+        trackMobileEvent(MOBILE_ANALYTICS_EVENTS.CIRCLE_INVITE_VIEWED, {
+          source: 'auth_gate_deep_link_capture',
+        });
+      }
     };
 
     void Linking.getInitialURL()

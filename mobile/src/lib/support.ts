@@ -2,9 +2,18 @@ export const SUPPORT_WEB_URL = 'https://egregor.world/support';
 export const PRIVACY_WEB_URL = 'https://egregor.world/privacy';
 export const ACCOUNT_DELETION_WEB_URL = 'https://egregor.world/account-deletion';
 
+export type SupportRouteSource = 'account_deletion' | 'moderation_report';
+
+export type SupportRouteSurface =
+  | 'circle_details'
+  | 'event_details'
+  | 'event_room'
+  | 'invite_decision'
+  | 'profile';
+
 export function buildSupportRouteMetadata(input: {
-  source: 'account_deletion' | 'moderation_report';
-  surface: 'event_room' | 'profile';
+  source: SupportRouteSource;
+  surface: SupportRouteSurface;
 }) {
   return {
     supportMetadata: {

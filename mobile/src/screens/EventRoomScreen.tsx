@@ -53,6 +53,7 @@ import {
   openSystemNotificationSettings,
   requestNotificationPermissionAndRegisterCurrentDevice,
 } from '../lib/notifications/registerDevicePushTarget';
+import { MOBILE_ANALYTICS_EVENTS, trackMobileEvent } from '../lib/observability';
 import { buildSupportRouteMetadata } from '../lib/support';
 import { supabase } from '../lib/supabase';
 import { sectionGap } from '../theme/layout';
@@ -328,7 +329,7 @@ export function EventRoomScreen() {
     : 'soon';
   const roomStateLabel = isCollectiveRoomLive ? 'Live now' : hasEnded ? 'Ended' : 'Waiting room';
   const roomStateDescription = isCollectiveRoomLive
-    ? 'This room is active. Join the shared session now.'
+    ? 'This room is active. Join the live room now.'
     : hasEnded
       ? 'This room has ended. You can still review details and reminders.'
       : `You are early. This shared room goes live in ${startCountdownPhrase}.`;
@@ -495,7 +496,15 @@ export function EventRoomScreen() {
       try {
         await joinEventRoom(joinTarget, userId);
         presenceJoinedRef.current = true;
+        trackMobileEvent(MOBILE_ANALYTICS_EVENTS.ROOM_JOIN_SUCCEEDED, {
+          occurrence_id: joinTarget.occurrenceId || routeOccurrenceId || null,
+          room_id: joinTarget.roomId || routeRoomId || null,
+        });
       } catch {
+        trackMobileEvent(MOBILE_ANALYTICS_EVENTS.ROOM_JOIN_FAILED, {
+          occurrence_id: joinTarget.occurrenceId || routeOccurrenceId || null,
+          room_id: joinTarget.roomId || routeRoomId || null,
+        });
         // Best-effort presence; keep room usable even if this fails.
       }
 
@@ -1013,10 +1022,17 @@ export function EventRoomScreen() {
     try {
       if (nextEnabled && notificationPermissionState === 'undetermined') {
         setSyncingNotificationPermission(true);
+        trackMobileEvent(MOBILE_ANALYTICS_EVENTS.NOTIFICATION_PERMISSION_TRIGGERED, {
+          source: 'event_room_reminder_toggle',
+        });
         const permissionResult = await requestNotificationPermissionAndRegisterCurrentDevice({
           registrationSource: 'event_room_reminder',
         });
         setNotificationPermissionState(permissionResult.permissionState);
+        trackMobileEvent(MOBILE_ANALYTICS_EVENTS.NOTIFICATION_PERMISSION_RESULT, {
+          permission_state: permissionResult.permissionState,
+          source: 'event_room_reminder_toggle',
+        });
       }
 
       await setEventNotificationSubscription({
@@ -1026,6 +1042,12 @@ export function EventRoomScreen() {
       });
       setReminderEnabled(nextEnabled);
       setError(null);
+      trackMobileEvent(MOBILE_ANALYTICS_EVENTS.ROOM_REMINDER_TOGGLED, {
+        enabled: nextEnabled,
+        occurrence_id: resolvedOccurrenceId,
+        permission_state: notificationPermissionState,
+        room_id: resolvedRoomId || routeRoomId || null,
+      });
     } catch (nextError) {
       setError(
         toEventRoomSafeErrorMessage(nextError, 'Could not update reminder for this live room.'),
@@ -1034,7 +1056,14 @@ export function EventRoomScreen() {
       setSyncingNotificationPermission(false);
       setUpdatingReminder(false);
     }
-  }, [notificationPermissionState, presenceUserId, reminderEnabled, resolvedOccurrenceId]);
+  }, [
+    notificationPermissionState,
+    presenceUserId,
+    reminderEnabled,
+    resolvedOccurrenceId,
+    resolvedRoomId,
+    routeRoomId,
+  ]);
 
   const reportCurrentRoom = useCallback(async () => {
     const targetRoomId = resolvedRoomId?.trim();
@@ -1059,6 +1088,10 @@ export function EventRoomScreen() {
         targetType: 'room',
       });
       setError(null);
+      trackMobileEvent(MOBILE_ANALYTICS_EVENTS.TRUST_ACTION_REPORT, {
+        source: 'event_room',
+        target_type: 'room',
+      });
       Alert.alert('Report submitted', 'This live room report was added to moderation review.');
     } catch (nextError) {
       setError(toEventRoomSafeErrorMessage(nextError, 'Could not submit room report.'));
@@ -1127,11 +1160,18 @@ export function EventRoomScreen() {
   const onReminderStatusAction = useCallback(() => {
     if (notificationPermission.action === 'request_permission') {
       setSyncingNotificationPermission(true);
+      trackMobileEvent(MOBILE_ANALYTICS_EVENTS.NOTIFICATION_PERMISSION_TRIGGERED, {
+        source: 'event_room_permission_notice',
+      });
       void requestNotificationPermissionAndRegisterCurrentDevice({
         registrationSource: 'event_room_reminder',
       })
         .then((result) => {
           setNotificationPermissionState(result.permissionState);
+          trackMobileEvent(MOBILE_ANALYTICS_EVENTS.NOTIFICATION_PERMISSION_RESULT, {
+            permission_state: result.permissionState,
+            source: 'event_room_permission_notice',
+          });
         })
         .catch((nextError) => {
           setError(

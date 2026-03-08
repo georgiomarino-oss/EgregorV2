@@ -31,6 +31,7 @@ import {
   toRoleLabel,
   type InviteDisplayStatus,
 } from '../features/circles/invitePresentation';
+import { MOBILE_ANALYTICS_EVENTS, trackMobileEvent } from '../lib/observability';
 
 type Props = NativeStackScreenProps<CommunityStackParamList, 'InviteDecision'>;
 
@@ -103,6 +104,17 @@ export function InviteDecisionScreen({ navigation, route }: Props) {
     void loadPreview();
   }, [loadPreview]);
 
+  useEffect(() => {
+    if (!preview) {
+      return;
+    }
+
+    trackMobileEvent(MOBILE_ANALYTICS_EVENTS.CIRCLE_INVITE_VIEWED, {
+      invitation_id: preview.invitationId,
+      status: preview.status,
+    });
+  }, [preview?.invitationId, preview?.status]);
+
   const onAccept = async () => {
     if (!resolvedToken) {
       return;
@@ -112,6 +124,9 @@ export function InviteDecisionScreen({ navigation, route }: Props) {
     try {
       await acceptCircleInvite({ inviteToken: resolvedToken });
       await loadPreview();
+      trackMobileEvent(MOBILE_ANALYTICS_EVENTS.CIRCLE_INVITE_ACCEPTED, {
+        invitation_id: preview?.invitationId ?? null,
+      });
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : 'Failed to accept invite.');
       await loadPreview();
@@ -129,6 +144,9 @@ export function InviteDecisionScreen({ navigation, route }: Props) {
     try {
       await declineCircleInvite({ inviteToken: resolvedToken });
       await loadPreview();
+      trackMobileEvent(MOBILE_ANALYTICS_EVENTS.CIRCLE_INVITE_DECLINED, {
+        invitation_id: preview?.invitationId ?? null,
+      });
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : 'Failed to decline invite.');
       await loadPreview();
@@ -146,7 +164,7 @@ export function InviteDecisionScreen({ navigation, route }: Props) {
     try {
       const supportRouting = buildSupportRouteMetadata({
         source: 'moderation_report',
-        surface: 'profile',
+        surface: 'invite_decision',
       });
       await submitModerationReport({
         details: `Invite abuse report submitted for invite ${preview.invitationId}.`,
@@ -157,6 +175,10 @@ export function InviteDecisionScreen({ navigation, route }: Props) {
         targetType: 'invite',
       });
       setError(null);
+      trackMobileEvent(MOBILE_ANALYTICS_EVENTS.TRUST_ACTION_REPORT, {
+        source: 'invite_decision',
+        target_type: 'invite',
+      });
       Alert.alert('Report submitted', 'This invite report was added to moderation review.');
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : 'Failed to submit report.');

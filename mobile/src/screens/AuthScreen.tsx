@@ -1,5 +1,5 @@
 import ambientAnimation from '../../assets/lottie/cosmic-ambient.json';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { KeyboardAvoidingView, Platform, StyleSheet, View } from 'react-native';
 
 import { PrimaryButton, SecondaryButton } from '../components/AppButtons';
@@ -9,6 +9,7 @@ import { Screen } from '../components/Screen';
 import { SurfaceCard } from '../components/SurfaceCard';
 import { TextField } from '../components/TextField';
 import { Typography } from '../components/Typography';
+import { MOBILE_ANALYTICS_EVENTS, trackMobileEvent } from '../lib/observability';
 import { supabase } from '../lib/supabase';
 import { sectionGap } from '../theme/layout';
 import { colors, spacing } from '../theme/tokens';
@@ -24,9 +25,18 @@ export function AuthScreen() {
 
   const isSignIn = mode === 'signIn';
 
+  useEffect(() => {
+    trackMobileEvent(MOBILE_ANALYTICS_EVENTS.AUTH_ENTRY_VIEWED, {
+      mode,
+    });
+  }, [mode]);
+
   const onSubmit = async () => {
     setMessage(null);
     setLoading(true);
+    trackMobileEvent(MOBILE_ANALYTICS_EVENTS.AUTH_SUBMIT_STARTED, {
+      mode,
+    });
 
     try {
       const normalizedEmail = email.trim().toLowerCase();
@@ -43,10 +53,16 @@ export function AuthScreen() {
         });
 
         if (error) {
+          trackMobileEvent(MOBILE_ANALYTICS_EVENTS.AUTH_SUBMIT_FAILED, {
+            mode,
+          });
           setMessage(error.message);
           return;
         }
 
+        trackMobileEvent(MOBILE_ANALYTICS_EVENTS.AUTH_SUBMIT_SUCCEEDED, {
+          mode,
+        });
         setMessage(null);
       } else {
         const { data, error } = await supabase.auth.signUp({
@@ -55,15 +71,25 @@ export function AuthScreen() {
         });
 
         if (error) {
+          trackMobileEvent(MOBILE_ANALYTICS_EVENTS.AUTH_SUBMIT_FAILED, {
+            mode,
+          });
           setMessage(error.message);
           return;
         }
 
         if (data.session) {
+          trackMobileEvent(MOBILE_ANALYTICS_EVENTS.AUTH_SUBMIT_SUCCEEDED, {
+            mode,
+          });
           setMessage(null);
           return;
         }
 
+        trackMobileEvent(MOBILE_ANALYTICS_EVENTS.AUTH_SUBMIT_SUCCEEDED, {
+          mode,
+          requires_confirmation: true,
+        });
         setMessage('Account created. Check your inbox to confirm your email before signing in.');
       }
     } finally {
@@ -92,8 +118,8 @@ export function AuthScreen() {
           <Badge label={isSignIn ? 'Returning member' : 'New account'} tone="active" />
           <Typography color={colors.textSecondary} style={styles.subtitle} variant="Body">
             {isSignIn
-              ? 'Sign in to continue your live healing rooms and solo rituals.'
-              : 'Create your account to begin solo rituals and shared collective sessions.'}
+              ? 'Sign in to continue your live rooms and solo rituals.'
+              : 'Create your account to begin solo rituals and shared live rooms.'}
           </Typography>
         </View>
 
@@ -133,7 +159,14 @@ export function AuthScreen() {
               title={isSignIn ? 'Sign in' : 'Sign up'}
             />
             <SecondaryButton
-              onPress={() => setMode(isSignIn ? 'signUp' : 'signIn')}
+              onPress={() => {
+                const nextMode = isSignIn ? 'signUp' : 'signIn';
+                trackMobileEvent(MOBILE_ANALYTICS_EVENTS.AUTH_MODE_SWITCHED, {
+                  from_mode: mode,
+                  to_mode: nextMode,
+                });
+                setMode(nextMode);
+              }}
               title={isSignIn ? 'Create account' : 'Back to sign in'}
             />
           </View>

@@ -3,7 +3,10 @@ import 'react-native-url-polyfill/auto';
 import { useEffect, useMemo } from 'react';
 
 import { AppRoot } from './src/app/AppRoot';
+import { initializeCrashReporting } from './src/lib/observability';
 import type { CaptureNavigationTarget } from './src/app/navigation/types';
+
+initializeCrashReporting();
 
 function parseCaptureTargetFromHash(): CaptureNavigationTarget | undefined {
   if (!__DEV__) {
