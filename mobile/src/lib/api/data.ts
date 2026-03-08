@@ -1,5 +1,40 @@
 import { EVENT_LIBRARY_CATALOG, type EventLibrarySeedItem } from '../catalog/eventLibraryCatalog';
 import { supabase } from '../supabase';
+import {
+  addEventsCircleMemberLegacy,
+  addPrayerCircleMemberLegacy,
+  fetchEventsCircleMembersLegacy,
+  fetchPrayerCircleMembersLegacy,
+  removeEventsCircleMemberLegacy,
+  removePrayerCircleMemberLegacy,
+  searchUsersForPrayerCircleLegacy,
+} from './circles';
+
+export type {
+  CanonicalCircleSummary,
+  CircleInviteAcceptResult,
+  CircleInviteChannel,
+  CircleInviteMutationResult,
+  CircleInviteSummary,
+  CircleInviteStatus,
+  CircleMemberRecord,
+  CircleMembershipRole,
+  CircleMembershipStatus,
+  InvitableUser,
+} from './circles';
+export {
+  acceptCircleInvite,
+  createCircleInvite,
+  declineCircleInvite,
+  listCircleMembers,
+  listMyCircles,
+  listPendingCircleInvites,
+  listSharedWithMe,
+  removeCircleMember,
+  revokeCircleInvite,
+  searchInvitableUsers,
+  updateCircleMemberRole,
+} from './circles';
 
 export type EventStatus = 'live' | 'scheduled' | 'completed' | 'cancelled';
 export type EventVisibility = 'public' | 'private';
@@ -115,18 +150,6 @@ interface UserIntentionRow {
   created_at: string;
   id: string;
   intention: string;
-}
-
-interface PrayerCircleMemberRpcRow {
-  display_name: string | null;
-  is_owner: boolean;
-  joined_at: string;
-  user_id: string;
-}
-
-interface PrayerCircleUserRpcRow {
-  display_name: string | null;
-  user_id: string;
 }
 
 interface UserJournalEntryRow {
@@ -1567,20 +1590,7 @@ export async function fetchPrayerCircleMembers(): Promise<PrayerCircleMember[]> 
     prayerCircleMembersRequestCache,
     'default',
     CIRCLE_MEMBERS_CACHE_TTL_MS,
-    async () => {
-      const { data, error } = await supabase.rpc('get_prayer_circle_members');
-
-      if (error) {
-        throw new Error(toSupabaseErrorMessage(error, 'Failed to load prayer circle members.'));
-      }
-
-      return ((data ?? []) as PrayerCircleMemberRpcRow[]).map((row) => ({
-        displayName: row.display_name?.trim() || 'Member',
-        isOwner: Boolean(row.is_owner),
-        joinedAt: row.joined_at,
-        userId: row.user_id,
-      }));
-    },
+    async () => fetchPrayerCircleMembersLegacy(),
   );
 }
 
@@ -1590,20 +1600,7 @@ export async function fetchEventsCircleMembers(): Promise<PrayerCircleMember[]> 
     eventsCircleMembersRequestCache,
     'default',
     CIRCLE_MEMBERS_CACHE_TTL_MS,
-    async () => {
-      const { data, error } = await supabase.rpc('get_events_circle_members');
-
-      if (error) {
-        throw new Error(toSupabaseErrorMessage(error, 'Failed to load events circle members.'));
-      }
-
-      return ((data ?? []) as PrayerCircleMemberRpcRow[]).map((row) => ({
-        displayName: row.display_name?.trim() || 'Member',
-        isOwner: Boolean(row.is_owner),
-        joinedAt: row.joined_at,
-        userId: row.user_id,
-      }));
-    },
+    async () => fetchEventsCircleMembersLegacy(),
   );
 }
 
@@ -1611,66 +1608,29 @@ export async function searchUsersForPrayerCircle(
   query: string,
   limit = 20,
 ): Promise<PrayerCircleUserSuggestion[]> {
-  const sanitized = query.trim();
-  const { data, error } = await supabase.rpc('search_app_users_for_circle', {
-    p_limit: limit,
-    p_query: sanitized.length > 0 ? sanitized : null,
-  });
-
-  if (error) {
-    throw new Error(toSupabaseErrorMessage(error, 'Failed to search users.'));
-  }
-
-  return ((data ?? []) as PrayerCircleUserRpcRow[]).map((row) => ({
-    displayName: row.display_name?.trim() || 'Member',
-    userId: row.user_id,
-  }));
+  return searchUsersForPrayerCircleLegacy(query, limit);
 }
 
 export async function addPrayerCircleMember(targetUserId: string) {
-  const { error } = await supabase.rpc('add_user_to_prayer_circle', {
-    p_target_user_id: targetUserId,
-  });
-
-  if (error) {
-    throw new Error(toSupabaseErrorMessage(error, 'Failed to add user to prayer circle.'));
-  }
+  await addPrayerCircleMemberLegacy(targetUserId);
 
   prayerCircleMembersCache.delete('default');
 }
 
 export async function addEventsCircleMember(targetUserId: string) {
-  const { error } = await supabase.rpc('add_user_to_events_circle', {
-    p_target_user_id: targetUserId,
-  });
-
-  if (error) {
-    throw new Error(toSupabaseErrorMessage(error, 'Failed to add user to events circle.'));
-  }
+  await addEventsCircleMemberLegacy(targetUserId);
 
   eventsCircleMembersCache.delete('default');
 }
 
 export async function removePrayerCircleMember(targetUserId: string) {
-  const { error } = await supabase.rpc('remove_user_from_prayer_circle', {
-    p_target_user_id: targetUserId,
-  });
-
-  if (error) {
-    throw new Error(toSupabaseErrorMessage(error, 'Failed to remove user from prayer circle.'));
-  }
+  await removePrayerCircleMemberLegacy(targetUserId);
 
   prayerCircleMembersCache.delete('default');
 }
 
 export async function removeEventsCircleMember(targetUserId: string) {
-  const { error } = await supabase.rpc('remove_user_from_events_circle', {
-    p_target_user_id: targetUserId,
-  });
-
-  if (error) {
-    throw new Error(toSupabaseErrorMessage(error, 'Failed to remove user from events circle.'));
-  }
+  await removeEventsCircleMemberLegacy(targetUserId);
 
   eventsCircleMembersCache.delete('default');
 }
@@ -2110,7 +2070,11 @@ export async function fetchProfileSummary(userId: string): Promise<ProfileSummar
 
       const [preferences, membershipRes, eventParticipantRes, soloSessionsRes] = await Promise.all([
         fetchUserPreferences(normalizedUserId),
-        supabase.from('circle_members').select('circle_id').eq('user_id', normalizedUserId),
+        supabase
+          .from('circle_members')
+          .select('circle_id')
+          .eq('user_id', normalizedUserId)
+          .eq('status', 'active'),
         supabase
           .from('event_participants')
           .select('event_id,joined_at')
@@ -2148,7 +2112,8 @@ export async function fetchProfileSummary(userId: string): Promise<ProfileSummar
         const { data, error } = await supabase
           .from('circle_members')
           .select('user_id,circle_id')
-          .in('circle_id', circleIds);
+          .in('circle_id', circleIds)
+          .eq('status', 'active');
 
         if (error) {
           throw new Error(
