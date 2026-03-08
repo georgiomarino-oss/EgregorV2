@@ -4,11 +4,14 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
 import { BottomTabs } from '../../components/BottomTabs';
 import { AuthScreen } from '../../screens/AuthScreen';
+import { CircleDetailsScreen } from '../../screens/CircleDetailsScreen';
+import { CircleInviteComposerScreen } from '../../screens/CircleInviteComposerScreen';
 import { CommunityScreen } from '../../screens/CommunityScreen';
 import { EventDetailsScreen } from '../../screens/EventDetailsScreen';
 import { EventRoomScreen } from '../../screens/EventRoomScreen';
 import { EventsCircleScreen } from '../../screens/EventsCircleScreen';
 import { EventsScreen } from '../../screens/EventsScreen';
+import { InviteDecisionScreen } from '../../screens/InviteDecisionScreen';
 import { PrayerCircleScreen } from '../../screens/PrayerCircleScreen';
 import { PrayerLibraryScreen } from '../../screens/PrayerLibraryScreen';
 import { ProfileScreen } from '../../screens/ProfileScreen';
@@ -55,14 +58,46 @@ function SoloStackNavigator({ initialRouteName, soloLiveInitialParams }: SoloSta
 }
 
 interface CommunityStackNavigatorProps {
+  circleDetailsInitialParams?: CommunityStackParamList['CircleDetails'];
+  circleInviteComposerInitialParams?: CommunityStackParamList['CircleInviteComposer'];
   initialRouteName?: keyof CommunityStackParamList;
+  inviteDecisionInitialParams?: CommunityStackParamList['InviteDecision'];
 }
 
-function CommunityStackNavigator({ initialRouteName }: CommunityStackNavigatorProps) {
+function CommunityStackNavigator({
+  circleDetailsInitialParams,
+  circleInviteComposerInitialParams,
+  initialRouteName,
+  inviteDecisionInitialParams,
+}: CommunityStackNavigatorProps) {
   const navigatorProps = initialRouteName ? { initialRouteName } : {};
+  const circleDetailsProps = circleDetailsInitialParams
+    ? { initialParams: circleDetailsInitialParams }
+    : {};
+  const circleInviteComposerProps = circleInviteComposerInitialParams
+    ? { initialParams: circleInviteComposerInitialParams }
+    : {};
+  const inviteDecisionProps = inviteDecisionInitialParams
+    ? { initialParams: inviteDecisionInitialParams }
+    : {};
   return (
     <CommunityStack.Navigator {...navigatorProps} screenOptions={sharedStackOptions}>
       <CommunityStack.Screen name="CommunityHome" component={CommunityScreen} />
+      <CommunityStack.Screen
+        name="CircleDetails"
+        component={CircleDetailsScreen}
+        {...circleDetailsProps}
+      />
+      <CommunityStack.Screen
+        name="CircleInviteComposer"
+        component={CircleInviteComposerScreen}
+        {...circleInviteComposerProps}
+      />
+      <CommunityStack.Screen
+        name="InviteDecision"
+        component={InviteDecisionScreen}
+        {...inviteDecisionProps}
+      />
       <CommunityStack.Screen name="EventsCircle" component={EventsCircleScreen} />
       <CommunityStack.Screen name="PrayerCircle" component={PrayerCircleScreen} />
     </CommunityStack.Navigator>
@@ -117,6 +152,8 @@ interface MainTabsProps {
 
 function MainTabs({ captureTarget }: MainTabsProps) {
   const tabNavigatorProps = captureTarget?.tab ? { initialRouteName: captureTarget.tab } : {};
+  const communityRoute = captureTarget?.communityRoute;
+  const communityParams = captureTarget?.communityParams;
 
   return (
     <Tab.Navigator
@@ -126,15 +163,6 @@ function MainTabs({ captureTarget }: MainTabsProps) {
       }}
       tabBar={(props) => <BottomTabs {...props} />}
     >
-      <Tab.Screen name="CommunityTab" options={{ title: 'Community' }}>
-        {() => (
-          <CommunityStackNavigator
-            {...(captureTarget?.communityRoute
-              ? { initialRouteName: captureTarget.communityRoute }
-              : {})}
-          />
-        )}
-      </Tab.Screen>
       <Tab.Screen
         name="SoloTab"
         options={({ route }) => {
@@ -142,7 +170,7 @@ function MainTabs({ captureTarget }: MainTabsProps) {
           const hideTabBar = nestedRouteName === 'SoloLive';
 
           return {
-            title: 'Solo',
+            title: 'Home',
             ...(hideTabBar ? { tabBarStyle: { display: 'none' } } : {}),
           };
         }}
@@ -156,6 +184,31 @@ function MainTabs({ captureTarget }: MainTabsProps) {
           />
         )}
       </Tab.Screen>
+      <Tab.Screen name="CommunityTab" options={{ title: 'Circles' }}>
+        {() => (
+          <CommunityStackNavigator
+            {...(communityRoute ? { initialRouteName: communityRoute } : {})}
+            {...(communityRoute === 'CircleDetails' && communityParams
+              ? {
+                  circleDetailsInitialParams:
+                    communityParams as CommunityStackParamList['CircleDetails'],
+                }
+              : {})}
+            {...(communityRoute === 'CircleInviteComposer' && communityParams
+              ? {
+                  circleInviteComposerInitialParams:
+                    communityParams as CommunityStackParamList['CircleInviteComposer'],
+                }
+              : {})}
+            {...(communityRoute === 'InviteDecision' && communityParams
+              ? {
+                  inviteDecisionInitialParams:
+                    communityParams as CommunityStackParamList['InviteDecision'],
+                }
+              : {})}
+          />
+        )}
+      </Tab.Screen>
       <Tab.Screen
         name="EventsTab"
         options={({ route }) => {
@@ -163,7 +216,7 @@ function MainTabs({ captureTarget }: MainTabsProps) {
           const hideTabBar = nestedRouteName === 'EventRoom';
 
           return {
-            title: 'Events',
+            title: 'Live',
             ...(hideTabBar ? { tabBarStyle: { display: 'none' } } : {}),
           };
         }}

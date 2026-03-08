@@ -35,8 +35,28 @@ const linking: LinkingOptions<RootStackParamList> = {
         screens: {
           CommunityTab: {
             screens: {
-              CommunityHome: 'community',
+              CircleDetails: {
+                parse: {
+                  circleId: (value: string) => value,
+                  circleName: (value: string) => value,
+                },
+                path: 'circles/:circleId',
+              },
+              CircleInviteComposer: {
+                parse: {
+                  circleId: (value: string) => value,
+                },
+                path: 'circles/:circleId/invite',
+              },
+              CommunityHome: ['circles', 'community'],
               EventsCircle: 'community/events-circle',
+              InviteDecision: {
+                parse: {
+                  invitationId: (value: string) => value,
+                  inviteToken: (value: string) => value,
+                },
+                path: 'invite/:inviteToken',
+              },
               PrayerCircle: 'community/prayer-circle',
             },
           },

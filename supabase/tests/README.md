@@ -10,3 +10,11 @@ psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/phase_2a_circle_col
 ```
 
 The script runs inside a transaction and ends with `ROLLBACK`, so it does not persist test data.
+
+Phase 2B invite token preview test:
+
+```bash
+psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/phase_2b_circle_invite_preview.sql
+```
+
+This script also runs in a transaction and ends with `ROLLBACK`.

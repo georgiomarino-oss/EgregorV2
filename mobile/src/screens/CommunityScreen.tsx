@@ -1,168 +1,162 @@
 import ambientAnimation from '../../assets/lottie/cosmic-ambient.json';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
-import type { CommunityStackParamList } from '../app/navigation/types';
+import { EmptyStateCard } from '../components/EmptyStateCard';
+import { Button } from '../components/Button';
+import { LoadingStateCard } from '../components/LoadingStateCard';
+import { RetryPanel } from '../components/RetryPanel';
 import { Screen } from '../components/Screen';
-import { CircleEntryCards } from '../features/community/components/CircleEntryCards';
-import { CommunityAlertFeed } from '../features/community/components/CommunityAlertFeed';
-import { GlobalPulseHero } from '../features/community/components/GlobalPulseHero';
-import { LiveMetricsPanel } from '../features/community/components/LiveMetricsPanel';
-import {
-  fetchCommunitySnapshot,
-  getCachedCommunitySnapshot,
-  type CommunitySnapshot,
-} from '../lib/api/data';
-import { supabase } from '../lib/supabase';
+import { SegmentedTabs } from '../components/SegmentedTabs';
+import type { CommunityStackParamList } from '../app/navigation/types';
+import { CirclePendingInviteCard } from '../features/circles/components/CirclePendingInviteCard';
+import { CircleSummaryCard } from '../features/circles/components/CircleSummaryCard';
+import { CirclesHeroPanel } from '../features/circles/components/CirclesHeroPanel';
+import { useCirclesDashboard } from '../features/circles/hooks/useCirclesDashboard';
 import { sectionGap } from '../theme/layout';
-import { spacing } from '../theme/tokens';
+import { colors, spacing } from '../theme/tokens';
 
 type CommunityNavigation = NativeStackNavigationProp<CommunityStackParamList, 'CommunityHome'>;
+type CircleSegment = 'invites' | 'my' | 'shared';
 
 export function CommunityScreen() {
   const navigation = useNavigation<CommunityNavigation>();
-  const initialSnapshot = getCachedCommunitySnapshot();
-  const hadInitialSnapshotRef = useRef(Boolean(initialSnapshot));
-  const [snapshot, setSnapshot] = useState<CommunitySnapshot | null>(initialSnapshot);
-  const [loading, setLoading] = useState(!initialSnapshot);
-  const [error, setError] = useState<string | null>(null);
+  const [segment, setSegment] = useState<CircleSegment>('my');
+  const { error, loading, myCircles, pendingInvites, refreshing, reload, sharedCircles } =
+    useCirclesDashboard();
 
-  const loadSnapshot = useCallback(async () => {
-    if (!hadInitialSnapshotRef.current) {
-      setLoading(true);
-    }
-
-    try {
-      const nextSnapshot = await fetchCommunitySnapshot();
-      setSnapshot(nextSnapshot);
-      hadInitialSnapshotRef.current = true;
-      setError(null);
-    } catch (nextError) {
-      setError(
-        nextError instanceof Error ? nextError.message : 'Failed to load community activity.',
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void loadSnapshot();
-  }, [loadSnapshot]);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      void loadSnapshot();
-    }, 15000);
-
-    return () => {
-      clearInterval(interval);
-    };
-  }, [loadSnapshot]);
-
-  useEffect(() => {
-    const channel = supabase
-      .channel('community-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'events' }, () => {
-        void loadSnapshot();
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'event_participants' }, () => {
-        void loadSnapshot();
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'app_user_presence' }, () => {
-        void loadSnapshot();
-      })
-      .subscribe();
-
-    return () => {
-      void supabase.removeChannel(channel);
-    };
-  }, [loadSnapshot]);
-
-  const openEventDetails = (eventId: string) => {
-    const parent = navigation.getParent() as
-      | { navigate: (name: string, params?: unknown) => void }
-      | undefined;
-    if (!parent) {
-      return;
-    }
-
-    parent.navigate('EventsTab', { params: { eventId }, screen: 'EventDetails' });
-  };
-
-  const onPrimaryAction = () => {
-    if (snapshot?.strongestLiveEventId) {
-      openEventDetails(snapshot.strongestLiveEventId);
-      return;
-    }
-
-    const parent = navigation.getParent() as
-      | { navigate: (name: string, params?: unknown) => void }
-      | undefined;
-    if (parent) {
-      parent.navigate('EventsTab');
-      return;
-    }
-
-    void loadSnapshot();
-  };
-
-  const prayerCircleCount = snapshot?.liveEvents ?? 0;
-  const eventsCircleCount = snapshot?.events.length ?? 0;
-  const alerts = snapshot?.alerts ?? [];
-  const emptyState = !loading && alerts.length === 0;
+  const segmentItems =
+    segment === 'my' ? myCircles : segment === 'shared' ? sharedCircles : pendingInvites;
 
   return (
     <Screen ambientSource={ambientAnimation} contentContainerStyle={styles.content} variant="home">
-      <View style={styles.topStack}>
-        <GlobalPulseHero
-          liveEvents={snapshot?.liveEvents ?? 0}
-          strongestLiveEventTitle={snapshot?.strongestLiveEventTitle ?? null}
-        />
+      <CirclesHeroPanel
+        myCount={myCircles.length}
+        pendingCount={pendingInvites.length}
+        sharedCount={sharedCircles.length}
+      />
 
-        <LiveMetricsPanel
-          countries={snapshot?.countries ?? 0}
-          liveEvents={snapshot?.liveEvents ?? 0}
-          loading={loading && !snapshot}
-          onPrimaryAction={onPrimaryAction}
-          primaryActionTitle={
-            snapshot?.strongestLiveEventTitle ? 'Join strongest live room' : 'Explore events'
+      <SegmentedTabs
+        activeKey={segment}
+        onChange={(nextKey) => {
+          if (nextKey === 'shared' || nextKey === 'invites') {
+            setSegment(nextKey);
+            return;
           }
-          uniqueActiveParticipants={snapshot?.uniqueActiveParticipants ?? 0}
-        />
-      </View>
 
-      {emptyState ? (
-        <>
-          <CircleEntryCards
-            eventsCircleCount={eventsCircleCount}
-            onOpenEventsCircle={() => navigation.navigate('EventsCircle')}
-            onOpenPrayerCircle={() => navigation.navigate('PrayerCircle')}
-            prayerCircleCount={prayerCircleCount}
-          />
-          <CommunityAlertFeed
-            alerts={alerts}
-            emptyState
-            errorMessage={error}
-            onOpenEventDetails={openEventDetails}
-            onRetry={() => {
-              void loadSnapshot();
-            }}
-          />
-        </>
-      ) : (
-        <CommunityAlertFeed
-          alerts={alerts}
-          emptyState={false}
-          errorMessage={error}
-          onOpenEventDetails={openEventDetails}
-          onRetry={() => {
-            void loadSnapshot();
-          }}
+          setSegment('my');
+        }}
+        options={[
+          { key: 'my', label: `My Circles (${myCircles.length})` },
+          { key: 'shared', label: `Shared With Me (${sharedCircles.length})` },
+          { key: 'invites', label: `Pending Invites (${pendingInvites.length})` },
+        ]}
+      />
+
+      {loading ? (
+        <LoadingStateCard
+          subtitle="Fetching your circle memberships and invitations."
+          title="Loading circles"
         />
+      ) : null}
+
+      {!loading && segment === 'my'
+        ? myCircles.map((circle) => (
+            <CircleSummaryCard
+              circle={circle}
+              key={circle.circleId}
+              onPress={(selectedCircle) => {
+                navigation.navigate('CircleDetails', {
+                  circleId: selectedCircle.circleId,
+                  circleName: selectedCircle.name,
+                });
+              }}
+            />
+          ))
+        : null}
+
+      {!loading && segment === 'shared'
+        ? sharedCircles.map((circle) => (
+            <CircleSummaryCard
+              circle={circle}
+              key={circle.circleId}
+              onPress={(selectedCircle) => {
+                navigation.navigate('CircleDetails', {
+                  circleId: selectedCircle.circleId,
+                  circleName: selectedCircle.name,
+                });
+              }}
+            />
+          ))
+        : null}
+
+      {!loading && segment === 'invites'
+        ? pendingInvites.map((invite) => (
+            <CirclePendingInviteCard
+              invite={invite}
+              key={invite.invitationId}
+              onReview={(selectedInvite) => {
+                navigation.navigate('InviteDecision', {
+                  invitationId: selectedInvite.invitationId,
+                  inviteToken: selectedInvite.inviteToken,
+                });
+              }}
+            />
+          ))
+        : null}
+
+      {!loading && segmentItems.length === 0 ? (
+        <EmptyStateCard
+          action={undefined}
+          backgroundColor="rgba(10, 30, 45, 0.7)"
+          body={
+            segment === 'my'
+              ? 'Create or accept invites to start building your circles.'
+              : segment === 'shared'
+                ? 'Circles shared with you will appear here after invite acceptance.'
+                : 'Pending invitations will appear here when someone invites you.'
+          }
+          bodyColor={colors.textCaption}
+          borderColor={colors.borderSoft}
+          iconBackgroundColor="rgba(22, 50, 68, 0.9)"
+          iconBorderColor="rgba(120, 170, 198, 0.6)"
+          iconName={segment === 'invites' ? 'email-outline' : 'account-group-outline'}
+          iconTint="rgba(214, 244, 255, 0.9)"
+          title={
+            segment === 'my'
+              ? 'No circles yet'
+              : segment === 'shared'
+                ? 'No shared circles yet'
+                : 'No pending invites'
+          }
+          titleColor={colors.textPrimary}
+        />
+      ) : null}
+
+      {error ? (
+        <RetryPanel
+          loading={refreshing}
+          message={error}
+          onRetry={() => {
+            void reload();
+          }}
+          retryLabel="Refresh"
+          title="Could not load circles"
+        />
+      ) : (
+        <View style={styles.refreshSpacer}>
+          <Button
+            loading={refreshing}
+            onPress={() => {
+              void reload();
+            }}
+            title="Refresh circles"
+            variant="ghost"
+          />
+        </View>
       )}
     </Screen>
   );
@@ -170,10 +164,10 @@ export function CommunityScreen() {
 
 const styles = StyleSheet.create({
   content: {
-    gap: spacing.md,
-    paddingBottom: spacing.md,
-  },
-  topStack: {
     gap: sectionGap,
+    paddingBottom: sectionGap,
+  },
+  refreshSpacer: {
+    marginTop: spacing.xs,
   },
 });

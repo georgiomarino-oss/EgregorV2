@@ -36,7 +36,15 @@ export type SoloStackParamList = {
 };
 
 export type CommunityStackParamList = {
+  CircleDetails: { circleId: string; circleName?: string } | undefined;
+  CircleInviteComposer: { circleId: string; circleName?: string };
   CommunityHome: undefined;
+  InviteDecision:
+    | {
+        invitationId?: string;
+        inviteToken?: string;
+      }
+    | undefined;
   EventsCircle: undefined;
   PrayerCircle: undefined;
 };
@@ -64,6 +72,10 @@ export type ProfileStackParamList = {
 };
 
 export interface CaptureNavigationTarget {
+  communityParams?:
+    | CommunityStackParamList['CircleDetails']
+    | CommunityStackParamList['CircleInviteComposer']
+    | CommunityStackParamList['InviteDecision'];
   communityRoute?: keyof CommunityStackParamList;
   eventDetailsParams?: EventsStackParamList['EventDetails'];
   eventRoomParams?: EventsStackParamList['EventRoom'];

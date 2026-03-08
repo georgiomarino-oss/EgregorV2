@@ -67,6 +67,25 @@ function normalizeInvitePath(url: URL) {
   return pathname;
 }
 
+function extractCircleInviteToken(url: URL): string | null {
+  const host = url.hostname.trim();
+  const pathSegments = url.pathname
+    .split('/')
+    .map((segment) => segment.trim())
+    .filter((segment) => segment.length > 0);
+
+  if (host.toLowerCase() === 'invite' && pathSegments.length > 0) {
+    return pathSegments[0] ?? null;
+  }
+
+  if (host.length === 0 && pathSegments[0]?.toLowerCase() === 'invite' && pathSegments[1]) {
+    return pathSegments[1];
+  }
+
+  const tokenFromQuery = url.searchParams.get('token')?.trim();
+  return tokenFromQuery || null;
+}
+
 export function parseInviteCaptureTarget(urlValue: string): CaptureNavigationTarget | null {
   const normalizedUrl = urlValue.trim();
   if (!normalizedUrl) {
@@ -85,6 +104,20 @@ export function parseInviteCaptureTarget(urlValue: string): CaptureNavigationTar
   }
 
   const normalizedPath = normalizeInvitePath(parsedUrl);
+  if (normalizedPath === 'invite' || normalizedPath.startsWith('invite/')) {
+    const inviteToken = extractCircleInviteToken(parsedUrl);
+    if (!inviteToken) {
+      return null;
+    }
+
+    return {
+      communityParams: { inviteToken },
+      communityRoute: 'InviteDecision',
+      root: 'main',
+      tab: 'CommunityTab',
+    };
+  }
+
   if (normalizedPath === 'solo/live') {
     const sharedSessionId = parsedUrl.searchParams.get('sharedSessionId')?.trim();
     if (!sharedSessionId) {
@@ -173,6 +206,10 @@ export function parseInviteCaptureTarget(urlValue: string): CaptureNavigationTar
   }
 
   return null;
+}
+
+export function buildCircleInviteUrl(inviteToken: string) {
+  return buildInviteUrl(`invite/${inviteToken.trim()}`, {});
 }
 
 function summarizeCircleMembers(members: PrayerCircleMember[]) {

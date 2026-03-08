@@ -36,6 +36,23 @@ interface CircleInviteRow {
   target_user_id: string | null;
 }
 
+interface CircleInvitePreviewRow {
+  channel: CircleInviteChannel;
+  circle_description: string | null;
+  circle_id: string;
+  circle_name: string;
+  created_at: string;
+  expires_at: string;
+  invitation_id: string;
+  inviter_display_name: string | null;
+  inviter_user_id: string;
+  responded_at: string | null;
+  role_to_grant: CircleMembershipRole;
+  status: CircleInviteStatus;
+  target_contact_label: string | null;
+  target_user_id: string | null;
+}
+
 interface CircleInviteMutationRow {
   channel: CircleInviteChannel;
   circle_id: string;
@@ -64,6 +81,23 @@ interface CircleMemberRow {
   role: CircleMembershipRole;
   status: CircleMembershipStatus;
   user_id: string;
+}
+
+interface CircleInviteRecordRow {
+  channel: CircleInviteChannel;
+  circle_id: string;
+  created_at: string;
+  declined_at: string | null;
+  expires_at: string;
+  id: string;
+  invite_token: string;
+  inviter_user_id: string;
+  responded_at: string | null;
+  revoked_at: string | null;
+  role_to_grant: CircleMembershipRole;
+  status: CircleInviteStatus;
+  target_contact_label: string | null;
+  target_user_id: string | null;
 }
 
 interface InvitableUserRow {
@@ -116,11 +150,45 @@ export interface CircleInviteMutationResult {
   targetUserId: string | null;
 }
 
+export interface CircleInvitePreview {
+  channel: CircleInviteChannel;
+  circleDescription: string | null;
+  circleId: string;
+  circleName: string;
+  createdAt: string;
+  expiresAt: string;
+  invitationId: string;
+  inviterDisplayName: string;
+  inviterUserId: string;
+  respondedAt: string | null;
+  roleToGrant: CircleMembershipRole;
+  status: CircleInviteStatus;
+  targetContactLabel: string | null;
+  targetUserId: string | null;
+}
+
 export interface CircleInviteAcceptResult {
   circleId: string;
   invitationId: string;
   membershipRole: CircleMembershipRole;
   membershipStatus: CircleMembershipStatus;
+}
+
+export interface CircleInviteRecord {
+  channel: CircleInviteChannel;
+  circleId: string;
+  createdAt: string;
+  declinedAt: string | null;
+  expiresAt: string;
+  invitationId: string;
+  inviteToken: string;
+  inviterUserId: string;
+  respondedAt: string | null;
+  revokedAt: string | null;
+  roleToGrant: CircleMembershipRole;
+  status: CircleInviteStatus;
+  targetContactLabel: string | null;
+  targetUserId: string | null;
 }
 
 export interface CircleMemberRecord {
@@ -220,6 +288,60 @@ function mapCircleInviteMutation(row: CircleInviteMutationRow): CircleInviteMuta
   };
 }
 
+function normalizeInviteStatus(
+  status: CircleInviteStatus,
+  expiresAt: string | null | undefined,
+): CircleInviteStatus {
+  if (status !== 'pending' || !expiresAt) {
+    return status;
+  }
+
+  const expiresAtMs = Date.parse(expiresAt);
+  if (!Number.isFinite(expiresAtMs)) {
+    return status;
+  }
+
+  return expiresAtMs <= Date.now() ? 'expired' : 'pending';
+}
+
+function mapCircleInvitePreview(row: CircleInvitePreviewRow): CircleInvitePreview {
+  return {
+    channel: row.channel,
+    circleDescription: row.circle_description,
+    circleId: row.circle_id,
+    circleName: row.circle_name,
+    createdAt: row.created_at,
+    expiresAt: row.expires_at,
+    invitationId: row.invitation_id,
+    inviterDisplayName: row.inviter_display_name?.trim() || 'Member',
+    inviterUserId: row.inviter_user_id,
+    respondedAt: row.responded_at,
+    roleToGrant: row.role_to_grant,
+    status: normalizeInviteStatus(row.status, row.expires_at),
+    targetContactLabel: row.target_contact_label,
+    targetUserId: row.target_user_id,
+  };
+}
+
+function mapCircleInviteRecord(row: CircleInviteRecordRow): CircleInviteRecord {
+  return {
+    channel: row.channel,
+    circleId: row.circle_id,
+    createdAt: row.created_at,
+    declinedAt: row.declined_at,
+    expiresAt: row.expires_at,
+    invitationId: row.id,
+    inviteToken: row.invite_token,
+    inviterUserId: row.inviter_user_id,
+    respondedAt: row.responded_at,
+    revokedAt: row.revoked_at,
+    roleToGrant: row.role_to_grant,
+    status: normalizeInviteStatus(row.status, row.expires_at),
+    targetContactLabel: row.target_contact_label,
+    targetUserId: row.target_user_id,
+  };
+}
+
 export async function listMyCircles(): Promise<CanonicalCircleSummary[]> {
   const { data, error } = await supabase.rpc('list_my_circles');
   if (error) {
@@ -242,6 +364,26 @@ export async function listPendingCircleInvites(): Promise<CircleInviteSummary[]>
     throw new Error(toSupabaseErrorMessage(error, 'Failed to load pending invites.'));
   }
   return ((data ?? []) as CircleInviteRow[]).map(mapCircleInviteSummary);
+}
+
+export async function getCircleInvitePreviewByToken(
+  inviteToken: string,
+): Promise<CircleInvitePreview | null> {
+  const normalizedToken = inviteToken.trim();
+  if (!normalizedToken) {
+    throw new Error('Invite token is required.');
+  }
+
+  const { data, error } = await supabase.rpc('get_circle_invite_preview_by_token', {
+    p_invite_token: normalizedToken,
+  });
+
+  if (error) {
+    throw new Error(toSupabaseErrorMessage(error, 'Failed to load invite preview.'));
+  }
+
+  const row = ((data ?? []) as CircleInvitePreviewRow[])[0];
+  return row ? mapCircleInvitePreview(row) : null;
 }
 
 export async function searchInvitableUsers(input: {
@@ -358,10 +500,7 @@ export async function declineCircleInvite(input: {
   }
 }
 
-export async function revokeCircleInvite(input: {
-  invitationId: string;
-  reason?: string;
-}) {
+export async function revokeCircleInvite(input: { invitationId: string; reason?: string }) {
   const invitationId = input.invitationId.trim();
   if (!invitationId) {
     throw new Error('Invitation id is required.');
@@ -375,6 +514,32 @@ export async function revokeCircleInvite(input: {
   if (error) {
     throw new Error(toSupabaseErrorMessage(error, 'Failed to revoke invite.'));
   }
+}
+
+export async function listCircleInvitesForManager(input: {
+  circleId: string;
+  limit?: number;
+}): Promise<CircleInviteRecord[]> {
+  const circleId = input.circleId.trim();
+  if (!circleId) {
+    throw new Error('Circle is required.');
+  }
+
+  const limit = normalizeLimit(input.limit, 50);
+  const { data, error } = await supabase
+    .from('circle_invitations')
+    .select(
+      'id,circle_id,inviter_user_id,target_user_id,target_contact_label,invite_token,channel,status,role_to_grant,expires_at,responded_at,declined_at,revoked_at,created_at',
+    )
+    .eq('circle_id', circleId)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    throw new Error(toSupabaseErrorMessage(error, 'Failed to load circle invites.'));
+  }
+
+  return ((data ?? []) as CircleInviteRecordRow[]).map(mapCircleInviteRecord);
 }
 
 export async function listCircleMembers(circleId: string): Promise<CircleMemberRecord[]> {
