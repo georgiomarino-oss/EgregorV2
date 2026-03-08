@@ -1,6 +1,6 @@
 import ambientAnimation from '../../assets/lottie/cosmic-ambient.json';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Alert, StyleSheet, View } from 'react-native';
 
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
@@ -30,6 +30,8 @@ import {
   type CircleMemberRecord,
   type CircleMembershipRole,
 } from '../lib/api/circles';
+import { blockUser, submitModerationReport } from '../lib/api/safety';
+import { buildSupportRouteMetadata } from '../lib/support';
 import { supabase } from '../lib/supabase';
 import { sectionGap } from '../theme/layout';
 import { sectionVisualThemes, spacing } from '../theme/tokens';
@@ -198,6 +200,81 @@ export function CircleDetailsScreen({ navigation, route }: Props) {
     }
   };
 
+  const blockMember = async () => {
+    if (!selectedMember) {
+      return;
+    }
+
+    setMemberActionLoading(true);
+    try {
+      await blockUser({
+        reason: `Blocked from circle ${circleId}`,
+        targetUserId: selectedMember.userId,
+      });
+      setSelectedMember(null);
+      setToast(`${selectedMember.displayName} was blocked.`);
+      await load(true);
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : 'Failed to block member.');
+    } finally {
+      setMemberActionLoading(false);
+    }
+  };
+
+  const reportMember = async () => {
+    if (!selectedMember) {
+      return;
+    }
+
+    setMemberActionLoading(true);
+    try {
+      const supportRouting = buildSupportRouteMetadata({
+        source: 'moderation_report',
+        surface: 'profile',
+      });
+      await submitModerationReport({
+        details: `Reported from circle member management for circle ${circleId}.`,
+        reasonCode: 'other',
+        supportMetadata: supportRouting.supportMetadata,
+        supportRoute: supportRouting.supportRoute,
+        targetId: selectedMember.userId,
+        targetType: 'user',
+      });
+      setToast(`Reported ${selectedMember.displayName}.`);
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : 'Failed to submit report.');
+    } finally {
+      setMemberActionLoading(false);
+    }
+  };
+
+  const reportCircle = async () => {
+    if (!circleId) {
+      return;
+    }
+
+    setRefreshing(true);
+    try {
+      const supportRouting = buildSupportRouteMetadata({
+        source: 'moderation_report',
+        surface: 'profile',
+      });
+      await submitModerationReport({
+        details: `Circle report submitted from CircleDetails for ${circleId}.`,
+        reasonCode: 'other',
+        supportMetadata: supportRouting.supportMetadata,
+        supportRoute: supportRouting.supportRoute,
+        targetId: circleId,
+        targetType: 'circle',
+      });
+      setToast('Circle report submitted.');
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : 'Failed to report circle.');
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   const onRevokeInvite = async (invite: CircleInviteRecord) => {
     setRevokingInviteId(invite.invitationId);
     try {
@@ -223,18 +300,43 @@ export function CircleDetailsScreen({ navigation, route }: Props) {
       >
         <View style={styles.headerTopRow}>
           <Button onPress={() => navigation.navigate('CommunityHome')} title="Back" variant="ghost" />
-          {canManageMembers ? (
+          <View style={styles.headerActionsRow}>
+            {canManageMembers ? (
+              <Button
+                onPress={() => {
+                  navigation.navigate('CircleInviteComposer', {
+                    circleId,
+                    circleName,
+                  });
+                }}
+                title="Invite"
+                variant="secondary"
+              />
+            ) : null}
             <Button
+              loading={refreshing}
               onPress={() => {
-                navigation.navigate('CircleInviteComposer', {
-                  circleId,
-                  circleName,
-                });
+                Alert.alert(
+                  'Report circle',
+                  'Submit a report for this circle to the moderation queue?',
+                  [
+                    {
+                      style: 'cancel',
+                      text: 'Cancel',
+                    },
+                    {
+                      text: 'Report',
+                      onPress: () => {
+                        void reportCircle();
+                      },
+                    },
+                  ],
+                );
               }}
-              title="Invite"
-              variant="secondary"
+              title="Report"
+              variant="ghost"
             />
-          ) : null}
+          </View>
         </View>
 
         <SectionHeader
@@ -412,6 +514,49 @@ export function CircleDetailsScreen({ navigation, route }: Props) {
           <Button
             loading={memberActionLoading}
             onPress={() => {
+              Alert.alert(
+                'Report user',
+                `Submit a moderation report for ${selectedMember.displayName}?`,
+                [
+                  {
+                    style: 'cancel',
+                    text: 'Cancel',
+                  },
+                  {
+                    text: 'Report',
+                    onPress: () => {
+                      void reportMember();
+                    },
+                  },
+                ],
+              );
+            }}
+            title="Report user"
+            variant="ghost"
+          />
+          <Button
+            loading={memberActionLoading}
+            onPress={() => {
+              Alert.alert('Block user', `Block ${selectedMember.displayName}?`, [
+                {
+                  style: 'cancel',
+                  text: 'Cancel',
+                },
+                {
+                  style: 'destructive',
+                  text: 'Block',
+                  onPress: () => {
+                    void blockMember();
+                  },
+                },
+              ]);
+            }}
+            title="Block user"
+            variant="ghost"
+          />
+          <Button
+            loading={memberActionLoading}
+            onPress={() => {
               void removeMember();
             }}
             title="Remove member"
@@ -433,6 +578,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: spacing.xs,
     justifyContent: 'space-between',
+  },
+  headerActionsRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: spacing.xs,
   },
   heroMetaRow: {
     flexDirection: 'row',

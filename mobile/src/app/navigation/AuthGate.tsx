@@ -7,6 +7,7 @@ import { AppEntryMoment } from '../../components/AppEntryMoment';
 import { prefetchCoreAppData, updateAppUserPresence } from '../../lib/api/data';
 import { prefetchEventAndPrayerAudioArtifacts } from '../../lib/artifactPrefetch';
 import { parseInviteCaptureTarget } from '../../lib/invite';
+import { registerCurrentDevicePushTarget } from '../../lib/notifications/registerDevicePushTarget';
 import { supabase } from '../../lib/supabase';
 import { colors } from '../../theme/tokens';
 import { RootNavigator } from './RootNavigator';
@@ -149,6 +150,31 @@ export function AuthGate({ captureTarget }: AuthGateProps) {
       clearInterval(interval);
       appStateSubscription.remove();
       void updateAppUserPresence(userId, false);
+    };
+  }, [forcedAuthState, session?.user?.id]);
+
+  useEffect(() => {
+    if (!session?.user?.id || forcedAuthState !== null) {
+      return;
+    }
+
+    let active = true;
+
+    void registerCurrentDevicePushTarget({
+      registrationSource: 'auth_gate_background',
+      requestPermission: false,
+    }).catch((error) => {
+      if (!active) {
+        return;
+      }
+
+      const message =
+        error instanceof Error ? error.message : 'Failed to register device push target.';
+      console.warn('[Egregor] Push registration skipped:', message);
+    });
+
+    return () => {
+      active = false;
     };
   }, [forcedAuthState, session?.user?.id]);
 

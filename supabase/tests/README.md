@@ -34,3 +34,11 @@ psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/phase_3a_event_doma
 ```
 
 This script also runs in a transaction and ends with `ROLLBACK`.
+
+Phase 5A notifications/trust/privacy/deletion foundation test:
+
+```bash
+psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/phase_5a_foundation.sql
+```
+
+This script also runs in a transaction and ends with `ROLLBACK`.

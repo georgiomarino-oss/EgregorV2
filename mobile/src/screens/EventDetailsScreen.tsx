@@ -1,6 +1,6 @@
 import ambientAnimation from '../../assets/lottie/cosmic-ambient.json';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Alert, StyleSheet, View } from 'react-native';
 
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
@@ -20,14 +20,26 @@ import {
   type EventDetailsStatusTone,
 } from '../features/events/components/EventDetailsHero';
 import { EventDetailsMeta } from '../features/events/components/EventDetailsMeta';
+import { ReminderStatusNotice } from '../features/events/components/ReminderStatusNotice';
 import { resolveLiveOccurrenceState, statusLabel } from '../features/events/services/liveModel';
+import {
+  describeNotificationPermissionState,
+  describeReminderState,
+} from '../features/profile/services/accountTrustPresentation';
 import {
   fetchEventNotificationState,
   getEventOccurrenceByJoinTarget,
   setEventNotificationSubscription,
   type CanonicalEventOccurrence,
 } from '../lib/api/data';
+import { submitModerationReport } from '../lib/api/safety';
 import { formatEventDateTimeInDeviceZone } from '../lib/dateTime';
+import {
+  getDeviceNotificationPermissionState,
+  openSystemNotificationSettings,
+  requestNotificationPermissionAndRegisterCurrentDevice,
+} from '../lib/notifications/registerDevicePushTarget';
+import { buildSupportRouteMetadata } from '../lib/support';
 import { supabase } from '../lib/supabase';
 import { sectionGap } from '../theme/layout';
 import { sectionVisualThemes, spacing } from '../theme/tokens';
@@ -97,6 +109,11 @@ export function EventDetailsScreen() {
   const [userId, setUserId] = useState<string | null>(null);
   const [reminderEnabled, setReminderEnabled] = useState(false);
   const [updatingReminder, setUpdatingReminder] = useState(false);
+  const [notificationPermissionState, setNotificationPermissionState] = useState<
+    'denied' | 'granted' | 'undetermined' | 'unsupported'
+  >('unsupported');
+  const [syncingNotificationPermission, setSyncingNotificationPermission] = useState(false);
+  const [reportingOccurrence, setReportingOccurrence] = useState(false);
 
   const resolvedState = useMemo(() => {
     if (!occurrence) {
@@ -118,6 +135,8 @@ export function EventDetailsScreen() {
       const { data, error: userError } = await supabase.auth.getUser();
       const authenticatedUserId = userError ? null : (data.user?.id?.trim() ?? null);
       setUserId(authenticatedUserId);
+      const permissionState = await getDeviceNotificationPermissionState();
+      setNotificationPermissionState(permissionState);
 
       const resolved = await getEventOccurrenceByJoinTarget({
         ...(target.legacyEventId ? { legacyEventId: target.legacyEventId } : {}),
@@ -166,21 +185,104 @@ export function EventDetailsScreen() {
     }
 
     const key = `occurrence:${occurrence.occurrenceId}`;
+    const nextEnabled = !reminderEnabled;
     setUpdatingReminder(true);
     try {
+      if (nextEnabled && notificationPermissionState === 'undetermined') {
+        setSyncingNotificationPermission(true);
+        const permissionResult = await requestNotificationPermissionAndRegisterCurrentDevice({
+          registrationSource: 'event_details_reminder',
+        });
+        setNotificationPermissionState(permissionResult.permissionState);
+      }
+
       await setEventNotificationSubscription({
-        enabled: !reminderEnabled,
+        enabled: nextEnabled,
         subscriptionKey: key,
         userId,
       });
-      setReminderEnabled((current) => !current);
+      setReminderEnabled(nextEnabled);
       setError(null);
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : 'Could not update reminder.');
     } finally {
+      setSyncingNotificationPermission(false);
       setUpdatingReminder(false);
     }
-  }, [occurrence, reminderEnabled, userId]);
+  }, [notificationPermissionState, occurrence, reminderEnabled, userId]);
+
+  const reportOccurrence = useCallback(async () => {
+    if (!occurrence) {
+      return;
+    }
+
+    setReportingOccurrence(true);
+    try {
+      const supportRouting = buildSupportRouteMetadata({
+        source: 'moderation_report',
+        surface: 'event_room',
+      });
+      await submitModerationReport({
+        details: `Live occurrence report submitted for ${occurrence.occurrenceId}.`,
+        reasonCode: 'other',
+        supportMetadata: supportRouting.supportMetadata,
+        supportRoute: supportRouting.supportRoute,
+        targetId: occurrence.occurrenceId,
+        targetType: 'event_occurrence',
+      });
+      setError(null);
+      Alert.alert('Report submitted', 'This live room report was added to moderation review.');
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : 'Could not submit report.');
+    } finally {
+      setReportingOccurrence(false);
+    }
+  }, [occurrence]);
+
+  const reminderStatus = useMemo(
+    () =>
+      describeReminderState({
+        permissionState: notificationPermissionState,
+        reminderEnabled,
+      }),
+    [notificationPermissionState, reminderEnabled],
+  );
+  const notificationPermission = useMemo(
+    () => describeNotificationPermissionState(notificationPermissionState),
+    [notificationPermissionState],
+  );
+  const reminderStatusActionLabel = reminderEnabled
+    ? notificationPermission.actionLabel
+    : null;
+
+  const onReminderStatusAction = useCallback(() => {
+    if (notificationPermission.action === 'request_permission') {
+      setSyncingNotificationPermission(true);
+      void requestNotificationPermissionAndRegisterCurrentDevice({
+        registrationSource: 'event_details_reminder',
+      })
+        .then((result) => {
+          setNotificationPermissionState(result.permissionState);
+        })
+        .catch((nextError) => {
+          setError(
+            nextError instanceof Error
+              ? nextError.message
+              : 'Could not enable notifications on this device.',
+          );
+        })
+        .finally(() => {
+          setSyncingNotificationPermission(false);
+        });
+      return;
+    }
+
+    if (notificationPermission.action === 'open_settings') {
+      void openSystemNotificationSettings().catch(() => {
+        setError('Could not open notification settings.');
+      });
+    }
+  }, [notificationPermission.action]);
 
   useEffect(() => {
     void loadOccurrence();
@@ -291,7 +393,7 @@ export function EventDetailsScreen() {
               />
 
               <Button
-                loading={updatingReminder}
+                loading={updatingReminder || syncingNotificationPermission}
                 onPress={() => {
                   void toggleReminder();
                 }}
@@ -307,7 +409,42 @@ export function EventDetailsScreen() {
                 title="Refresh"
                 variant="secondary"
               />
+
+              <Button
+                loading={reportingOccurrence}
+                onPress={() => {
+                  Alert.alert(
+                    'Report live room',
+                    'Submit this live experience to moderation review?',
+                    [
+                      {
+                        style: 'cancel',
+                        text: 'Cancel',
+                      },
+                      {
+                        text: 'Report',
+                        onPress: () => {
+                          void reportOccurrence();
+                        },
+                      },
+                    ],
+                  );
+                }}
+                title="Report"
+                variant="ghost"
+              />
             </View>
+
+            <ReminderStatusNotice
+              {...(reminderStatusActionLabel
+                ? {
+                    actionLabel: reminderStatusActionLabel,
+                    onAction: onReminderStatusAction,
+                  }
+                : {})}
+              detail={reminderStatus.detail}
+              tone={reminderStatus.tone}
+            />
           </PremiumLiveEventCardSurface>
         </>
       ) : null}

@@ -1,6 +1,6 @@
 import ambientAnimation from '../../assets/lottie/cosmic-ambient.json';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Alert, StyleSheet, View } from 'react-native';
 
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
@@ -20,6 +20,8 @@ import {
   listPendingCircleInvites,
   type CircleInvitePreview,
 } from '../lib/api/circles';
+import { submitModerationReport } from '../lib/api/safety';
+import { buildSupportRouteMetadata } from '../lib/support';
 import { sectionGap } from '../theme/layout';
 import { sectionVisualThemes, spacing } from '../theme/tokens';
 import {
@@ -135,6 +137,34 @@ export function InviteDecisionScreen({ navigation, route }: Props) {
     }
   };
 
+  const onReportInvite = async () => {
+    if (!preview) {
+      return;
+    }
+
+    setActing(true);
+    try {
+      const supportRouting = buildSupportRouteMetadata({
+        source: 'moderation_report',
+        surface: 'profile',
+      });
+      await submitModerationReport({
+        details: `Invite abuse report submitted for invite ${preview.invitationId}.`,
+        reasonCode: 'spam',
+        supportMetadata: supportRouting.supportMetadata,
+        supportRoute: supportRouting.supportRoute,
+        targetId: preview.invitationId,
+        targetType: 'invite',
+      });
+      setError(null);
+      Alert.alert('Report submitted', 'This invite report was added to moderation review.');
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : 'Failed to submit report.');
+    } finally {
+      setActing(false);
+    }
+  };
+
   return (
     <Screen ambientSource={ambientAnimation} contentContainerStyle={styles.content} variant="circles">
       <PremiumHeroPanel
@@ -218,6 +248,26 @@ export function InviteDecisionScreen({ navigation, route }: Props) {
               variant="secondary"
             />
           ) : null}
+
+          <Button
+            loading={acting}
+            onPress={() => {
+              Alert.alert('Report invite', 'Submit this invite to moderation review?', [
+                {
+                  style: 'cancel',
+                  text: 'Cancel',
+                },
+                {
+                  text: 'Report',
+                  onPress: () => {
+                    void onReportInvite();
+                  },
+                },
+              ]);
+            }}
+            title="Report invite"
+            variant="ghost"
+          />
         </PremiumCircleCardSurface>
       ) : null}
 

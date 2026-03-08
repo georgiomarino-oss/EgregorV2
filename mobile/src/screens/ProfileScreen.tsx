@@ -1,6 +1,6 @@
 import ambientAnimation from '../../assets/lottie/cosmic-ambient.json';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, PanResponder, StyleSheet } from 'react-native';
+import { Alert, Animated, Linking, PanResponder, StyleSheet } from 'react-native';
 import type { User } from '@supabase/supabase-js';
 
 import { SecondaryButton } from '../components/AppButtons';
@@ -13,8 +13,23 @@ import { Screen } from '../components/Screen';
 import { SectionHeader } from '../components/SectionHeader';
 import { Typography } from '../components/Typography';
 import { JournalPanel } from '../features/profile/components/JournalPanel';
+import { NotificationSettingsPanel } from '../features/profile/components/NotificationSettingsPanel';
+import { PrivacyPresencePanel } from '../features/profile/components/PrivacyPresencePanel';
+import { SafetySupportPanel } from '../features/profile/components/SafetySupportPanel';
 import { TrustHero } from '../features/profile/components/TrustHero';
 import { TrustMetricsPanel } from '../features/profile/components/TrustMetricsPanel';
+import {
+  describeDeletionStatus,
+  describeNotificationPermissionState,
+  describePrivacySettings,
+  describeReminderState,
+  describeSafetyActionFeedback,
+} from '../features/profile/services/accountTrustPresentation';
+import {
+  createAccountDeletionRequest,
+  getAccountDeletionStatus,
+  type AccountDeletionState,
+} from '../lib/api/accountDeletion';
 import {
   createUserJournalEntry,
   fetchProfileSummary,
@@ -24,6 +39,29 @@ import {
   updateUserJournalEntry,
   type ProfileSummary,
 } from '../lib/api/data';
+import {
+  listNotificationPreferences,
+  updateNotificationPreferences,
+  type NotificationCategory,
+} from '../lib/api/notifications';
+import {
+  getPrivacySettings,
+  updatePrivacySettings,
+  type PrivacySettings,
+  type PrivacyVisibility,
+} from '../lib/api/privacy';
+import { listBlockedUsers, unblockUser, type BlockRecord } from '../lib/api/safety';
+import {
+  getDeviceNotificationPermissionState,
+  openSystemNotificationSettings,
+  requestNotificationPermissionAndRegisterCurrentDevice,
+} from '../lib/notifications/registerDevicePushTarget';
+import {
+  ACCOUNT_DELETION_WEB_URL,
+  PRIVACY_WEB_URL,
+  SUPPORT_WEB_URL,
+  buildSupportRouteMetadata,
+} from '../lib/support';
 import { supabase } from '../lib/supabase';
 import { PROFILE_SECTION_GAP } from '../theme/figmaV2Layout';
 import { profileSurface, spacing } from '../theme/tokens';
@@ -44,6 +82,35 @@ interface JournalEntryPreview {
   localId: string;
   pageNumber: number;
   updatedAt: string | null;
+}
+
+type NotificationSettingsState = {
+  circleSocial: boolean;
+  invite: boolean;
+  occurrenceReminder: boolean;
+};
+
+type NotificationSettingKey = keyof NotificationSettingsState;
+
+function defaultNotificationSettingsState(): NotificationSettingsState {
+  return {
+    circleSocial: true,
+    invite: true,
+    occurrenceReminder: true,
+  };
+}
+
+function findGlobalPushCategoryState(
+  category: NotificationCategory,
+  preferences: Awaited<ReturnType<typeof listNotificationPreferences>>,
+) {
+  const entry = preferences.find(
+    (preference) =>
+      preference.category === category &&
+      preference.targetType === 'global' &&
+      preference.channel === 'push',
+  );
+  return entry ? entry.enabled : true;
 }
 
 function createDraftJournalPage(): JournalPageState {
@@ -94,6 +161,32 @@ export function ProfileScreen() {
   const [error, setError] = useState<string | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [summary, setSummary] = useState<ProfileSummary | null>(null);
+  const [deletionStatus, setDeletionStatus] = useState<AccountDeletionState | null>(null);
+  const [deletionError, setDeletionError] = useState<string | null>(null);
+  const [loadingDeletionStatus, setLoadingDeletionStatus] = useState(false);
+  const [submittingDeletionRequest, setSubmittingDeletionRequest] = useState(false);
+  const [notificationSettings, setNotificationSettings] = useState<NotificationSettingsState>(
+    defaultNotificationSettingsState(),
+  );
+  const [notificationPermissionState, setNotificationPermissionState] = useState<
+    'denied' | 'granted' | 'undetermined' | 'unsupported'
+  >('unsupported');
+  const [loadingNotificationSettings, setLoadingNotificationSettings] = useState(false);
+  const [notificationSettingsError, setNotificationSettingsError] = useState<string | null>(null);
+  const [updatingNotificationCategory, setUpdatingNotificationCategory] =
+    useState<NotificationCategory | null>(null);
+  const [syncingNotificationPermission, setSyncingNotificationPermission] = useState(false);
+  const [privacySettings, setPrivacySettings] = useState<PrivacySettings | null>(null);
+  const [loadingPrivacySettings, setLoadingPrivacySettings] = useState(false);
+  const [privacySettingsError, setPrivacySettingsError] = useState<string | null>(null);
+  const [updatingPrivacyField, setUpdatingPrivacyField] = useState<
+    'allowCircleInvites' | 'allowDirectInvites' | 'livePresenceVisibility' | 'memberListVisibility' | null
+  >(null);
+  const [blockedUsers, setBlockedUsers] = useState<BlockRecord[]>([]);
+  const [loadingBlockedUsers, setLoadingBlockedUsers] = useState(false);
+  const [safetyError, setSafetyError] = useState<string | null>(null);
+  const [safetyInfoMessage, setSafetyInfoMessage] = useState<string | null>(null);
+  const [unblockingUserId, setUnblockingUserId] = useState<string | null>(null);
   const [journalPages, setJournalPages] = useState<JournalPageState[]>([createDraftJournalPage()]);
   const [currentJournalPageIndex, setCurrentJournalPageIndex] = useState(0);
   const [journalSavingLocalId, setJournalSavingLocalId] = useState<string | null>(null);
@@ -155,6 +248,98 @@ export function ProfileScreen() {
       setError(nextError instanceof Error ? nextError.message : 'Failed to load profile.');
     } finally {
       setLoadingProfile(false);
+    }
+  }, []);
+
+  const loadDeletionStatus = useCallback(async (nextUser: User | null) => {
+    if (!nextUser) {
+      setDeletionStatus(null);
+      setLoadingDeletionStatus(false);
+      return;
+    }
+
+    setLoadingDeletionStatus(true);
+    try {
+      const status = await getAccountDeletionStatus();
+      setDeletionStatus(status);
+    } catch {
+      setDeletionStatus(null);
+    } finally {
+      setLoadingDeletionStatus(false);
+    }
+  }, []);
+
+  const loadNotificationSettings = useCallback(async (nextUser: User | null) => {
+    if (!nextUser) {
+      setNotificationSettings(defaultNotificationSettingsState());
+      setNotificationPermissionState('unsupported');
+      setLoadingNotificationSettings(false);
+      setNotificationSettingsError(null);
+      return;
+    }
+
+    setLoadingNotificationSettings(true);
+    try {
+      const [preferences, permissionState] = await Promise.all([
+        listNotificationPreferences(),
+        getDeviceNotificationPermissionState(),
+      ]);
+
+      setNotificationSettings({
+        circleSocial: findGlobalPushCategoryState('circle_social', preferences),
+        invite: findGlobalPushCategoryState('invite', preferences),
+        occurrenceReminder: findGlobalPushCategoryState('occurrence_reminder', preferences),
+      });
+      setNotificationPermissionState(permissionState);
+      setNotificationSettingsError(null);
+    } catch (nextError) {
+      setNotificationSettingsError(
+        nextError instanceof Error ? nextError.message : 'Failed to load notification settings.',
+      );
+    } finally {
+      setLoadingNotificationSettings(false);
+    }
+  }, []);
+
+  const loadPrivacySettings = useCallback(async (nextUser: User | null) => {
+    if (!nextUser) {
+      setPrivacySettings(null);
+      setLoadingPrivacySettings(false);
+      setPrivacySettingsError(null);
+      return;
+    }
+
+    setLoadingPrivacySettings(true);
+    try {
+      const nextPrivacySettings = await getPrivacySettings();
+      setPrivacySettings(nextPrivacySettings);
+      setPrivacySettingsError(null);
+    } catch (nextError) {
+      setPrivacySettingsError(
+        nextError instanceof Error ? nextError.message : 'Failed to load privacy settings.',
+      );
+    } finally {
+      setLoadingPrivacySettings(false);
+    }
+  }, []);
+
+  const loadBlockedUsers = useCallback(async (nextUser: User | null) => {
+    if (!nextUser) {
+      setBlockedUsers([]);
+      setLoadingBlockedUsers(false);
+      setSafetyError(null);
+      return;
+    }
+
+    setLoadingBlockedUsers(true);
+    try {
+      const nextBlockedUsers = await listBlockedUsers();
+      setBlockedUsers(nextBlockedUsers);
+      setSafetyError(null);
+    } catch (nextError) {
+      setSafetyError(nextError instanceof Error ? nextError.message : 'Failed to load blocked users.');
+    } finally {
+      setLoadingBlockedUsers(false);
     }
   }, []);
 
@@ -387,6 +572,10 @@ export function ProfileScreen() {
       setUser(data.user);
       await loadProfile(data.user);
       await loadJournal(data.user);
+      await loadDeletionStatus(data.user);
+      await loadNotificationSettings(data.user);
+      await loadPrivacySettings(data.user);
+      await loadBlockedUsers(data.user);
     };
 
     void loadUser();
@@ -398,13 +587,24 @@ export function ProfileScreen() {
       setUser(nextUser);
       void loadProfile(nextUser);
       void loadJournal(nextUser);
+      void loadDeletionStatus(nextUser);
+      void loadNotificationSettings(nextUser);
+      void loadPrivacySettings(nextUser);
+      void loadBlockedUsers(nextUser);
     });
 
     return () => {
       active = false;
       subscription.unsubscribe();
     };
-  }, [loadJournal, loadProfile]);
+  }, [
+    loadBlockedUsers,
+    loadDeletionStatus,
+    loadJournal,
+    loadNotificationSettings,
+    loadPrivacySettings,
+    loadProfile,
+  ]);
 
   useEffect(() => {
     journalPagesRef.current = journalPages;
@@ -413,6 +613,20 @@ export function ProfileScreen() {
   useEffect(() => {
     userIdRef.current = user?.id ?? null;
   }, [user?.id]);
+
+  useEffect(() => {
+    if (!safetyInfoMessage) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      setSafetyInfoMessage(null);
+    }, 3200);
+
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [safetyInfoMessage]);
 
   const activeJournalPage = journalPages[currentJournalPageIndex] ?? journalPages[0] ?? null;
   const journalEntryPreviews = useMemo<JournalEntryPreview[]>(
@@ -442,6 +656,128 @@ export function ProfileScreen() {
     };
   }, [activeJournalPage, persistPageByLocalId]);
 
+  const updateNotificationCategorySetting = useCallback(
+    async (key: NotificationSettingKey, enabled: boolean) => {
+      const categoryByKey: Record<NotificationSettingKey, NotificationCategory> = {
+        circleSocial: 'circle_social',
+        invite: 'invite',
+        occurrenceReminder: 'occurrence_reminder',
+      };
+      const category = categoryByKey[key];
+      setUpdatingNotificationCategory(category);
+
+      try {
+        if (enabled && notificationPermissionState === 'undetermined') {
+          setSyncingNotificationPermission(true);
+          const permissionResult = await requestNotificationPermissionAndRegisterCurrentDevice({
+            registrationSource: 'profile_notifications',
+          });
+          setNotificationPermissionState(permissionResult.permissionState);
+        }
+
+        await updateNotificationPreferences({
+          category,
+          enabled,
+          targetType: 'global',
+        });
+
+        setNotificationSettings((previous) => ({
+          ...previous,
+          [key]: enabled,
+        }));
+        setNotificationSettingsError(null);
+      } catch (nextError) {
+        setNotificationSettingsError(
+          nextError instanceof Error ? nextError.message : 'Failed to update notification settings.',
+        );
+      } finally {
+        setSyncingNotificationPermission(false);
+        setUpdatingNotificationCategory(null);
+      }
+    },
+    [notificationPermissionState],
+  );
+
+  const handleNotificationPermissionAction = useCallback(async () => {
+    const presentation = describeNotificationPermissionState(notificationPermissionState);
+    if (presentation.action === 'request_permission') {
+      setSyncingNotificationPermission(true);
+      try {
+        const permissionResult = await requestNotificationPermissionAndRegisterCurrentDevice({
+          registrationSource: 'profile_notifications',
+        });
+        setNotificationPermissionState(permissionResult.permissionState);
+        setNotificationSettingsError(null);
+      } catch (nextError) {
+        setNotificationSettingsError(
+          nextError instanceof Error ? nextError.message : 'Could not enable notifications.',
+        );
+      } finally {
+        setSyncingNotificationPermission(false);
+      }
+      return;
+    }
+
+    if (presentation.action === 'open_settings') {
+      try {
+        await openSystemNotificationSettings();
+      } catch {
+        setNotificationSettingsError('Could not open system notification settings.');
+      }
+    }
+  }, [notificationPermissionState]);
+
+  const updatePrivacyField = useCallback(
+    async (
+      field:
+        | 'allowCircleInvites'
+        | 'allowDirectInvites'
+        | 'livePresenceVisibility'
+        | 'memberListVisibility',
+      input: {
+        allowCircleInvites?: boolean;
+        allowDirectInvites?: boolean;
+        livePresenceVisibility?: PrivacyVisibility;
+        memberListVisibility?: PrivacyVisibility;
+      },
+    ) => {
+      setUpdatingPrivacyField(field);
+      try {
+        const nextPrivacySettings = await updatePrivacySettings(input);
+        setPrivacySettings(nextPrivacySettings);
+        setPrivacySettingsError(null);
+      } catch (nextError) {
+        setPrivacySettingsError(
+          nextError instanceof Error ? nextError.message : 'Could not update privacy settings.',
+        );
+      } finally {
+        setUpdatingPrivacyField(null);
+      }
+    },
+    [],
+  );
+
+  const unblockUserFromSafetyPanel = useCallback(async (userToUnblock: BlockRecord) => {
+    setUnblockingUserId(userToUnblock.blockedUserId);
+    try {
+      await unblockUser(userToUnblock.blockedUserId);
+      setBlockedUsers((previous) =>
+        previous.filter((entry) => entry.blockedUserId !== userToUnblock.blockedUserId),
+      );
+      setSafetyInfoMessage(
+        describeSafetyActionFeedback({
+          action: 'unblock',
+          targetLabel: userToUnblock.blockedDisplayName,
+        }),
+      );
+      setSafetyError(null);
+    } catch (nextError) {
+      setSafetyError(nextError instanceof Error ? nextError.message : 'Failed to unblock user.');
+    } finally {
+      setUnblockingUserId(null);
+    }
+  }, []);
+
   const onSignOut = async () => {
     setError(null);
     setLoadingSignOut(true);
@@ -456,12 +792,108 @@ export function ProfileScreen() {
     }
   };
 
+  const openExternalUrl = useCallback(async (url: string, failureMessage: string) => {
+    try {
+      await Linking.openURL(url);
+    } catch {
+      Alert.alert('Unable to open link', failureMessage);
+    }
+  }, []);
+
   const onRetryProfileLoad = () => {
     setError(null);
+    setDeletionError(null);
     setJournalError(null);
+    setNotificationSettingsError(null);
+    setPrivacySettingsError(null);
+    setSafetyError(null);
     void loadProfile(user);
     void loadJournal(user);
+    void loadDeletionStatus(user);
+    void loadNotificationSettings(user);
+    void loadPrivacySettings(user);
+    void loadBlockedUsers(user);
   };
+
+  const activeDeletionRequest = Boolean(
+    deletionStatus &&
+      (deletionStatus.status === 'requested' ||
+        deletionStatus.status === 'acknowledged' ||
+        deletionStatus.status === 'in_review'),
+  );
+
+  const submitDeletionRequest = useCallback(async () => {
+    if (activeDeletionRequest) {
+      return;
+    }
+
+    const supportRouting = buildSupportRouteMetadata({
+      source: 'account_deletion',
+      surface: 'profile',
+    });
+
+    setSubmittingDeletionRequest(true);
+    try {
+      await createAccountDeletionRequest({
+        details: 'Initiated from in-app profile flow.',
+        reason: 'user_initiated_in_app',
+        supportMetadata: supportRouting.supportMetadata,
+        supportRoute: supportRouting.supportRoute,
+      });
+      const status = await getAccountDeletionStatus();
+      setDeletionStatus(status);
+      setDeletionError(null);
+    } catch (nextError) {
+      setDeletionError(
+        nextError instanceof Error
+          ? nextError.message
+          : 'Failed to request account deletion at this time.',
+      );
+    } finally {
+      setSubmittingDeletionRequest(false);
+    }
+  }, [activeDeletionRequest]);
+
+  const requestAccountDeletion = useCallback(() => {
+    if (activeDeletionRequest) {
+      return;
+    }
+
+    Alert.alert(
+      'Request account deletion',
+      'This sends a support-reviewed deletion request. Your account is not deleted instantly. Continue?',
+      [
+        {
+          style: 'cancel',
+          text: 'Cancel',
+        },
+        {
+          style: 'destructive',
+          text: 'Request deletion',
+          onPress: () => {
+            void submitDeletionRequest();
+          },
+        },
+      ],
+    );
+  }, [activeDeletionRequest, submitDeletionRequest]);
+
+  const deletionStatusPresentation = describeDeletionStatus(deletionStatus?.status ?? null);
+  const notificationPermissionPresentation = describeNotificationPermissionState(
+    notificationPermissionState,
+  );
+  const reminderPreferencePresentation = describeReminderState({
+    permissionState: notificationPermissionState,
+    reminderEnabled: notificationSettings.occurrenceReminder,
+  });
+  const privacySummary = privacySettings
+    ? describePrivacySettings({
+        allowCircleInvites: privacySettings.allowCircleInvites,
+        allowDirectInvites: privacySettings.allowDirectInvites,
+        livePresenceVisibility: privacySettings.livePresenceVisibility,
+        memberListVisibility: privacySettings.memberListVisibility,
+      })
+    : null;
 
   const currentPageNumber = Math.min(currentJournalPageIndex + 1, journalPages.length);
   const isSavingActivePage = journalSavingLocalId === activeJournalPage?.localId;
@@ -551,6 +983,98 @@ export function ProfileScreen() {
         />
       ) : null}
 
+      <NotificationSettingsPanel
+        errorMessage={notificationSettingsError}
+        loading={loadingNotificationSettings}
+        onOpenSettings={() => {
+          void handleNotificationPermissionAction();
+        }}
+        onRequestPermission={() => {
+          void handleNotificationPermissionAction();
+        }}
+        onToggleCategory={(category, enabled) => {
+          const settingKeyByCategory: Partial<Record<NotificationCategory, NotificationSettingKey>> = {
+            circle_social: 'circleSocial',
+            invite: 'invite',
+            occurrence_reminder: 'occurrenceReminder',
+          };
+          const key = settingKeyByCategory[category];
+          if (!key) {
+            return;
+          }
+          void updateNotificationCategorySetting(key, enabled);
+        }}
+        permission={notificationPermissionPresentation}
+        reminderState={reminderPreferencePresentation}
+        rows={[
+          {
+            category: 'occurrence_reminder',
+            description: 'Default reminder preference for upcoming live moments.',
+            enabled: notificationSettings.occurrenceReminder,
+            title: 'Live reminders',
+          },
+          {
+            category: 'invite',
+            description: 'Alerts for new circle invite requests.',
+            enabled: notificationSettings.invite,
+            title: 'Circle invites',
+          },
+          {
+            category: 'circle_social',
+            description: 'Circle activity and social updates.',
+            enabled: notificationSettings.circleSocial,
+            title: 'Circle activity',
+          },
+        ]}
+        syncingPermission={syncingNotificationPermission}
+        updatingCategory={updatingNotificationCategory}
+      />
+
+      <PrivacyPresencePanel
+        errorMessage={privacySettingsError}
+        loading={loadingPrivacySettings}
+        onToggleAllowCircleInvites={(value) => {
+          void updatePrivacyField('allowCircleInvites', {
+            allowCircleInvites: value,
+          });
+        }}
+        onToggleAllowDirectInvites={(value) => {
+          void updatePrivacyField('allowDirectInvites', {
+            allowDirectInvites: value,
+          });
+        }}
+        onUpdateLivePresenceVisibility={(value) => {
+          void updatePrivacyField('livePresenceVisibility', {
+            livePresenceVisibility: value,
+          });
+        }}
+        onUpdateMemberListVisibility={(value) => {
+          void updatePrivacyField('memberListVisibility', {
+            memberListVisibility: value,
+          });
+        }}
+        privacySettings={privacySettings}
+        summary={privacySummary}
+        updatingField={updatingPrivacyField}
+      />
+
+      <SafetySupportPanel
+        blockedUsers={blockedUsers}
+        errorMessage={safetyError}
+        infoMessage={safetyInfoMessage}
+        loading={loadingBlockedUsers}
+        onOpenPrivacy={() => {
+          void openExternalUrl(PRIVACY_WEB_URL, 'Could not open privacy policy.');
+        }}
+        onOpenSupport={() => {
+          void openExternalUrl(SUPPORT_WEB_URL, 'Could not open support page.');
+        }}
+        onUnblock={(userToUnblock) => {
+          void unblockUserFromSafetyPanel(userToUnblock);
+        }}
+        unblockingUserId={unblockingUserId}
+      />
+
       <PremiumProfileTrustCardSurface
         accessibilityHint="Contains account-level actions."
         accessibilityLabel="Account actions"
@@ -568,6 +1092,73 @@ export function ProfileScreen() {
           trailing={<Badge label="Secure account" tone="success" />}
         />
         <SecondaryButton loading={loadingSignOut} onPress={onSignOut} title="Sign out" />
+      </PremiumProfileTrustCardSurface>
+
+      <PremiumProfileTrustCardSurface
+        accessibilityHint="Contains account deletion and support actions."
+        accessibilityLabel="Deletion and support"
+        fallbackIcon="alert-decagram-outline"
+        fallbackLabel="Safety controls"
+        section="profile"
+        style={styles.utilityPanel}
+      >
+        <SectionHeader
+          compact
+          subtitle={
+            loadingDeletionStatus
+              ? 'Checking deletion workflow status...'
+              : deletionStatusPresentation.headline
+          }
+          subtitleColor={profileSurface.utility.subtitle}
+          title="Account deletion"
+          titleColor={profileSurface.utility.title}
+          trailing={
+            <Badge
+              label={deletionStatusPresentation.badgeLabel}
+              tone={
+                deletionStatusPresentation.badgeTone === 'success'
+                  ? 'success'
+                  : deletionStatusPresentation.badgeTone === 'warning'
+                    ? 'warning'
+                    : deletionStatusPresentation.badgeTone === 'danger'
+                      ? 'error'
+                      : 'active'
+              }
+            />
+          }
+        />
+        <Typography color={profileSurface.utility.subtitle} variant="Caption">
+          {deletionStatusPresentation.detail}
+        </Typography>
+        <SecondaryButton
+          disabled={deletionStatusPresentation.requestDisabled}
+          loading={submittingDeletionRequest}
+          onPress={requestAccountDeletion}
+          title={
+            deletionStatusPresentation.requestDisabled
+              ? 'Deletion request active'
+              : 'Request account deletion'
+          }
+        />
+        <SecondaryButton
+          onPress={() => {
+            void openExternalUrl(ACCOUNT_DELETION_WEB_URL, 'Could not open account deletion policy.');
+          }}
+          title="Open deletion policy"
+        />
+        <SecondaryButton
+          onPress={() => {
+            void openExternalUrl(SUPPORT_WEB_URL, 'Could not open support page.');
+          }}
+          title="Open support"
+        />
+        {deletionError ? (
+          <InlineErrorCard
+            message={deletionError}
+            title="Deletion request issue"
+            tone="warning"
+          />
+        ) : null}
       </PremiumProfileTrustCardSurface>
 
       {error ? (

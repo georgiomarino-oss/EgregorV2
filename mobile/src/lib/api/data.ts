@@ -9,6 +9,13 @@ import {
   removePrayerCircleMemberLegacy,
   searchUsersForPrayerCircleLegacy,
 } from './circles';
+import {
+  listNotificationPreferences,
+  registerDevicePushTarget,
+  saveOccurrenceReminderPreference,
+  saveRoomReminderPreference,
+  updateNotificationPreferences,
+} from './notifications';
 
 export type {
   CanonicalCircleSummary,
@@ -35,6 +42,13 @@ export {
   searchInvitableUsers,
   updateCircleMemberRole,
 } from './circles';
+export {
+  listNotificationPreferences,
+  registerDevicePushTarget,
+  saveOccurrenceReminderPreference,
+  saveRoomReminderPreference,
+  updateNotificationPreferences,
+} from './notifications';
 
 export type EventStatus = 'live' | 'scheduled' | 'completed' | 'cancelled';
 export type EventVisibility = 'public' | 'private';
@@ -1999,6 +2013,36 @@ export async function fetchEventNotificationState(userId: string): Promise<Event
       const subscriptionKeys = new Set<string>();
       let subscribedAll = false;
 
+      try {
+        const canonicalPreferences = await listNotificationPreferences();
+        for (const preference of canonicalPreferences) {
+          if (preference.category !== 'occurrence_reminder') {
+            continue;
+          }
+
+          if (preference.targetType === 'global') {
+            subscribedAll = preference.enabled;
+            continue;
+          }
+
+          if (
+            preference.targetType === 'event_occurrence' &&
+            preference.enabled &&
+            preference.targetId
+          ) {
+            subscriptionKeys.add(buildOccurrenceSubscriptionKey(preference.targetId));
+          }
+        }
+      } catch (error) {
+        const message = toSupabaseErrorMessage(error, 'Failed to load event notification settings.');
+        if (
+          !isMissingTableMessage(message, 'notification_subscriptions') &&
+          !message.toLowerCase().includes('list_my_notification_preferences')
+        ) {
+          throw new Error(message);
+        }
+      }
+
       const canonical = await supabase
         .from('event_reminder_preferences')
         .select('target_type,occurrence_id,enabled')
@@ -2034,7 +2078,11 @@ export async function fetchEventNotificationState(userId: string): Promise<Event
           legacy.error,
           'Failed to load event notification settings.',
         );
-        if (!isMissingTableMessage(message, 'user_event_subscriptions')) {
+        if (
+          !isMissingTableMessage(message, 'user_event_subscriptions') &&
+          !subscribedAll &&
+          subscriptionKeys.size === 0
+        ) {
           throw new Error(message);
         }
       } else {
@@ -2074,6 +2122,24 @@ export async function setAllEventNotifications(userId: string, enabled: boolean)
     return;
   }
 
+  let canonicalSucceeded = false;
+  try {
+    await updateNotificationPreferences({
+      category: 'occurrence_reminder',
+      enabled,
+      targetType: 'global',
+    });
+    canonicalSucceeded = true;
+  } catch (error) {
+    const message = toSupabaseErrorMessage(error, 'Failed to update all-event notifications.');
+    if (
+      !isMissingTableMessage(message, 'notification_subscriptions') &&
+      !message.toLowerCase().includes('update_notification_subscription')
+    ) {
+      throw new Error(message);
+    }
+  }
+
   if (enabled) {
     const { error } = await supabase.from('user_event_subscriptions').upsert(
       {
@@ -2088,7 +2154,7 @@ export async function setAllEventNotifications(userId: string, enabled: boolean)
 
     if (error) {
       const message = toSupabaseErrorMessage(error, 'Failed to update all-event notifications.');
-      if (isMissingTableMessage(message, 'user_event_subscriptions')) {
+      if (isMissingTableMessage(message, 'user_event_subscriptions') && canonicalSucceeded) {
         return;
       }
       throw new Error(message);
@@ -2107,7 +2173,7 @@ export async function setAllEventNotifications(userId: string, enabled: boolean)
 
   if (error) {
     const message = toSupabaseErrorMessage(error, 'Failed to update all-event notifications.');
-    if (isMissingTableMessage(message, 'user_event_subscriptions')) {
+    if (isMissingTableMessage(message, 'user_event_subscriptions') && canonicalSucceeded) {
       return;
     }
     throw new Error(message);
@@ -2139,17 +2205,18 @@ export async function setEventNotificationSubscription(input: {
   let canonicalSucceeded = false;
   if (occurrenceId) {
     try {
-      await saveEventReminderPreference({
+      await saveOccurrenceReminderPreference({
         enabled: input.enabled,
         occurrenceId,
-        targetType: 'occurrence',
       });
       canonicalSucceeded = true;
     } catch (error) {
       const message = toSupabaseErrorMessage(error, 'Failed to save event reminder preference.');
       if (
         !isMissingTableMessage(message, 'event_reminder_preferences') &&
-        !message.toLowerCase().includes('save_event_reminder_preference')
+        !isMissingTableMessage(message, 'notification_subscriptions') &&
+        !message.toLowerCase().includes('save_event_reminder_preference') &&
+        !message.toLowerCase().includes('update_notification_subscription')
       ) {
         throw new Error(message);
       }

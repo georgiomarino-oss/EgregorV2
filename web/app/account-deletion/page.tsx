@@ -37,6 +37,7 @@ export default function AccountDeletionPage() {
           <li>Sign in to your account in the mobile app.</li>
           <li>Open {siteConfig.accountDeletionPath}.</li>
           <li>Confirm deletion when prompted.</li>
+          <li>Track request status in-app while support verifies completion.</li>
         </ul>
         <p className="inline-note">
           If you do not yet see a Delete account option in the app, use the

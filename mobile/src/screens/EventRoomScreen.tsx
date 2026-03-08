@@ -22,6 +22,7 @@ import { InlineErrorCard } from '../components/InlineErrorCard';
 import { LiveLogo } from '../components/LiveLogo';
 import { Screen } from '../components/Screen';
 import { Typography } from '../components/Typography';
+import { ReminderStatusNotice } from '../features/events/components/ReminderStatusNotice';
 import {
   fetchEventNotificationState,
   fetchEventLibraryItemById,
@@ -37,11 +38,22 @@ import {
   setEventNotificationSubscription,
 } from '../lib/api/data';
 import { prefetchPrayerAudio } from '../lib/api/functions';
+import { submitModerationReport } from '../lib/api/safety';
 import {
   buildEventInviteMessage,
   buildEventInviteUrl,
   buildEventShareMessage,
 } from '../lib/invite';
+import {
+  describeNotificationPermissionState,
+  describeReminderState,
+} from '../features/profile/services/accountTrustPresentation';
+import {
+  getDeviceNotificationPermissionState,
+  openSystemNotificationSettings,
+  requestNotificationPermissionAndRegisterCurrentDevice,
+} from '../lib/notifications/registerDevicePushTarget';
+import { buildSupportRouteMetadata } from '../lib/support';
 import { supabase } from '../lib/supabase';
 import { sectionGap } from '../theme/layout';
 import { colors, motion, radii, roomAtmosphere, spacing } from '../theme/tokens';
@@ -225,6 +237,11 @@ export function EventRoomScreen() {
   const [presenceUserId, setPresenceUserId] = useState<string | null>(null);
   const [reminderEnabled, setReminderEnabled] = useState(false);
   const [updatingReminder, setUpdatingReminder] = useState(false);
+  const [notificationPermissionState, setNotificationPermissionState] = useState<
+    'denied' | 'granted' | 'undetermined' | 'unsupported'
+  >('unsupported');
+  const [syncingNotificationPermission, setSyncingNotificationPermission] = useState(false);
+  const [reportingRoom, setReportingRoom] = useState(false);
   const [resolvedOccurrenceId, setResolvedOccurrenceId] = useState(routeOccurrenceId);
   const [resolvedRoomId, setResolvedRoomId] = useState(routeRoomId);
 
@@ -315,12 +332,27 @@ export function EventRoomScreen() {
     : hasEnded
       ? 'This room has ended. You can still review details and reminders.'
       : `You are early. This shared room goes live in ${startCountdownPhrase}.`;
-  const reminderActionLabel = updatingReminder
+  const reminderActionLabel = updatingReminder || syncingNotificationPermission
     ? 'Saving reminder...'
     : reminderEnabled
       ? 'Reminder on'
       : 'Save reminder';
   const canToggleReminder = Boolean(presenceUserId && resolvedOccurrenceId);
+  const reminderState = useMemo(
+    () =>
+      describeReminderState({
+        permissionState: notificationPermissionState,
+        reminderEnabled,
+      }),
+    [notificationPermissionState, reminderEnabled],
+  );
+  const notificationPermission = useMemo(
+    () => describeNotificationPermissionState(notificationPermissionState),
+    [notificationPermissionState],
+  );
+  const reminderStatusActionLabel = reminderEnabled
+    ? (notificationPermission.actionLabel ?? undefined)
+    : undefined;
   const isVeryCompactHeight = viewportHeight <= 700;
   const isCompactHeight = viewportHeight <= 780;
   const isNarrowWidth = viewportWidth <= 360;
@@ -920,6 +952,28 @@ export function EventRoomScreen() {
   }, []);
 
   useEffect(() => {
+    let active = true;
+
+    void getDeviceNotificationPermissionState()
+      .then((state) => {
+        if (!active) {
+          return;
+        }
+        setNotificationPermissionState(state);
+      })
+      .catch(() => {
+        if (!active) {
+          return;
+        }
+        setNotificationPermissionState('unsupported');
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
     if (!presenceUserId || !resolvedOccurrenceId) {
       setReminderEnabled(false);
       return;
@@ -954,23 +1008,64 @@ export function EventRoomScreen() {
       return;
     }
 
+    const nextEnabled = !reminderEnabled;
     setUpdatingReminder(true);
     try {
+      if (nextEnabled && notificationPermissionState === 'undetermined') {
+        setSyncingNotificationPermission(true);
+        const permissionResult = await requestNotificationPermissionAndRegisterCurrentDevice({
+          registrationSource: 'event_room_reminder',
+        });
+        setNotificationPermissionState(permissionResult.permissionState);
+      }
+
       await setEventNotificationSubscription({
-        enabled: !reminderEnabled,
+        enabled: nextEnabled,
         subscriptionKey: `occurrence:${resolvedOccurrenceId}`,
         userId: presenceUserId,
       });
-      setReminderEnabled((current) => !current);
+      setReminderEnabled(nextEnabled);
       setError(null);
     } catch (nextError) {
       setError(
         toEventRoomSafeErrorMessage(nextError, 'Could not update reminder for this live room.'),
       );
     } finally {
+      setSyncingNotificationPermission(false);
       setUpdatingReminder(false);
     }
-  }, [presenceUserId, reminderEnabled, resolvedOccurrenceId]);
+  }, [notificationPermissionState, presenceUserId, reminderEnabled, resolvedOccurrenceId]);
+
+  const reportCurrentRoom = useCallback(async () => {
+    const targetRoomId = resolvedRoomId?.trim();
+    if (!targetRoomId) {
+      setError('Room reporting is unavailable until room identity is resolved.');
+      return;
+    }
+
+    setReportingRoom(true);
+    try {
+      const supportRouting = buildSupportRouteMetadata({
+        source: 'moderation_report',
+        surface: 'event_room',
+      });
+
+      await submitModerationReport({
+        details: `Live room report submitted for room ${targetRoomId}.`,
+        reasonCode: 'other',
+        supportMetadata: supportRouting.supportMetadata,
+        supportRoute: supportRouting.supportRoute,
+        targetId: targetRoomId,
+        targetType: 'room',
+      });
+      setError(null);
+      Alert.alert('Report submitted', 'This live room report was added to moderation review.');
+    } catch (nextError) {
+      setError(toEventRoomSafeErrorMessage(nextError, 'Could not submit room report.'));
+    } finally {
+      setReportingRoom(false);
+    }
+  }, [resolvedRoomId]);
 
   const onSelectInviteOption = useCallback(
     (option: string) => {
@@ -1029,6 +1124,36 @@ export function EventRoomScreen() {
     ],
   );
 
+  const onReminderStatusAction = useCallback(() => {
+    if (notificationPermission.action === 'request_permission') {
+      setSyncingNotificationPermission(true);
+      void requestNotificationPermissionAndRegisterCurrentDevice({
+        registrationSource: 'event_room_reminder',
+      })
+        .then((result) => {
+          setNotificationPermissionState(result.permissionState);
+        })
+        .catch((nextError) => {
+          setError(
+            toEventRoomSafeErrorMessage(
+              nextError,
+              'Could not enable notifications on this device.',
+            ),
+          );
+        })
+        .finally(() => {
+          setSyncingNotificationPermission(false);
+        });
+      return;
+    }
+
+    if (notificationPermission.action === 'open_settings') {
+      void openSystemNotificationSettings().catch(() => {
+        setError('Could not open notification settings.');
+      });
+    }
+  }, [notificationPermission.action]);
+
   return (
     <Screen
       ambientSource={ambientAnimation}
@@ -1060,13 +1185,43 @@ export function EventRoomScreen() {
             isVeryCompactHeight && styles.topActionsRowVeryCompact,
           ]}
         >
-          <View
-            style={[
-              styles.iconSpacer,
-              useCompactLayout && styles.iconSpacerCompact,
-              isVeryCompactHeight && styles.iconSpacerVeryCompact,
+          <Pressable
+            accessibilityHint="Reports this live room to moderation."
+            accessibilityLabel="Report live room"
+            accessibilityRole="button"
+            disabled={reportingRoom}
+            hitSlop={6}
+            onPress={() => {
+              Alert.alert(
+                'Report live room',
+                'Submit this live room to moderation review?',
+                [
+                  {
+                    style: 'cancel',
+                    text: 'Cancel',
+                  },
+                  {
+                    text: 'Report',
+                    onPress: () => {
+                      void reportCurrentRoom();
+                    },
+                  },
+                ],
+              );
+            }}
+            style={({ pressed }) => [
+              styles.iconCircleButton,
+              useCompactLayout && styles.iconCircleButtonCompact,
+              isVeryCompactHeight && styles.iconCircleButtonVeryCompact,
+              !reduceMotionEnabled && pressed && styles.iconButtonPressed,
             ]}
-          />
+          >
+            <MaterialCommunityIcons
+              color={colors.textPrimary}
+              name={reportingRoom ? 'progress-clock' : 'alert-circle-outline'}
+              size={22}
+            />
+          </Pressable>
 
           <Pressable
             accessibilityHint="Closes this live room."
@@ -1177,11 +1332,11 @@ export function EventRoomScreen() {
                 accessibilityLabel={reminderActionLabel}
                 accessibilityRole="button"
                 accessibilityState={{
-                  busy: updatingReminder,
-                  disabled: !canToggleReminder || updatingReminder,
+                  busy: updatingReminder || syncingNotificationPermission,
+                  disabled: !canToggleReminder || updatingReminder || syncingNotificationPermission,
                   selected: reminderEnabled,
                 }}
-                disabled={!canToggleReminder || updatingReminder}
+                disabled={!canToggleReminder || updatingReminder || syncingNotificationPermission}
                 onPress={() => {
                   void toggleOccurrenceReminder();
                 }}
@@ -1206,6 +1361,18 @@ export function EventRoomScreen() {
                   {reminderActionLabel}
                 </Typography>
               </Pressable>
+            ) : null}
+            {resolvedOccurrenceId ? (
+              <ReminderStatusNotice
+                {...(reminderStatusActionLabel
+                  ? {
+                      actionLabel: reminderStatusActionLabel,
+                      onAction: onReminderStatusAction,
+                    }
+                  : {})}
+                detail={reminderState.detail}
+                tone={reminderState.tone}
+              />
             ) : null}
           </View>
         </Animated.View>
