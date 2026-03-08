@@ -498,7 +498,7 @@ begin
     v_invitation.id,
     null
   )
-  on conflict (circle_id, user_id) do update
+  on conflict on constraint circle_members_pkey do update
   set status = 'active'::public.circle_membership_status,
       left_at = null,
       source_invitation_id = excluded.source_invitation_id,

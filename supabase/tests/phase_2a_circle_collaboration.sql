@@ -77,6 +77,8 @@ create temporary table _phase2a_ctx (
   value text not null
 ) on commit drop;
 
+grant all on table _phase2a_ctx to authenticated;
+
 set local role authenticated;
 select set_config(
   'request.jwt.claim.sub',

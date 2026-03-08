@@ -248,7 +248,7 @@ immutable
 as $$
   select case
     when public.normalize_external_contact(p_contact) is null then null
-    else encode(digest(public.normalize_external_contact(p_contact), 'sha256'), 'hex')
+    else encode(extensions.digest(public.normalize_external_contact(p_contact), 'sha256'), 'hex')
   end;
 $$;
 

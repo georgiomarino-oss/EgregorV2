@@ -63,3 +63,10 @@ Phase 2A implements the redesign-doc canonical collaboration foundation:
 2. Legacy circle membership operations continue to work, now backed by status-aware membership rows.
 3. Existing profile RLS remains strict; search/member display uses controlled security-definer RPC output.
 4. Existing data is preserved; no destructive renames or hard table replacements in this phase.
+
+## Verification Corrections (2026-03-08)
+
+1. `hash_external_contact` must call `extensions.digest(...)` instead of unqualified `digest(...)` so invite creation works under Supabase extension schema/search-path behavior.
+2. `accept_circle_invite` must upsert memberships with `on conflict on constraint circle_members_pkey` to avoid PL/pgSQL output-column name ambiguity in the `returns table` function.
+3. The SQL integration test harness (`phase_2a_circle_collaboration.sql`) requires explicit temp-table privileges before `set local role authenticated`; `_phase2a_ctx` is now granted to `authenticated`.
+4. Forward-fix migration `20260308123000_phase_2a_circle_collaboration_fixes.sql` is added so already-migrated environments receive the function fixes without requiring historical migration edits.
