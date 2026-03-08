@@ -134,7 +134,7 @@ export function useGlobePoints({
         kind:
           occurrence.status === 'live'
             ? 'live'
-            : occurrence.source === 'news'
+            : occurrence.category.toLowerCase().startsWith('news')
               ? 'news'
               : 'scheduled',
       });

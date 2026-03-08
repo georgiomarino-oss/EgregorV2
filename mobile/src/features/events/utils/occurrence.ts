@@ -1,11 +1,9 @@
 import { formatEventDateTimeInDeviceZone } from '../../../lib/dateTime';
-import type { AppEvent, EventLibraryItem, NewsDrivenEventItem } from '../../../lib/api/data';
+import type { AppEvent } from '../../../lib/api/data';
 import type { EventStatusChip, ScheduledEventOccurrence } from '../types';
 
-const HORIZON_DAYS = 7;
 const SOON_WINDOW_MS = 2 * 60 * 60 * 1000;
 const NEXT_24_HOURS_MS = 24 * 60 * 60 * 1000;
-const SCHEDULE_HOURS_UTC = [0, 3, 6, 9, 12, 15, 18, 21];
 
 export function normalizeCategory(category: string | null | undefined) {
   const value = category?.trim();
@@ -86,128 +84,6 @@ export function addLocalDays(date: Date, days: number) {
   return nextDate;
 }
 
-function buildTemplateScheduleSlots(nowDate: Date) {
-  const nowMillis = nowDate.getTime();
-  const horizonMillis = nowMillis + HORIZON_DAYS * 24 * 60 * 60 * 1000;
-  const lookbackMillis = 2 * 60 * 60 * 1000;
-  const slots: Date[] = [];
-
-  const startOfTodayUtc = new Date(
-    Date.UTC(nowDate.getUTCFullYear(), nowDate.getUTCMonth(), nowDate.getUTCDate(), 0, 0, 0, 0),
-  );
-
-  for (let dayOffset = 0; dayOffset < HORIZON_DAYS; dayOffset += 1) {
-    for (const hour of SCHEDULE_HOURS_UTC) {
-      const startAt = new Date(startOfTodayUtc);
-      startAt.setUTCDate(startOfTodayUtc.getUTCDate() + dayOffset);
-      startAt.setUTCHours(hour, 0, 0, 0);
-
-      if (startAt.getTime() < nowMillis - lookbackMillis) {
-        continue;
-      }
-
-      if (startAt.getTime() > horizonMillis) {
-        continue;
-      }
-
-      slots.push(startAt);
-    }
-  }
-
-  return slots;
-}
-
-export function buildScheduledTemplateEvents(
-  items: EventLibraryItem[],
-  nowDate: Date,
-): ScheduledEventOccurrence[] {
-  const slots = buildTemplateScheduleSlots(nowDate);
-  if (slots.length === 0 || items.length === 0) {
-    return [];
-  }
-
-  const sortedItems = items.slice().sort((left, right) => left.title.localeCompare(right.title));
-  const maxCount = Math.min(sortedItems.length, slots.length);
-  const nowMillis = nowDate.getTime();
-  const occurrences: ScheduledEventOccurrence[] = [];
-
-  for (let index = 0; index < maxCount; index += 1) {
-    const item = sortedItems[index];
-    const slot = slots[index];
-    const startsAt = (slot ?? new Date(nowDate.getTime() + index * 60 * 60 * 1000)).toISOString();
-    const status = toOccurrenceStatus(startsAt, item?.durationMinutes ?? 10, nowMillis);
-    if (!status) {
-      continue;
-    }
-
-    occurrences.push({
-      body: item?.body ?? '',
-      category: normalizeCategory(item?.category),
-      durationMinutes: item?.durationMinutes ?? 10,
-      favoriteKey: item?.id ?? `template-${index}`,
-      occurrenceKey: `template:${item?.id}:${startsAt}`,
-      script: item?.script ?? item?.body ?? '',
-      source: 'template',
-      startsAt,
-      startsCount: item?.startsCount ?? 0,
-      status,
-      title: item?.title ?? 'Manifestation Event',
-    });
-  }
-
-  return occurrences;
-}
-
-export function buildScheduledNewsEvents(
-  items: NewsDrivenEventItem[],
-  nowDate: Date,
-): ScheduledEventOccurrence[] {
-  const nowMillis = nowDate.getTime();
-  const horizonMillis = nowMillis + HORIZON_DAYS * 24 * 60 * 60 * 1000;
-  const occurrences: ScheduledEventOccurrence[] = [];
-
-  for (const item of items) {
-    if (!item.countryCode && !item.locationHint) {
-      continue;
-    }
-
-    const startMillis = new Date(item.startsAt).getTime();
-    if (!Number.isFinite(startMillis)) {
-      continue;
-    }
-
-    const endMillis = startMillis + item.durationMinutes * 60 * 1000;
-    if (endMillis <= nowMillis || startMillis > horizonMillis) {
-      continue;
-    }
-
-    const status = toOccurrenceStatus(item.startsAt, item.durationMinutes, nowMillis);
-    if (!status) {
-      continue;
-    }
-
-    occurrences.push({
-      body: item.summary,
-      category: `News - ${normalizeCategory(item.category)}`,
-      countryCode: item.countryCode,
-      durationMinutes: item.durationMinutes,
-      favoriteKey: item.id,
-      locationHint: item.locationHint,
-      occurrenceKey: `news:${item.id}:${item.startsAt}`,
-      script: item.script,
-      source: 'news',
-      startsAt: item.startsAt,
-      startsCount: 0,
-      status,
-      title: item.title,
-    });
-  }
-
-  return occurrences.sort(
-    (left, right) => new Date(left.startsAt).getTime() - new Date(right.startsAt).getTime(),
-  );
-}
-
 export function isWithinNext24Hours(startIso: string, durationMinutes: number, nowMillis: number) {
   const startMillis = new Date(startIso).getTime();
   if (!Number.isFinite(startMillis)) {
@@ -221,11 +97,15 @@ export function isWithinNext24Hours(startIso: string, durationMinutes: number, n
 
 export function statusLabel(status: EventStatusChip) {
   if (status === 'live') {
-    return 'Live';
+    return 'Live now';
   }
 
-  if (status === 'soon') {
-    return 'Soon';
+  if (status === 'waiting_room' || status === 'soon') {
+    return 'Waiting room';
+  }
+
+  if (status === 'ended') {
+    return 'Ended';
   }
 
   return 'Upcoming';

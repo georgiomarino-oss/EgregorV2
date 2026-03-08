@@ -18,3 +18,19 @@ psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/phase_2b_circle_inv
 ```
 
 This script also runs in a transaction and ends with `ROLLBACK`.
+
+Phase 3A canonical event domain test:
+
+```bash
+psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/phase_3a_event_domain.sql
+```
+
+This script also runs in a transaction and ends with `ROLLBACK`.
+
+Phase 3A idempotence/authz/timezone verification test:
+
+```bash
+psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/phase_3a_event_domain_idempotence.sql
+```
+
+This script also runs in a transaction and ends with `ROLLBACK`.

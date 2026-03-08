@@ -156,17 +156,56 @@ export function parseInviteCaptureTarget(urlValue: string): CaptureNavigationTar
     };
   }
 
+  if (normalizedPath.startsWith('live/occurrence/')) {
+    const occurrenceId = normalizedPath.slice('live/occurrence/'.length).trim();
+    if (!occurrenceId) {
+      return null;
+    }
+
+    return {
+      eventDetailsParams: {
+        occurrenceId,
+      },
+      eventsRoute: 'EventDetails',
+      root: 'main',
+      tab: 'EventsTab',
+    };
+  }
+
+  if (normalizedPath.startsWith('room/')) {
+    const roomId = normalizedPath.slice('room/'.length).trim();
+    if (!roomId) {
+      return null;
+    }
+
+    return {
+      eventRoomParams: {
+        roomId,
+      },
+      eventsRoute: 'EventRoom',
+      root: 'main',
+      tab: 'EventsTab',
+    };
+  }
+
   if (normalizedPath === 'events/room') {
     const eventRoomParams: NonNullable<CaptureNavigationTarget['eventRoomParams']> = {};
     const allowAudioGeneration = parseBoolean(parsedUrl.searchParams.get('allowAudioGeneration'));
     const durationMinutes = parseDurationMinutes(parsedUrl.searchParams.get('durationMinutes'));
+    const occurrenceId = parsedUrl.searchParams.get('occurrenceId')?.trim();
+    const occurrenceKey = parsedUrl.searchParams.get('occurrenceKey')?.trim();
+    const roomId = parsedUrl.searchParams.get('roomId')?.trim();
+    const hasCanonicalTarget = Boolean(occurrenceId || occurrenceKey || roomId);
     const eventId = parsedUrl.searchParams.get('eventId')?.trim();
     const rawEventSource = parsedUrl.searchParams.get('eventSource');
     const eventSource =
-      rawEventSource === 'news' || rawEventSource === 'template' ? rawEventSource : undefined;
+      rawEventSource === 'news' ||
+      rawEventSource === 'template' ||
+      rawEventSource === 'occurrence'
+        ? rawEventSource
+        : undefined;
     const eventTemplateId = parsedUrl.searchParams.get('eventTemplateId')?.trim();
     const eventTitle = parsedUrl.searchParams.get('eventTitle')?.trim();
-    const occurrenceKey = parsedUrl.searchParams.get('occurrenceKey')?.trim();
     const scheduledStartAt = parsedUrl.searchParams.get('scheduledStartAt')?.trim();
     const scriptText = parsedUrl.searchParams.get('scriptText')?.trim();
     if (allowAudioGeneration !== undefined) {
@@ -175,20 +214,26 @@ export function parseInviteCaptureTarget(urlValue: string): CaptureNavigationTar
     if (durationMinutes !== undefined) {
       eventRoomParams.durationMinutes = durationMinutes;
     }
-    if (eventId) {
+    if (!hasCanonicalTarget && eventId) {
       eventRoomParams.eventId = eventId;
     }
-    if (eventSource) {
+    if (!hasCanonicalTarget && eventSource) {
       eventRoomParams.eventSource = eventSource;
     }
-    if (eventTemplateId) {
+    if (!hasCanonicalTarget && eventTemplateId) {
       eventRoomParams.eventTemplateId = eventTemplateId;
     }
     if (eventTitle) {
       eventRoomParams.eventTitle = eventTitle;
     }
+    if (occurrenceId) {
+      eventRoomParams.occurrenceId = occurrenceId;
+    }
     if (occurrenceKey) {
       eventRoomParams.occurrenceKey = occurrenceKey;
+    }
+    if (roomId) {
+      eventRoomParams.roomId = roomId;
     }
     if (scheduledStartAt) {
       eventRoomParams.scheduledStartAt = scheduledStartAt;
@@ -244,9 +289,12 @@ interface SoloInviteInput {
 interface EventInviteInput {
   durationMinutes?: number;
   eventId?: string;
+  eventSource?: 'news' | 'occurrence' | 'template';
   eventTemplateId?: string;
   eventTitle: string;
+  occurrenceId?: string;
   occurrenceKey?: string;
+  roomId?: string;
   scheduledStartAt?: string;
 }
 
@@ -260,12 +308,29 @@ export function buildSoloInviteUrl(input: SoloInviteInput) {
 }
 
 export function buildEventInviteUrl(input: EventInviteInput) {
+  const roomId = input.roomId?.trim();
+  if (roomId) {
+    return buildInviteUrl(`room/${roomId}`, {});
+  }
+
+  const occurrenceId = input.occurrenceId?.trim();
+  if (occurrenceId) {
+    return buildInviteUrl(`live/occurrence/${occurrenceId}`, {});
+  }
+
+  const hasCanonicalTarget = Boolean(
+    occurrenceId || input.occurrenceKey?.trim() || roomId,
+  );
+
   return buildInviteUrl('events/room', {
     durationMinutes: input.durationMinutes,
-    eventId: input.eventId,
-    eventTemplateId: input.eventTemplateId,
+    eventId: hasCanonicalTarget ? undefined : input.eventId,
+    eventSource: hasCanonicalTarget ? undefined : input.eventSource,
+    eventTemplateId: hasCanonicalTarget ? undefined : input.eventTemplateId,
     eventTitle: input.eventTitle,
+    occurrenceId: input.occurrenceId,
     occurrenceKey: input.occurrenceKey,
+    roomId: input.roomId,
     scheduledStartAt: input.scheduledStartAt,
   });
 }
@@ -292,20 +357,20 @@ export function buildSoloShareMessage(input: SoloInviteInput) {
 export function buildEventInviteMessage(
   input: EventInviteInput & { members: PrayerCircleMember[] },
 ) {
-  const title = input.eventTitle.trim() || 'Live Event Room';
+  const title = input.eventTitle.trim() || 'Live Room';
   const inviteUrl = buildEventInviteUrl(input);
   const memberSummary = summarizeCircleMembers(input.members);
 
   return [
-    `Join me in a live Egregor event: ${title}.`,
+    `Join me in a live Egregor room: ${title}.`,
     memberSummary,
     `Invite link: ${inviteUrl}`,
   ].join('\n');
 }
 
 export function buildEventShareMessage(input: EventInviteInput) {
-  const title = input.eventTitle.trim() || 'Live Event Room';
+  const title = input.eventTitle.trim() || 'Live Room';
   const inviteUrl = buildEventInviteUrl(input);
 
-  return [`Join me in a live Egregor event: ${title}.`, `Invite link: ${inviteUrl}`].join('\n');
+  return [`Join me in a live Egregor room: ${title}.`, `Invite link: ${inviteUrl}`].join('\n');
 }

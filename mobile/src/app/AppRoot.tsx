@@ -66,8 +66,10 @@ const linking: LinkingOptions<RootStackParamList> = {
                 parse: {
                   eventId: (value: string) => value,
                   eventTemplateId: (value: string) => value,
+                  occurrenceId: (value: string) => value,
+                  roomId: (value: string) => value,
                 },
-                path: 'events/details',
+                path: ['events/details', 'live/occurrence/:occurrenceId'],
               },
               EventRoom: {
                 parse: {
@@ -78,14 +80,18 @@ const linking: LinkingOptions<RootStackParamList> = {
                   },
                   eventId: (value: string) => value,
                   eventSource: (value: string) =>
-                    value === 'news' || value === 'template' ? value : undefined,
+                    value === 'news' || value === 'template' || value === 'occurrence'
+                      ? value
+                      : undefined,
                   eventTemplateId: (value: string) => value,
                   eventTitle: (value: string) => value,
+                  occurrenceId: (value: string) => value,
                   occurrenceKey: (value: string) => value,
+                  roomId: (value: string) => value,
                   scheduledStartAt: (value: string) => value,
                   scriptText: (value: string) => value,
                 },
-                path: 'events/room',
+                path: ['events/room', 'room/:roomId'],
               },
               EventsHome: 'events',
             },

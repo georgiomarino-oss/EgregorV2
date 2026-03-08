@@ -97,7 +97,7 @@ export function EventsHeader({
               variant="Caption"
               weight="bold"
             >
-              Global Pulse
+              Live
             </Typography>
           </View>
           <Typography
@@ -125,13 +125,13 @@ export function EventsHeader({
           color={eventsSurface.hero.subtitle}
           style={styles.body}
         >
-          Discover live intention rooms around the globe and join the next wave as it forms.
+          Join real shared rooms in rhythm with your local timezone and global moments.
         </Typography>
 
         <View style={styles.statsRow}>
           <StatPill label="Live now" value={liveCount.toString()} />
-          <StatPill label="Upcoming" value={upcomingCount.toString()} />
-          <StatPill label="Joined" value={participantCount.toString()} />
+          <StatPill label="Next up" value={upcomingCount.toString()} />
+          <StatPill label="Active" value={participantCount.toString()} />
         </View>
 
         <Typography allowFontScaling={false} color={eventsSurface.hero.timezone} variant="Caption">

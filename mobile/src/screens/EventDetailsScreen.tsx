@@ -1,6 +1,6 @@
 import ambientAnimation from '../../assets/lottie/cosmic-ambient.json';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Easing, StyleSheet, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { StyleSheet, View } from 'react-native';
 
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
@@ -10,7 +10,6 @@ import { ActionPanel } from '../components/ActionPanel';
 import type { EventsStackParamList } from '../app/navigation/types';
 import { Button } from '../components/Button';
 import { EmptyStateCard } from '../components/EmptyStateCard';
-import { LoadingStateCard } from '../components/LoadingStateCard';
 import { RetryPanel } from '../components/RetryPanel';
 import { Screen } from '../components/Screen';
 import { Typography } from '../components/Typography';
@@ -18,350 +17,212 @@ import {
   EventDetailsHero,
   type EventDetailsStatusTone,
 } from '../features/events/components/EventDetailsHero';
+import { EventDetailsMeta } from '../features/events/components/EventDetailsMeta';
+import { resolveLiveOccurrenceState, statusLabel } from '../features/events/services/liveModel';
 import {
-  EventDetailsMeta,
-  type EventDetailsMetaItem,
-} from '../features/events/components/EventDetailsMeta';
-import { toOccurrenceStatus } from '../features/events/utils/occurrence';
-import { useReducedMotion } from '../features/rooms/hooks/useReducedMotion';
-import {
-  fetchEventById,
-  fetchEventLibraryItemById,
-  fetchEvents,
-  getCachedEventById,
-  getCachedEventLibraryItemById,
-  getCachedEvents,
-  type AppEvent,
-  type EventLibraryItem,
+  fetchEventNotificationState,
+  getEventOccurrenceByJoinTarget,
+  setEventNotificationSubscription,
+  type CanonicalEventOccurrence,
 } from '../lib/api/data';
 import { formatEventDateTimeInDeviceZone } from '../lib/dateTime';
 import { supabase } from '../lib/supabase';
 import { sectionGap } from '../theme/layout';
-import { handoffSurface, motion, radii, spacing } from '../theme/tokens';
+import { handoffSurface, radii, spacing } from '../theme/tokens';
 
-type EventsNavigation = NativeStackNavigationProp<EventsStackParamList, 'EventDetails'>;
 type EventDetailsRoute = RouteProp<EventsStackParamList, 'EventDetails'>;
+type EventsNavigation = NativeStackNavigationProp<EventsStackParamList, 'EventDetails'>;
 
-function isEventLiveNow(event: Pick<AppEvent, 'durationMinutes' | 'startsAt'>) {
-  const startsAtMillis = new Date(event.startsAt).getTime();
-  if (!Number.isFinite(startsAtMillis)) {
-    return false;
-  }
+function normalizeJoinTarget(route: EventDetailsRoute) {
+  const occurrenceId = route.params?.occurrenceId?.trim() || '';
+  const roomId = route.params?.roomId?.trim() || '';
+  const eventId = route.params?.eventId?.trim() || '';
 
-  const endsAtMillis = startsAtMillis + Math.max(1, event.durationMinutes) * 60 * 1000;
-  const nowMillis = Date.now();
-  return nowMillis >= startsAtMillis && nowMillis < endsAtMillis;
+  return {
+    legacyEventId: !occurrenceId && !roomId ? eventId : '',
+    occurrenceId,
+    roomId,
+  };
 }
 
-function formatEventStartLabel(event: AppEvent) {
-  if (isEventLiveNow(event)) {
-    return 'Live now';
-  }
-
-  return (
-    formatEventDateTimeInDeviceZone(event.startsAt, {
-      includeDate: true,
-      includeTimeZone: true,
-    }) ?? 'Scheduled'
-  );
+function toAccessSummary(occurrence: CanonicalEventOccurrence) {
+  const scope =
+    occurrence.visibilityScope === 'circle'
+      ? 'Circle'
+      : occurrence.visibilityScope === 'private'
+        ? 'Private'
+        : 'Global';
+  const accessMode =
+    occurrence.accessMode === 'circle_members'
+      ? 'Circle members'
+      : occurrence.accessMode === 'invite_only'
+        ? 'Invite only'
+        : 'Open';
+  return `${scope} | ${accessMode}`;
 }
 
-function summarizeText(value: string | null | undefined, fallback: string) {
-  const normalized = value?.trim();
-  if (!normalized) {
-    return fallback;
+function toContextLabel(occurrence: CanonicalEventOccurrence) {
+  if (occurrence.visibilityScope === 'circle') {
+    return 'Circle live room';
   }
-
-  if (normalized.length <= 170) {
-    return normalized;
+  if (occurrence.accessMode === 'invite_only') {
+    return 'Invite live room';
   }
-
-  return `${normalized.slice(0, 167).trimEnd()}...`;
+  return 'Global live room';
 }
 
-function toStatusTone(event: AppEvent): EventDetailsStatusTone {
-  const occurrenceStatus = toOccurrenceStatus(event.startsAt, event.durationMinutes, Date.now());
-  if (occurrenceStatus) {
-    return occurrenceStatus;
+function toHeroTone(state: ReturnType<typeof resolveLiveOccurrenceState>): EventDetailsStatusTone {
+  if (state === 'live') {
+    return 'live';
   }
-
+  if (state === 'waiting_room') {
+    return 'soon';
+  }
+  if (state === 'upcoming') {
+    return 'upcoming';
+  }
   return 'scheduled';
-}
-
-function toStatusLabel(statusTone: EventDetailsStatusTone) {
-  if (statusTone === 'live') {
-    return 'Live';
-  }
-  if (statusTone === 'soon') {
-    return 'Soon';
-  }
-  if (statusTone === 'upcoming') {
-    return 'Upcoming';
-  }
-  if (statusTone === 'template') {
-    return 'Template';
-  }
-
-  return 'Scheduled';
-}
-
-function toContextLabel(statusTone: EventDetailsStatusTone) {
-  if (statusTone === 'live') {
-    return 'Collective room active';
-  }
-  if (statusTone === 'soon') {
-    return 'Starting soon';
-  }
-  if (statusTone === 'upcoming') {
-    return 'Upcoming collective room';
-  }
-  if (statusTone === 'template') {
-    return 'Collective intention template';
-  }
-
-  return 'Scheduled collective room';
-}
-
-function toEventDetailsSafeErrorMessage(error: unknown, fallback: string) {
-  const rawMessage =
-    error instanceof Error ? error.message : typeof error === 'string' ? error : fallback;
-  const normalized = rawMessage.toLowerCase();
-
-  let safeMessage = fallback;
-
-  if (
-    normalized.includes('schema cache') ||
-    normalized.includes('relation') ||
-    normalized.includes('does not exist')
-  ) {
-    safeMessage = 'Event details are temporarily unavailable. Please try again shortly.';
-  } else if (
-    normalized.includes('permission') ||
-    normalized.includes('forbidden') ||
-    normalized.includes('not allowed')
-  ) {
-    safeMessage = 'You do not have access to this event.';
-  } else if (
-    normalized.includes('not found') &&
-    (normalized.includes('event') || normalized.includes('template'))
-  ) {
-    safeMessage = 'This event is no longer available.';
-  }
-
-  if (__DEV__ && safeMessage !== rawMessage) {
-    console.warn('[Egregor][EventDetails]', safeMessage, rawMessage);
-  }
-
-  return safeMessage;
 }
 
 export function EventDetailsScreen() {
   const navigation = useNavigation<EventsNavigation>();
   const route = useRoute<EventDetailsRoute>();
-  const reduceMotionEnabled = useReducedMotion();
-  const sectionSettle = useMemo(() => new Animated.Value(0), []);
-
-  const initialEventTemplate = route.params?.eventTemplateId
-    ? (getCachedEventLibraryItemById(route.params.eventTemplateId) ?? null)
-    : null;
-  const initialEvent = route.params?.eventId
-    ? (getCachedEventById(route.params.eventId) ?? null)
-    : ((getCachedEvents(1)?.[0] ?? null) as AppEvent | null);
-  const hasInitialDetailsRef = useRef(Boolean(initialEventTemplate || initialEvent));
-
-  const [event, setEvent] = useState<AppEvent | null>(initialEventTemplate ? null : initialEvent);
-  const [eventTemplate, setEventTemplate] = useState<EventLibraryItem | null>(initialEventTemplate);
-  const [loading, setLoading] = useState(!(initialEventTemplate || initialEvent));
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const isCapturePreview = __DEV__ && route.params?.eventId?.trim() === '__capture__';
-
   const palette = handoffSurface.eventDetails;
 
-  useEffect(() => {
-    if (reduceMotionEnabled) {
-      sectionSettle.setValue(1);
+  const [occurrence, setOccurrence] = useState<CanonicalEventOccurrence | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [reminderEnabled, setReminderEnabled] = useState(false);
+  const [updatingReminder, setUpdatingReminder] = useState(false);
+
+  const resolvedState = useMemo(() => {
+    if (!occurrence) {
+      return 'upcoming';
+    }
+    return resolveLiveOccurrenceState(occurrence, Date.now());
+  }, [occurrence]);
+
+  const loadOccurrence = useCallback(async () => {
+    const target = normalizeJoinTarget(route);
+    if (!target.occurrenceId && !target.roomId && !target.legacyEventId) {
+      setOccurrence(null);
+      setError('Invalid live link: no occurrence target was provided.');
+      setLoading(false);
       return;
     }
 
-    sectionSettle.setValue(0);
-    const animation = Animated.timing(sectionSettle, {
-      duration: motion.durationMs.slow,
-      easing: Easing.out(Easing.cubic),
-      toValue: 1,
-      useNativeDriver: true,
-    });
-    animation.start();
-
-    return () => {
-      animation.stop();
-    };
-  }, [reduceMotionEnabled, sectionSettle]);
-
-  const getSectionStyle = (index: number) => {
-    if (reduceMotionEnabled) {
-      return styles.noMotion;
-    }
-
-    return {
-      opacity: sectionSettle.interpolate({
-        inputRange: [0, 1],
-        outputRange: [0.88, 1],
-      }),
-      transform: [
-        {
-          translateY: sectionSettle.interpolate({
-            inputRange: [0, 1],
-            outputRange: [10 + index * 4, 0],
-          }),
-        },
-      ],
-    };
-  };
-
-  const loadEvent = useCallback(async () => {
-    if (!hasInitialDetailsRef.current) {
-      setLoading(true);
-    }
-
     try {
-      if (isCapturePreview) {
-        const startsAt = new Date(Date.now() + 14 * 60 * 1000).toISOString();
-        setEvent({
-          countryCode: 'GB',
-          description:
-            'A guided collective room for coherent intention, healing focus, and calm global presence.',
-          durationMinutes: 12,
-          hostNote:
-            'Breathe into shared stillness, hold one clear intention, and let the field settle together.',
-          id: '__capture__',
-          participants: 142,
-          region: 'Europe',
-          startsAt,
-          status: 'scheduled',
-          subtitle: 'Collective resonance session',
-          title: 'Global Harmonic Prayer',
-          visibility: 'public',
-        });
-        setEventTemplate(null);
-        hasInitialDetailsRef.current = true;
-        setError(null);
+      const { data, error: userError } = await supabase.auth.getUser();
+      const authenticatedUserId = userError ? null : (data.user?.id?.trim() ?? null);
+      setUserId(authenticatedUserId);
+
+      const resolved = await getEventOccurrenceByJoinTarget({
+        ...(target.legacyEventId ? { legacyEventId: target.legacyEventId } : {}),
+        ...(target.occurrenceId ? { occurrenceId: target.occurrenceId } : {}),
+        ...(target.roomId ? { roomId: target.roomId } : {}),
+      });
+
+      if (!resolved) {
+        setOccurrence(null);
+        setError('This live room is unavailable or you no longer have access.');
         return;
       }
 
-      const eventTemplateId = route.params?.eventTemplateId;
-      if (eventTemplateId) {
-        const selectedTemplate = await fetchEventLibraryItemById(eventTemplateId);
-        setEventTemplate(selectedTemplate);
-        setEvent(null);
-
-        if (!selectedTemplate) {
-          setError('Event template not found.');
-        } else {
-          hasInitialDetailsRef.current = true;
-          setError(null);
-        }
-
-        return;
-      }
-
-      const eventId = route.params?.eventId;
-      const selectedEvent = eventId ? await fetchEventById(eventId) : null;
-
-      if (selectedEvent) {
-        setEvent(selectedEvent);
-        setEventTemplate(null);
-        hasInitialDetailsRef.current = true;
-        setError(null);
-        return;
-      }
-
-      const fallbackEvents = await fetchEvents(1);
-      setEvent(fallbackEvents[0] ?? null);
-      setEventTemplate(null);
-      hasInitialDetailsRef.current = true;
+      setOccurrence(resolved);
       setError(null);
+
+      if (authenticatedUserId) {
+        const notificationState = await fetchEventNotificationState(authenticatedUserId);
+        const key = `occurrence:${resolved.occurrenceId}`;
+        setReminderEnabled(
+          notificationState.subscribedAll || notificationState.subscriptionKeys.includes(key),
+        );
+      } else {
+        setReminderEnabled(false);
+      }
     } catch (nextError) {
-      setError(
-        toEventDetailsSafeErrorMessage(nextError, 'Unable to load event details right now.'),
-      );
+      setError(nextError instanceof Error ? nextError.message : 'Could not load live details.');
     } finally {
       setLoading(false);
     }
-  }, [
-    hasInitialDetailsRef,
-    isCapturePreview,
-    route.params?.eventId,
-    route.params?.eventTemplateId,
-  ]);
+  }, [route]);
 
-  const refreshEvent = useCallback(async () => {
+  const refreshOccurrence = useCallback(async () => {
     setRefreshing(true);
     try {
-      await loadEvent();
+      await loadOccurrence();
     } finally {
       setRefreshing(false);
     }
-  }, [loadEvent]);
+  }, [loadOccurrence]);
 
-  useEffect(() => {
-    void loadEvent();
-  }, [loadEvent]);
-
-  useEffect(() => {
-    if (isCapturePreview) {
+  const toggleReminder = useCallback(async () => {
+    if (!userId || !occurrence) {
+      setError('Sign in to save reminders for this live room.');
       return;
     }
 
+    const key = `occurrence:${occurrence.occurrenceId}`;
+    setUpdatingReminder(true);
+    try {
+      await setEventNotificationSubscription({
+        enabled: !reminderEnabled,
+        subscriptionKey: key,
+        userId,
+      });
+      setReminderEnabled((current) => !current);
+      setError(null);
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : 'Could not update reminder.');
+    } finally {
+      setUpdatingReminder(false);
+    }
+  }, [occurrence, reminderEnabled, userId]);
+
+  useEffect(() => {
+    void loadOccurrence();
+  }, [loadOccurrence]);
+
+  useEffect(() => {
     const interval = setInterval(() => {
-      void loadEvent();
+      void loadOccurrence();
     }, 15000);
 
     return () => {
       clearInterval(interval);
     };
-  }, [isCapturePreview, loadEvent]);
+  }, [loadOccurrence]);
 
-  useEffect(() => {
-    if (isCapturePreview) {
-      return;
-    }
+  const startsLabel = occurrence
+    ? (formatEventDateTimeInDeviceZone(occurrence.startsAtUtc, {
+        includeDate: true,
+        includeTimeZone: true,
+      }) ?? 'Scheduled')
+    : 'Scheduled';
 
-    const channel = supabase
-      .channel('event-details-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'events' }, () => {
-        void loadEvent();
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'event_participants' }, () => {
-        void loadEvent();
-      })
-      .subscribe();
-
-    return () => {
-      void supabase.removeChannel(channel);
-    };
-  }, [isCapturePreview, loadEvent]);
-
-  const eventStatusTone = event ? toStatusTone(event) : null;
-  const eventMetaItems: EventDetailsMetaItem[] = event
+  const metaItems = occurrence
     ? [
-        { label: 'Starts', value: formatEventStartLabel(event) },
-        { label: 'Participants', value: event.participants.toString() },
-        { label: 'Duration', value: `${event.durationMinutes} min` },
+        { label: 'Starts', value: startsLabel },
+        { label: 'State', value: statusLabel(resolvedState) },
+        { label: 'Duration', value: `${occurrence.durationMinutes} min` },
         {
-          label: 'Region',
-          value: event.region?.trim() || event.countryCode?.trim() || 'Global',
+          label: 'Participants',
+          value: `${occurrence.activeParticipantCount} active | ${occurrence.participantCount} total`,
         },
+        { label: 'Access', value: toAccessSummary(occurrence) },
       ]
     : [];
 
-  const templateMetaItems: EventDetailsMetaItem[] = eventTemplate
-    ? [
-        { label: 'Category', value: eventTemplate.category ?? 'Manifestation' },
-        { label: 'Duration', value: `${eventTemplate.durationMinutes} min` },
-        { label: 'Energy', value: `${eventTemplate.startsCount} starts` },
-      ]
-    : [];
+  const primaryActionLabel =
+    resolvedState === 'live'
+      ? 'Join now'
+      : resolvedState === 'waiting_room'
+        ? 'Enter waiting room'
+        : resolvedState === 'upcoming'
+          ? 'Open waiting room'
+          : 'Ended';
 
   return (
     <Screen
@@ -369,256 +230,134 @@ export function EventDetailsScreen() {
       contentContainerStyle={styles.content}
       variant="events"
     >
-      {loading && !event && !eventTemplate ? (
-        <LoadingStateCard
-          subtitle="Preparing event details and room context."
-          title="Loading event details"
+      {occurrence ? (
+        <>
+          <EventDetailsHero
+            contextLabel={toContextLabel(occurrence)}
+            statusLabel={statusLabel(resolvedState)}
+            statusTone={toHeroTone(resolvedState)}
+            subtitle={
+              occurrence.seriesDescription?.trim() ||
+              occurrence.seriesPurpose?.trim() ||
+              'Join this shared intention room.'
+            }
+            title={occurrence.seriesName}
+          />
+
+          <EventDetailsMeta
+            heading="Live room details"
+            helper="Every join action resolves to this occurrence and room identity."
+            items={metaItems}
+          />
+
+          <ActionPanel
+            accessibilityHint="Contains primary actions for this live room."
+            accessibilityLabel="Live room actions"
+            accessibilityRole="summary"
+            backgroundColor={palette.actions.panelBackground}
+            borderColor={palette.actions.panelBorder}
+          >
+            <Typography allowFontScaling={false} color={palette.actions.hintText} variant="Caption">
+              {resolvedState === 'live'
+                ? 'The room is active now.'
+                : resolvedState === 'ended'
+                  ? 'This session has ended.'
+                  : 'You can enter the waiting room before the session goes live.'}
+            </Typography>
+
+            <Button
+              disabled={resolvedState === 'ended'}
+              onPress={() => {
+                const roomScriptText =
+                  occurrence.seriesPurpose?.trim() || occurrence.seriesDescription?.trim() || '';
+                const roomParams: EventsStackParamList['EventRoom'] = {
+                  durationMinutes: occurrence.durationMinutes,
+                  eventTitle: occurrence.seriesName,
+                  occurrenceId: occurrence.occurrenceId,
+                  occurrenceKey: occurrence.occurrenceKey,
+                  scheduledStartAt: occurrence.startsAtUtc,
+                  ...(occurrence.roomId ? { roomId: occurrence.roomId } : {}),
+                  ...(roomScriptText ? { scriptText: roomScriptText } : {}),
+                };
+                navigation.navigate('EventRoom', roomParams);
+              }}
+              title={primaryActionLabel}
+              variant="gold"
+            />
+
+            <Button
+              loading={updatingReminder}
+              onPress={() => {
+                void toggleReminder();
+              }}
+              title={reminderEnabled ? 'Remove reminder' : 'Save reminder'}
+              variant="secondary"
+            />
+
+            <Button
+              loading={refreshing}
+              onPress={() => {
+                void refreshOccurrence();
+              }}
+              title="Refresh"
+              variant="secondary"
+            />
+          </ActionPanel>
+        </>
+      ) : null}
+
+      {!loading && !occurrence ? (
+        <EmptyStateCard
+          action={
+            <Button
+              loading={refreshing}
+              onPress={() => {
+                void refreshOccurrence();
+              }}
+              title="Try again"
+              variant="secondary"
+            />
+          }
+          backgroundColor={palette.meta.detailBackground}
+          body="This deep link does not resolve to a valid live occurrence or room."
+          bodyColor={palette.meta.detailBody}
+          borderColor={palette.meta.detailBorder}
+          iconBackgroundColor={palette.hero.badgeBackground}
+          iconBorderColor={palette.hero.badgeBorder}
+          iconName="calendar-search"
+          iconTint={palette.hero.badgeText}
+          title="Live target unavailable"
+          titleColor={palette.meta.detailTitle}
         />
       ) : null}
 
-      {eventTemplate ? (
-        <>
-          <EventDetailsHero
-            contextLabel={toContextLabel('template')}
-            statusLabel={toStatusLabel('template')}
-            statusTone="template"
-            subtitle={summarizeText(
-              eventTemplate.body,
-              'Template script ready for a guided collective intention room.',
-            )}
-            title={eventTemplate.title}
-          />
-
-          <Animated.View style={getSectionStyle(0)}>
-            <EventDetailsMeta
-              heading="Template details"
-              helper="Review the template before opening a collective room."
-              items={templateMetaItems}
-            />
-          </Animated.View>
-
-          <Animated.View style={getSectionStyle(1)}>
-            <ActionPanel
-              accessibilityHint="Contains available actions for this event template."
-              accessibilityLabel="Template actions"
-              accessibilityRole="summary"
-              backgroundColor={palette.actions.panelBackground}
-              borderColor={palette.actions.panelBorder}
-            >
-              <Typography
-                allowFontScaling={false}
-                color={palette.actions.hintText}
-                variant="Caption"
-              >
-                This template can be used to open a room from the events surface.
-              </Typography>
-              <Button
-                loading={refreshing}
-                onPress={() => {
-                  void refreshEvent();
-                }}
-                title="Refresh"
-                variant="secondary"
-              />
-            </ActionPanel>
-          </Animated.View>
-
-          <Animated.View
-            style={[
-              styles.detailPanel,
-              {
-                backgroundColor: palette.meta.detailBackground,
-                borderColor: palette.meta.detailBorder,
-              },
-              getSectionStyle(2),
-            ]}
-          >
-            <Typography
-              allowFontScaling={false}
-              color={palette.meta.detailTitle}
-              variant="H2"
-              weight="bold"
-            >
-              Manifestation script
-            </Typography>
-            <Typography allowFontScaling={false} color={palette.meta.detailBody} variant="Body">
-              {eventTemplate.script}
-            </Typography>
-          </Animated.View>
-        </>
-      ) : null}
-
-      {event ? (
-        <>
-          <EventDetailsHero
-            contextLabel={toContextLabel(eventStatusTone ?? 'scheduled')}
-            statusLabel={toStatusLabel(eventStatusTone ?? 'scheduled')}
-            statusTone={eventStatusTone ?? 'scheduled'}
-            subtitle={summarizeText(
-              event.description,
-              'Join this collective event and contribute your intention.',
-            )}
-            title={event.title}
-          />
-
-          <Animated.View style={getSectionStyle(0)}>
-            <EventDetailsMeta
-              heading="Room context"
-              helper="Review timing and room context before entering the collective field."
-              items={eventMetaItems}
-            />
-          </Animated.View>
-
-          <Animated.View style={getSectionStyle(1)}>
-            <ActionPanel
-              accessibilityHint="Contains actions to join or refresh this event room."
-              accessibilityLabel="Event room actions"
-              accessibilityRole="summary"
-              backgroundColor={palette.actions.panelBackground}
-              borderColor={palette.actions.panelBorder}
-            >
-              <View
-                style={[
-                  styles.readinessChip,
-                  {
-                    backgroundColor: palette.actions.readinessBackground,
-                    borderColor: palette.actions.readinessBorder,
-                  },
-                ]}
-              >
-                <Typography
-                  allowFontScaling={false}
-                  color={palette.actions.readinessText}
-                  variant="Caption"
-                  weight="bold"
-                >
-                  {eventStatusTone === 'live'
-                    ? 'Room is active now'
-                    : eventStatusTone === 'soon'
-                      ? 'Room starts soon'
-                      : 'Room ready to open'}
-                </Typography>
-              </View>
-
-              <Typography
-                allowFontScaling={false}
-                color={palette.actions.hintText}
-                variant="Caption"
-              >
-                Opening this room keeps your current event handoff intact.
-              </Typography>
-
-              <Button
-                onPress={() =>
-                  navigation.navigate('EventRoom', {
-                    eventId: event.id,
-                    eventTitle: event.title,
-                  })
-                }
-                title={isEventLiveNow(event) ? 'Join live room' : 'Open room'}
-                variant="gold"
-              />
-              <Button
-                loading={refreshing}
-                onPress={() => {
-                  void refreshEvent();
-                }}
-                title="Refresh"
-                variant="secondary"
-              />
-            </ActionPanel>
-          </Animated.View>
-
-          <Animated.View
-            style={[
-              styles.detailPanel,
-              {
-                backgroundColor: palette.meta.detailBackground,
-                borderColor: palette.meta.detailBorder,
-              },
-              getSectionStyle(2),
-            ]}
-          >
-            <Typography
-              allowFontScaling={false}
-              color={palette.meta.detailTitle}
-              variant="H2"
-              weight="bold"
-            >
-              Host note
-            </Typography>
-            <Typography allowFontScaling={false} color={palette.meta.detailBody} variant="Body">
-              {event.hostNote?.trim() || 'Host note will appear here when available.'}
-            </Typography>
-          </Animated.View>
-
-          <Animated.View
-            style={[
-              styles.detailPanel,
-              {
-                backgroundColor: palette.meta.detailBackground,
-                borderColor: palette.meta.detailBorder,
-              },
-              getSectionStyle(3),
-            ]}
-          >
-            <Typography
-              allowFontScaling={false}
-              color={palette.meta.detailTitle}
-              variant="H2"
-              weight="bold"
-            >
-              Access
-            </Typography>
-            <Typography allowFontScaling={false} color={palette.meta.detailBody} variant="Body">
-              {event.visibility === 'public'
-                ? 'Public room. Anyone can join with an account.'
-                : 'Private room. Invite required.'}
-            </Typography>
-          </Animated.View>
-        </>
-      ) : null}
-
-      {!loading && !event && !eventTemplate ? (
-        <Animated.View style={[getSectionStyle(0)]}>
-          <EmptyStateCard
-            action={
-              <Button
-                loading={refreshing}
-                onPress={() => {
-                  void refreshEvent();
-                }}
-                title="Try again"
-                variant="secondary"
-              />
-            }
-            backgroundColor={palette.meta.detailBackground}
-            body="Create or schedule an event in Supabase, then return to this screen."
-            bodyColor={palette.meta.detailBody}
-            borderColor={palette.meta.detailBorder}
-            iconBackgroundColor={palette.hero.badgeBackground}
-            iconBorderColor={palette.hero.badgeBorder}
-            iconName="calendar-search"
-            iconTint={palette.hero.badgeText}
-            title="No event selected"
-            titleColor={palette.meta.detailTitle}
-          />
-        </Animated.View>
-      ) : null}
-
       {error ? (
-        <Animated.View style={[getSectionStyle(4)]}>
-          <RetryPanel
-            loading={refreshing}
-            message={error}
-            onRetry={() => {
-              void refreshEvent();
-            }}
-            retryLabel="Retry"
-            style={styles.errorCard}
-            title="Unable to load event details"
-          />
-        </Animated.View>
+        <RetryPanel
+          loading={refreshing}
+          message={error}
+          onRetry={() => {
+            void refreshOccurrence();
+          }}
+          retryLabel="Retry"
+          style={styles.errorCard}
+          title="Unable to load live details"
+        />
+      ) : null}
+
+      {loading ? (
+        <View
+          style={[
+            styles.loadingCard,
+            {
+              backgroundColor: palette.meta.detailBackground,
+              borderColor: palette.meta.detailBorder,
+            },
+          ]}
+        >
+          <Typography allowFontScaling={false} color={palette.meta.detailBody} variant="Body">
+            Loading live room details...
+          </Typography>
+        </View>
       ) : null}
     </Screen>
   );
@@ -628,24 +367,13 @@ const styles = StyleSheet.create({
   content: {
     gap: sectionGap,
   },
-  detailPanel: {
+  errorCard: {
+    minHeight: 44,
+  },
+  loadingCard: {
     borderRadius: radii.xl,
     borderWidth: 1,
-    gap: spacing.sm,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.md,
-  },
-  errorCard: {
-    minHeight: 42,
-  },
-  noMotion: {
-    opacity: 1,
-  },
-  readinessChip: {
-    alignSelf: 'flex-start',
-    borderRadius: radii.pill,
-    borderWidth: 1,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 4,
   },
 });

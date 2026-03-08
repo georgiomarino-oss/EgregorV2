@@ -2,108 +2,61 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import {
   fetchActiveEventUsers,
-  fetchEventLibraryItems,
-  fetchEvents,
-  fetchNewsDrivenEvents,
   getCachedActiveEventUsers,
-  getCachedEventLibraryItems,
-  getCachedEvents,
-  getCachedNewsDrivenEvents,
+  getCachedEventFeed,
+  listEventFeed,
   type ActiveEventUserPresence,
-  type AppEvent,
-  type EventLibraryItem,
-  type NewsDrivenEventItem,
+  type CanonicalEventOccurrence,
 } from '../../../lib/api/data';
 import { supabase } from '../../../lib/supabase';
 
 interface UseEventsDataResult {
   activePresence: ActiveEventUserPresence[];
-  error: string | null;
-  events: AppEvent[];
-  libraryError: string | null;
-  libraryItems: EventLibraryItem[];
-  libraryLoading: boolean;
+  activePresenceError: string | null;
   loading: boolean;
-  newsItems: NewsDrivenEventItem[];
-  newsSyncError: string | null;
   nowTick: number;
+  occurrences: CanonicalEventOccurrence[];
+  occurrencesError: string | null;
   reloadActivePresence: () => Promise<void>;
-  reloadEvents: () => Promise<void>;
-  reloadLibrary: () => Promise<void>;
-  reloadNewsEvents: () => Promise<void>;
+  reloadOccurrences: () => Promise<void>;
 }
 
 export function useEventsData(): UseEventsDataResult {
-  const initialEventsRef = useRef<AppEvent[]>(getCachedEvents(120) ?? []);
-  const initialLibraryItemsRef = useRef<EventLibraryItem[]>(getCachedEventLibraryItems(80) ?? []);
-  const initialNewsItemsRef = useRef<NewsDrivenEventItem[]>(getCachedNewsDrivenEvents(80) ?? []);
-  const initialPresenceRef = useRef<ActiveEventUserPresence[]>(getCachedActiveEventUsers(15) ?? []);
-  const hasHydratedEventsRef = useRef(initialEventsRef.current.length > 0);
-  const hasHydratedLibraryRef = useRef(initialLibraryItemsRef.current.length > 0);
-
-  const [events, setEvents] = useState<AppEvent[]>(initialEventsRef.current);
-  const [loading, setLoading] = useState(initialEventsRef.current.length === 0);
-  const [error, setError] = useState<string | null>(null);
-
-  const [libraryItems, setLibraryItems] = useState<EventLibraryItem[]>(
-    initialLibraryItemsRef.current,
+  const initialOccurrencesRef = useRef<CanonicalEventOccurrence[]>(
+    getCachedEventFeed({ horizonHours: 120 }) ?? [],
   );
-  const [libraryLoading, setLibraryLoading] = useState(initialLibraryItemsRef.current.length === 0);
-  const [libraryError, setLibraryError] = useState<string | null>(null);
+  const initialPresenceRef = useRef<ActiveEventUserPresence[]>(getCachedActiveEventUsers(15) ?? []);
+  const hasHydratedOccurrencesRef = useRef(initialOccurrencesRef.current.length > 0);
 
-  const [newsItems, setNewsItems] = useState<NewsDrivenEventItem[]>(initialNewsItemsRef.current);
-  const [newsSyncError, setNewsSyncError] = useState<string | null>(null);
+  const [occurrences, setOccurrences] = useState<CanonicalEventOccurrence[]>(
+    initialOccurrencesRef.current,
+  );
+  const [loading, setLoading] = useState(initialOccurrencesRef.current.length === 0);
+  const [occurrencesError, setOccurrencesError] = useState<string | null>(null);
 
   const [activePresence, setActivePresence] = useState<ActiveEventUserPresence[]>(
     initialPresenceRef.current,
   );
+  const [activePresenceError, setActivePresenceError] = useState<string | null>(null);
 
   const [nowTick, setNowTick] = useState(() => Date.now());
 
-  const reloadEvents = useCallback(async () => {
-    if (!hasHydratedEventsRef.current) {
+  const reloadOccurrences = useCallback(async () => {
+    if (!hasHydratedOccurrencesRef.current) {
       setLoading(true);
     }
 
     try {
-      const nextEvents = await fetchEvents(120);
-      setEvents(nextEvents);
-      hasHydratedEventsRef.current = nextEvents.length > 0;
-      setError(null);
+      const nextOccurrences = await listEventFeed({ horizonHours: 120 });
+      setOccurrences(nextOccurrences);
+      hasHydratedOccurrencesRef.current = nextOccurrences.length > 0;
+      setOccurrencesError(null);
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : 'Failed to load events.');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  const reloadLibrary = useCallback(async () => {
-    if (!hasHydratedLibraryRef.current) {
-      setLibraryLoading(true);
-    }
-
-    try {
-      const nextLibraryItems = await fetchEventLibraryItems(80);
-      setLibraryItems(nextLibraryItems);
-      hasHydratedLibraryRef.current = nextLibraryItems.length > 0;
-      setLibraryError(null);
-    } catch (nextError) {
-      setLibraryError(
-        nextError instanceof Error ? nextError.message : 'Failed to load event library.',
+      setOccurrencesError(
+        nextError instanceof Error ? nextError.message : 'Failed to load live feed.',
       );
     } finally {
-      setLibraryLoading(false);
-    }
-  }, []);
-
-  const reloadNewsEvents = useCallback(async () => {
-    try {
-      const nextNewsItems = await fetchNewsDrivenEvents(80);
-      setNewsItems(nextNewsItems);
-      setNewsSyncError(null);
-    } catch {
-      setNewsItems([]);
-      setNewsSyncError('Could not load news-driven events.');
+      setLoading(false);
     }
   }, []);
 
@@ -111,17 +64,19 @@ export function useEventsData(): UseEventsDataResult {
     try {
       const nextPresence = await fetchActiveEventUsers(15);
       setActivePresence(nextPresence);
-    } catch {
+      setActivePresenceError(null);
+    } catch (nextError) {
       setActivePresence([]);
+      setActivePresenceError(
+        nextError instanceof Error ? nextError.message : 'Failed to load live presence.',
+      );
     }
   }, []);
 
   useEffect(() => {
-    void reloadEvents();
-    void reloadLibrary();
-    void reloadNewsEvents();
+    void reloadOccurrences();
     void reloadActivePresence();
-  }, [reloadActivePresence, reloadEvents, reloadLibrary, reloadNewsEvents]);
+  }, [reloadActivePresence, reloadOccurrences]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -135,50 +90,47 @@ export function useEventsData(): UseEventsDataResult {
 
   useEffect(() => {
     const interval = setInterval(() => {
-      void reloadEvents();
-      void reloadNewsEvents();
+      void reloadOccurrences();
       void reloadActivePresence();
     }, 15000);
 
     return () => {
       clearInterval(interval);
     };
-  }, [reloadActivePresence, reloadEvents, reloadNewsEvents]);
+  }, [reloadActivePresence, reloadOccurrences]);
 
   useEffect(() => {
     const channel = supabase
-      .channel('events-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'events' }, () => {
-        void reloadEvents();
+      .channel('live-events-realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'event_occurrences' },
+        () => {
+          void reloadOccurrences();
+        },
+      )
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'rooms' }, () => {
+        void reloadOccurrences();
       })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'news_driven_events' }, () => {
-        void reloadNewsEvents();
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'event_participants' }, () => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'room_participants' }, () => {
+        void reloadOccurrences();
         void reloadActivePresence();
-        void reloadEvents();
       })
       .subscribe();
 
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [reloadActivePresence, reloadEvents, reloadNewsEvents]);
+  }, [reloadActivePresence, reloadOccurrences]);
 
   return {
     activePresence,
-    error,
-    events,
-    libraryError,
-    libraryItems,
-    libraryLoading,
+    activePresenceError,
     loading,
-    newsItems,
-    newsSyncError,
     nowTick,
+    occurrences,
+    occurrencesError,
     reloadActivePresence,
-    reloadEvents,
-    reloadLibrary,
-    reloadNewsEvents,
+    reloadOccurrences,
   };
 }

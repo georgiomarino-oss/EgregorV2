@@ -13,10 +13,10 @@ import type { OccurrenceSection, ScheduledEventOccurrence } from '../types';
 import { OccurrenceCard } from './OccurrenceCard';
 
 interface OccurrenceListProps {
-  libraryError: string | null;
-  libraryLoading: boolean;
+  feedError: string | null;
+  feedLoading: boolean;
   onOpenOccurrence: (occurrence: ScheduledEventOccurrence) => void;
-  onRetryLibrary: () => void;
+  onRetryFeed: () => void;
   onToggleOccurrenceSubscription: (occurrenceKey: string) => void;
   sections: OccurrenceSection[];
   subscribedAll: boolean;
@@ -25,10 +25,10 @@ interface OccurrenceListProps {
 }
 
 export function OccurrenceList({
-  libraryError,
-  libraryLoading,
+  feedError,
+  feedLoading,
   onOpenOccurrence,
-  onRetryLibrary,
+  onRetryFeed,
   onToggleOccurrenceSubscription,
   sections,
   subscribedAll,
@@ -51,24 +51,24 @@ export function OccurrenceList({
 
   const eventCardStep = useMemo(() => eventCardWidth + HOME_CARD_GAP, [eventCardWidth]);
 
-  if (libraryLoading) {
+  if (feedLoading) {
     return (
       <LoadingStateCard
         compact
         subtitle="Preparing upcoming and live occurrences."
-        title="Loading event feed"
+        title="Loading live feed"
       />
     );
   }
 
-  if (libraryError) {
+  if (feedError) {
     return (
       <RetryPanel
-        message={libraryError}
-        onRetry={onRetryLibrary}
+        message={feedError}
+        onRetry={onRetryFeed}
         retryLabel="Retry"
         style={styles.emptyStateCard}
-        title="Could not load event templates"
+        title="Could not load live feed"
       />
     );
   }
@@ -77,7 +77,7 @@ export function OccurrenceList({
     return (
       <EmptyStateCard
         backgroundColor={eventsSurface.occurrence.sectionBackground}
-        body="Try another category or switch filters."
+        body="No joinable rooms are available right now. Check back soon."
         bodyColor={eventsSurface.occurrence.itemBody}
         borderColor={eventsSurface.occurrence.sectionBorder}
         iconBackgroundColor={eventsSurface.occurrence.categoryBadgeBackground}
@@ -85,7 +85,7 @@ export function OccurrenceList({
         iconName="calendar-blank-outline"
         iconTint={eventsSurface.occurrence.categoryBadgeText}
         style={styles.emptyStateCard}
-        title="No events in this filter"
+        title="No live rooms yet"
         titleColor={eventsSurface.occurrence.itemTitle}
       />
     );
@@ -105,10 +105,20 @@ export function OccurrenceList({
                 variant="Body"
                 weight="bold"
               >
-                {`${section.items.length} events`}
+                {`${section.items.length} rooms`}
               </Typography>
             }
           />
+          {section.description ? (
+            <Typography
+              allowFontScaling={false}
+              color={eventsSurface.occurrence.itemMeta}
+              style={styles.sectionDescription}
+              variant="Caption"
+            >
+              {section.description}
+            </Typography>
+          ) : null}
 
           <ScrollView
             horizontal
@@ -136,8 +146,9 @@ export function OccurrenceList({
             showsHorizontalScrollIndicator={false}
           >
             {section.items.map((item, index) => {
-              const isSubscribed = subscribedAll || subscribedKeys.includes(item.occurrenceKey);
-              const isUpdatingBell = updatingSubscriptionKey === item.occurrenceKey;
+              const subscriptionKey = item.subscriptionKey ?? item.occurrenceKey;
+              const isSubscribed = subscribedAll || subscribedKeys.includes(subscriptionKey);
+              const isUpdatingBell = updatingSubscriptionKey === subscriptionKey;
 
               return (
                 <OccurrenceCard
@@ -146,7 +157,7 @@ export function OccurrenceList({
                   isUpdatingBell={isUpdatingBell}
                   item={item}
                   onOpen={() => onOpenOccurrence(item)}
-                  onToggleSubscription={() => onToggleOccurrenceSubscription(item.occurrenceKey)}
+                  onToggleSubscription={() => onToggleOccurrenceSubscription(subscriptionKey)}
                   orderIndex={index}
                   width={eventCardWidth}
                 />
@@ -214,5 +225,8 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.sm,
+  },
+  sectionDescription: {
+    marginTop: -2,
   },
 });

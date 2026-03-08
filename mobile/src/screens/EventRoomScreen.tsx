@@ -23,9 +23,10 @@ import { LiveLogo } from '../components/LiveLogo';
 import { Screen } from '../components/Screen';
 import { Typography } from '../components/Typography';
 import {
-  fetchEventById,
+  fetchEventNotificationState,
   fetchEventLibraryItemById,
   fetchEventsCircleMembers,
+  type EventJoinTarget,
   fetchEventRoomSnapshot,
   getCachedEventsCircleMembers,
   getCachedEventById,
@@ -33,6 +34,7 @@ import {
   joinEventRoom,
   leaveEventRoom,
   refreshEventPresence,
+  setEventNotificationSubscription,
 } from '../lib/api/data';
 import { prefetchPrayerAudio } from '../lib/api/functions';
 import {
@@ -154,20 +156,27 @@ export function EventRoomScreen() {
   const navigation = useNavigation<EventNavigation>();
   const route = useRoute<EventRoomRoute>();
   const { height: viewportHeight, width: viewportWidth } = useWindowDimensions();
+  const routeOccurrenceId = route.params?.occurrenceId?.trim() || '';
+  const routeEventTemplateId = route.params?.eventTemplateId?.trim() || '';
+  const routeOccurrenceKey = route.params?.occurrenceKey?.trim() || '';
+  const routeRoomId = route.params?.roomId?.trim() || '';
+  const rawRouteLegacyEventId = route.params?.eventId?.trim() || '';
+  const hasCanonicalIdentifiers = Boolean(routeOccurrenceId || routeOccurrenceKey || routeRoomId);
+  const routeLegacyEventId = hasCanonicalIdentifiers ? '' : rawRouteLegacyEventId;
   const routeScript = route.params?.scriptText?.trim() || '';
   const cachedTemplate =
-    !routeScript && route.params?.eventTemplateId
-      ? (getCachedEventLibraryItemById(route.params.eventTemplateId) ?? null)
+    !routeScript && !hasCanonicalIdentifiers && routeEventTemplateId
+      ? (getCachedEventLibraryItemById(routeEventTemplateId) ?? null)
       : null;
   const cachedEvent =
-    !routeScript && !cachedTemplate && route.params?.eventId
-      ? (getCachedEventById(route.params.eventId) ?? null)
+    !routeScript && !cachedTemplate && routeLegacyEventId
+      ? (getCachedEventById(routeLegacyEventId) ?? null)
       : null;
   const cachedEventScript = cachedEvent
     ? buildFallbackEventScript(cachedEvent.description, cachedEvent.hostNote)
     : '';
   const initialEventTitle =
-    route.params?.eventTitle?.trim() || cachedTemplate?.title || cachedEvent?.title || 'Event Room';
+    route.params?.eventTitle?.trim() || cachedTemplate?.title || cachedEvent?.title || 'Live Room';
   const initialEventBody =
     routeScript || cachedTemplate?.body || cachedEvent?.description?.trim() || '';
   const initialEventScript =
@@ -184,15 +193,39 @@ export function EventRoomScreen() {
     route.params?.scheduledStartAt?.trim() || cachedEvent?.startsAt || new Date().toISOString();
   const hasInitialEventData = Boolean(initialEventScript || cachedTemplate || cachedEvent);
   const allowAudioGeneration = route.params?.allowAudioGeneration === true;
-  const eventId = route.params?.eventId?.trim() || '';
-  const routeEventTemplateId = route.params?.eventTemplateId?.trim() || '';
-  const routeOccurrenceKey = route.params?.occurrenceKey?.trim() || '';
+  const joinTarget = useMemo<EventJoinTarget>(
+    () => ({
+      ...(routeLegacyEventId ? { legacyEventId: routeLegacyEventId } : {}),
+      ...(routeOccurrenceId ? { occurrenceId: routeOccurrenceId } : {}),
+      ...(routeOccurrenceKey ? { occurrenceKey: routeOccurrenceKey } : {}),
+      ...(routeRoomId ? { roomId: routeRoomId } : {}),
+    }),
+    [routeLegacyEventId, routeOccurrenceId, routeOccurrenceKey, routeRoomId],
+  );
+  const joinTargetKey = useMemo(
+    () =>
+      [
+        joinTarget.legacyEventId ?? '',
+        joinTarget.occurrenceId ?? '',
+        joinTarget.occurrenceKey ?? '',
+        joinTarget.roomId ?? '',
+      ].join('|'),
+    [joinTarget],
+  );
+  const hasCanonicalJoinTarget = Boolean(
+    routeLegacyEventId || routeOccurrenceId || routeOccurrenceKey || routeRoomId,
+  );
 
   const [selectedVoice, setSelectedVoice] = useState<(typeof VOICE_OPTIONS)[number]>('Dominic');
   const [isVoiceMenuOpen, setIsVoiceMenuOpen] = useState(false);
   const [isInviteOpen, setIsInviteOpen] = useState(false);
   const [loadingEvent, setLoadingEvent] = useState(!hasInitialEventData);
   const [error, setError] = useState<string | null>(null);
+  const [presenceUserId, setPresenceUserId] = useState<string | null>(null);
+  const [reminderEnabled, setReminderEnabled] = useState(false);
+  const [updatingReminder, setUpdatingReminder] = useState(false);
+  const [resolvedOccurrenceId, setResolvedOccurrenceId] = useState(routeOccurrenceId);
+  const [resolvedRoomId, setResolvedRoomId] = useState(routeRoomId);
 
   const [eventTitle, setEventTitle] = useState(initialEventTitle);
   const [, setEventBody] = useState(initialEventBody);
@@ -275,6 +308,18 @@ export function EventRoomScreen() {
   const startCountdownPhrase = hasValidStartMillis
     ? formatCountdownPhrase(remainingUntilStartMillis / 1000)
     : 'soon';
+  const roomStateLabel = isCollectiveRoomLive ? 'Live now' : hasEnded ? 'Ended' : 'Waiting room';
+  const roomStateDescription = isCollectiveRoomLive
+    ? 'This room is active. Join the shared session now.'
+    : hasEnded
+      ? 'This room has ended. You can still review details and reminders.'
+      : `You are early. This shared room goes live in ${startCountdownPhrase}.`;
+  const reminderActionLabel = updatingReminder
+    ? 'Saving reminder...'
+    : reminderEnabled
+      ? 'Reminder on'
+      : 'Save reminder';
+  const canToggleReminder = Boolean(presenceUserId && resolvedOccurrenceId);
   const isVeryCompactHeight = viewportHeight <= 700;
   const isCompactHeight = viewportHeight <= 780;
   const isNarrowWidth = viewportWidth <= 360;
@@ -288,10 +333,12 @@ export function EventRoomScreen() {
   useEffect(() => {
     presenceJoinedRef.current = false;
     presenceLeftRef.current = false;
-  }, [eventId]);
+    setResolvedOccurrenceId(routeOccurrenceId);
+    setResolvedRoomId(routeRoomId);
+  }, [joinTargetKey]);
 
   const leavePresence = useCallback(async () => {
-    if (!eventId || presenceLeftRef.current || !presenceJoinedRef.current) {
+    if (!hasCanonicalJoinTarget || presenceLeftRef.current || !presenceJoinedRef.current) {
       return;
     }
 
@@ -302,11 +349,11 @@ export function EventRoomScreen() {
 
     presenceLeftRef.current = true;
     try {
-      await leaveEventRoom(eventId, userId);
+      await leaveEventRoom(joinTarget, userId);
     } catch {
       // Presence cleanup is best-effort.
     }
-  }, [eventId]);
+  }, [hasCanonicalJoinTarget, joinTarget]);
 
   const onExitSession = useCallback(() => {
     closeAllSelectors();
@@ -334,12 +381,12 @@ export function EventRoomScreen() {
     closeAllSelectors();
 
     if (!hasStarted) {
-      setError('This event has not started yet.');
+      setError('This live room has not started yet.');
       return;
     }
 
     if (hasEnded) {
-      setError('This event has already ended.');
+      setError('This live room has already ended.');
       return;
     }
 
@@ -366,7 +413,7 @@ export function EventRoomScreen() {
   }, []);
 
   useEffect(() => {
-    if (!eventId) {
+    if (!hasCanonicalJoinTarget) {
       return;
     }
 
@@ -382,10 +429,11 @@ export function EventRoomScreen() {
       }
 
       eventPresenceUserIdRef.current = userId;
+      setPresenceUserId(userId);
       presenceLeftRef.current = false;
 
       try {
-        const snapshot = await fetchEventRoomSnapshot(eventId, userId);
+        const snapshot = await fetchEventRoomSnapshot(joinTarget, userId);
         if (!active) {
           return;
         }
@@ -401,20 +449,26 @@ export function EventRoomScreen() {
             snapshotEvent.startsAt ||
             new Date().toISOString(),
         );
+        if (snapshot.occurrenceId) {
+          setResolvedOccurrenceId(snapshot.occurrenceId);
+        }
+        if (snapshot.roomId) {
+          setResolvedRoomId(snapshot.roomId);
+        }
       } catch {
         // Non-blocking: room can still proceed with route-provided state.
       }
 
       try {
-        await joinEventRoom(eventId, userId);
+        await joinEventRoom(joinTarget, userId);
         presenceJoinedRef.current = true;
       } catch {
         // Best-effort presence; keep room usable even if this fails.
       }
 
       heartbeat = setInterval(() => {
-        void refreshEventPresence(eventId, userId);
-        void fetchEventRoomSnapshot(eventId, userId)
+        void refreshEventPresence(joinTarget, userId);
+        void fetchEventRoomSnapshot(joinTarget, userId)
           .then((snapshot) => {
             if (!active) {
               return;
@@ -438,7 +492,8 @@ export function EventRoomScreen() {
       void leavePresence();
     };
   }, [
-    eventId,
+    hasCanonicalJoinTarget,
+    joinTarget,
     leavePresence,
     route.params?.durationMinutes,
     route.params?.eventTitle,
@@ -454,6 +509,43 @@ export function EventRoomScreen() {
           setLoadingEvent(true);
         }
 
+        if (hasCanonicalJoinTarget) {
+          const snapshot = await fetchEventRoomSnapshot(joinTarget, '');
+          if (!active) {
+            return;
+          }
+
+          const snapshotEvent = snapshot.event;
+          const fallbackScript = buildFallbackEventScript(
+            snapshotEvent.description,
+            snapshotEvent.hostNote,
+          );
+
+          setEventTitle(route.params?.eventTitle?.trim() || snapshotEvent.title);
+          setEventBody(snapshotEvent.description?.trim() || 'Hold intention for this live room.');
+          setEventScript(
+            fallbackScript || 'We gather in shared intention and focus for this live room.',
+          );
+          setEventDurationMinutes(
+            route.params?.durationMinutes ?? snapshotEvent.durationMinutes ?? 10,
+          );
+          setEventStartAt(
+            route.params?.scheduledStartAt?.trim() ||
+              snapshotEvent.startsAt ||
+              new Date().toISOString(),
+          );
+          setParticipantCount(snapshot.joinedCount);
+          if (snapshot.occurrenceId) {
+            setResolvedOccurrenceId(snapshot.occurrenceId);
+          }
+          if (snapshot.roomId) {
+            setResolvedRoomId(snapshot.roomId);
+          }
+          hasInitialEventDataRef.current = true;
+          setError(null);
+          return;
+        }
+
         const nextRouteScript = route.params?.scriptText?.trim();
         if (nextRouteScript && nextRouteScript.length > 0) {
           if (!active) {
@@ -462,7 +554,7 @@ export function EventRoomScreen() {
 
           setEventScript(nextRouteScript);
           setEventBody(nextRouteScript);
-          setEventTitle(route.params?.eventTitle?.trim() || 'Event Room');
+          setEventTitle(route.params?.eventTitle?.trim() || 'Live Room');
           setEventDurationMinutes(route.params?.durationMinutes ?? 10);
           setEventStartAt(route.params?.scheduledStartAt?.trim() || new Date().toISOString());
           setParticipantCount(0);
@@ -493,37 +585,11 @@ export function EventRoomScreen() {
           }
         }
 
-        const eventId = route.params?.eventId?.trim();
-        if (eventId) {
-          const event = await fetchEventById(eventId);
-          if (!active) {
-            return;
-          }
-
-          if (event) {
-            const fallbackScript = buildFallbackEventScript(event.description, event.hostNote);
-
-            setEventTitle(route.params?.eventTitle?.trim() || event.title);
-            setEventBody(event.description?.trim() || 'Hold intention for this live room.');
-            setEventScript(
-              fallbackScript || 'We gather in shared intention and focus for this event.',
-            );
-            setEventDurationMinutes(route.params?.durationMinutes ?? event.durationMinutes ?? 10);
-            setEventStartAt(
-              route.params?.scheduledStartAt?.trim() || event.startsAt || new Date().toISOString(),
-            );
-            setParticipantCount(event.participants);
-            hasInitialEventDataRef.current = true;
-            setError(null);
-            return;
-          }
-        }
-
         if (!active) {
           return;
         }
 
-        setError('Could not find event details for this room.');
+        setError('Could not find live room details for this room.');
       } catch (nextError) {
         if (!active) {
           return;
@@ -542,10 +608,15 @@ export function EventRoomScreen() {
       active = false;
     };
   }, [
+    hasCanonicalJoinTarget,
+    joinTarget,
     route.params?.durationMinutes,
     route.params?.eventId,
+    route.params?.occurrenceId,
     route.params?.eventTemplateId,
     route.params?.eventTitle,
+    route.params?.occurrenceKey,
+    route.params?.roomId,
     route.params?.scheduledStartAt,
     route.params?.scriptText,
   ]);
@@ -847,6 +918,59 @@ export function EventRoomScreen() {
     }
   }, []);
 
+  useEffect(() => {
+    if (!presenceUserId || !resolvedOccurrenceId) {
+      setReminderEnabled(false);
+      return;
+    }
+
+    let active = true;
+    const loadReminderState = async () => {
+      try {
+        const state = await fetchEventNotificationState(presenceUserId);
+        if (!active) {
+          return;
+        }
+        const key = `occurrence:${resolvedOccurrenceId}`;
+        setReminderEnabled(state.subscribedAll || state.subscriptionKeys.includes(key));
+      } catch {
+        if (!active) {
+          return;
+        }
+        setReminderEnabled(false);
+      }
+    };
+
+    void loadReminderState();
+    return () => {
+      active = false;
+    };
+  }, [presenceUserId, resolvedOccurrenceId]);
+
+  const toggleOccurrenceReminder = useCallback(async () => {
+    if (!presenceUserId || !resolvedOccurrenceId) {
+      setError('Sign in to save reminders for this live room.');
+      return;
+    }
+
+    setUpdatingReminder(true);
+    try {
+      await setEventNotificationSubscription({
+        enabled: !reminderEnabled,
+        subscriptionKey: `occurrence:${resolvedOccurrenceId}`,
+        userId: presenceUserId,
+      });
+      setReminderEnabled((current) => !current);
+      setError(null);
+    } catch (nextError) {
+      setError(
+        toEventRoomSafeErrorMessage(nextError, 'Could not update reminder for this live room.'),
+      );
+    } finally {
+      setUpdatingReminder(false);
+    }
+  }, [presenceUserId, reminderEnabled, resolvedOccurrenceId]);
+
   const onSelectInviteOption = useCallback(
     (option: string) => {
       setIsInviteOpen(false);
@@ -858,16 +982,16 @@ export function EventRoomScreen() {
             durationMinutes: eventDurationMinutes,
             eventTitle,
             scheduledStartAt: eventStartAt,
-            ...(eventId ? { eventId } : {}),
-            ...(routeEventTemplateId ? { eventTemplateId: routeEventTemplateId } : {}),
+            ...(resolvedOccurrenceId ? { occurrenceId: resolvedOccurrenceId } : {}),
             ...(routeOccurrenceKey ? { occurrenceKey: routeOccurrenceKey } : {}),
+            ...(resolvedRoomId ? { roomId: resolvedRoomId } : {}),
           };
 
           if (normalizedOption === 'copy invite link') {
             await Clipboard.setStringAsync(buildEventInviteUrl(inviteContext));
             Alert.alert(
               'Invite link copied',
-              'The event room invite link is now on your clipboard.',
+              'The live room invite link is now on your clipboard.',
             );
             return;
           }
@@ -882,7 +1006,7 @@ export function EventRoomScreen() {
 
           await Share.share({
             message,
-            title: 'Invite to Live Event',
+            title: 'Invite to Live Room',
           });
         } catch (nextError) {
           const detail = toEventRoomSafeErrorMessage(
@@ -895,12 +1019,12 @@ export function EventRoomScreen() {
     },
     [
       eventDurationMinutes,
-      eventId,
       eventStartAt,
       eventTitle,
       resolveEventsCircleMembers,
-      routeEventTemplateId,
       routeOccurrenceKey,
+      resolvedOccurrenceId,
+      resolvedRoomId,
     ],
   );
 
@@ -943,8 +1067,8 @@ export function EventRoomScreen() {
           />
 
           <Pressable
-            accessibilityHint="Closes this event room."
-            accessibilityLabel="Close event room"
+            accessibilityHint="Closes this live room."
+            accessibilityLabel="Close live room"
             accessibilityRole="button"
             hitSlop={6}
             onPress={onExitSession}
@@ -1027,6 +1151,63 @@ export function EventRoomScreen() {
           </View>
         </Animated.View>
 
+        <Animated.View style={metaIntroStyle}>
+          <View style={styles.waitingStateCard}>
+            <Typography
+              allowFontScaling={false}
+              color={colors.textPrimary}
+              variant="Caption"
+              weight="bold"
+            >
+              {roomStateLabel}
+            </Typography>
+            <Typography
+              allowFontScaling={false}
+              color={colors.textSecondary}
+              style={styles.waitingStateBody}
+              variant="Caption"
+            >
+              {roomStateDescription}
+            </Typography>
+            {resolvedOccurrenceId ? (
+              <Pressable
+                accessibilityHint="Saves or removes reminder for this live room."
+                accessibilityLabel={reminderActionLabel}
+                accessibilityRole="button"
+                accessibilityState={{
+                  busy: updatingReminder,
+                  disabled: !canToggleReminder || updatingReminder,
+                  selected: reminderEnabled,
+                }}
+                disabled={!canToggleReminder || updatingReminder}
+                onPress={() => {
+                  void toggleOccurrenceReminder();
+                }}
+                style={({ pressed }) => [
+                  styles.reminderToggle,
+                  reminderEnabled && styles.reminderToggleActive,
+                  !reduceMotionEnabled && pressed && styles.selectorPressed,
+                ]}
+              >
+                <MaterialCommunityIcons
+                  color={reminderEnabled ? colors.textPrimary : colors.textSecondary}
+                  name={reminderEnabled ? 'bell-ring' : 'bell-outline'}
+                  size={16}
+                />
+                <Typography
+                  allowFontScaling={false}
+                  color={reminderEnabled ? colors.textPrimary : colors.textSecondary}
+                  style={styles.reminderToggleText}
+                  variant="Caption"
+                  weight="bold"
+                >
+                  {reminderActionLabel}
+                </Typography>
+              </Pressable>
+            ) : null}
+          </View>
+        </Animated.View>
+
         <Animated.View style={headerIntroStyle}>
           <View
             style={[
@@ -1037,7 +1218,7 @@ export function EventRoomScreen() {
           >
             <View style={styles.selectorContainer}>
               <Pressable
-                accessibilityHint="Opens voice options for this event room."
+                accessibilityHint="Opens voice options for this live room."
                 accessibilityLabel="Voice selection"
                 accessibilityRole="button"
                 accessibilityState={{ expanded: isVoiceMenuOpen }}
@@ -1166,8 +1347,8 @@ export function EventRoomScreen() {
           ]}
         >
           <Pressable
-            accessibilityHint="Starts or pauses event room audio."
-            accessibilityLabel={isRunning ? 'Pause event audio' : 'Play event audio'}
+            accessibilityHint="Starts or pauses live room audio."
+            accessibilityLabel={isRunning ? 'Pause live room audio' : 'Play live room audio'}
             accessibilityRole="button"
             accessibilityState={{
               busy: loadingAudio || loadingEvent,
@@ -1238,9 +1419,9 @@ export function EventRoomScreen() {
                 activeTimedWords={activeTimedParagraph?.words}
                 fallbackParagraph={fallbackParagraph}
                 loading={loadingEvent}
-                loadingMessage="Loading event details..."
+                loadingMessage="Loading live room details..."
                 maxScriptLines={MAX_SCRIPT_LINES}
-                noScriptMessage="No script available for this event."
+                noScriptMessage="No script available for this live room."
                 scriptSyncWrapStyle={[
                   styles.scriptSyncWrap,
                   useCompactLayout && styles.scriptSyncWrapCompact,
@@ -1665,6 +1846,26 @@ const styles = StyleSheet.create({
     backgroundColor: roomAtmosphere.collective.selectorBackground,
     borderColor: roomAtmosphere.collective.selectorBorder,
   },
+  reminderToggle: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: roomAtmosphere.collective.selectorBackground,
+    borderColor: roomAtmosphere.collective.selectorBorder,
+    borderRadius: radii.pill,
+    borderWidth: 0.7,
+    flexDirection: 'row',
+    gap: spacing.xxs,
+    minHeight: 30,
+    paddingHorizontal: spacing.xs,
+    paddingVertical: spacing.xxs,
+  },
+  reminderToggleActive: {
+    backgroundColor: roomAtmosphere.collective.liveChipBackground,
+    borderColor: roomAtmosphere.collective.liveChipBorder,
+  },
+  reminderToggleText: {
+    textTransform: 'none',
+  },
   minutesSelectorButton: {
     justifyContent: 'center',
   },
@@ -1920,5 +2121,17 @@ const styles = StyleSheet.create({
   voiceAvatarVeryCompact: {
     height: 18,
     width: 18,
+  },
+  waitingStateBody: {
+    maxWidth: '100%',
+  },
+  waitingStateCard: {
+    backgroundColor: roomAtmosphere.collective.selectorBackground,
+    borderColor: roomAtmosphere.collective.selectorBorder,
+    borderRadius: radii.lg,
+    borderWidth: 0.7,
+    gap: spacing.xxs,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
   },
 });

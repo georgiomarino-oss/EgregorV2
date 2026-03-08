@@ -185,7 +185,10 @@ export function EmbeddedGlobeCard({
     [allScheduledEvents],
   );
   const soonOccurrenceCount = useMemo(
-    () => allScheduledEvents.filter((occurrence) => occurrence.status === 'soon').length,
+    () =>
+      allScheduledEvents.filter(
+        (occurrence) => occurrence.status === 'soon' || occurrence.status === 'waiting_room',
+      ).length,
     [allScheduledEvents],
   );
   const uniqueParticipants = useMemo(() => {
@@ -1050,7 +1053,7 @@ export function EmbeddedGlobeCard({
     }
 
     if (fullscreenSelection.sourceType === 'occurrence') {
-      return fullscreenSelection.occurrence?.source === 'template';
+      return Boolean(fullscreenSelection.occurrence);
     }
 
     return Boolean(fullscreenSelection.event?.id);
@@ -1079,9 +1082,6 @@ export function EmbeddedGlobeCard({
     }
 
     if (fullscreenSelection.sourceType === 'occurrence' && fullscreenSelection.occurrence) {
-      if (fullscreenSelection.occurrence.source !== 'template') {
-        return;
-      }
       closeGlobeFullscreen();
       onOpenOccurrenceDetails(fullscreenSelection.occurrence);
       return;

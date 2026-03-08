@@ -10,17 +10,14 @@ import { AlertBanner } from '../components/AlertBanner';
 import { GhostButton } from '../components/AppButtons';
 import { Screen } from '../components/Screen';
 import { ToastCard } from '../components/ToastCard';
-import { getDeviceTimeZoneLabel } from '../lib/dateTime';
-import { spacing } from '../theme/tokens';
-import { EmbeddedGlobeCard } from '../features/events/components/EmbeddedGlobeCard';
-import { EventFilterBar } from '../features/events/components/EventFilterBar';
-import { EventsHeader } from '../features/events/components/EventsHeader';
 import { OccurrenceList } from '../features/events/components/OccurrenceList';
+import { EventsHeader } from '../features/events/components/EventsHeader';
 import { useEventNotifications } from '../features/events/hooks/useEventNotifications';
 import { useEventsData } from '../features/events/hooks/useEventsData';
 import { useOccurrenceFeed } from '../features/events/hooks/useOccurrenceFeed';
 import type { ScheduledEventOccurrence } from '../features/events/types';
-import type { AppEvent } from '../lib/api/data';
+import { getDeviceTimeZoneLabel } from '../lib/dateTime';
+import { spacing } from '../theme/tokens';
 
 type EventsNavigation = NativeStackNavigationProp<EventsStackParamList, 'EventsHome'>;
 
@@ -31,115 +28,68 @@ export function EventsScreen() {
 
   const {
     activePresence,
-    error,
-    events,
-    libraryError,
-    libraryItems,
-    libraryLoading,
+    activePresenceError,
     loading,
-    newsItems,
-    newsSyncError,
     nowTick,
-    reloadLibrary,
+    occurrences,
+    occurrencesError,
+    reloadOccurrences,
   } = useEventsData();
-
-  const {
-    allScheduledEvents,
-    categoryFilters,
-    liveFilterCount,
-    sections,
-    selectedCategory,
-    setSelectedCategory,
-    setTimeFilter,
-    timeFilter,
-    todayFilterCount,
-    tomorrowFilterCount,
-    visibleEvents,
-  } = useOccurrenceFeed({
-    events,
-    libraryItems,
-    newsItems,
-    nowTick,
-  });
 
   const { subscribedAll, subscribedKeys, toggleOccurrenceSubscription, updatingSubscriptionKey } =
     useEventNotifications({
       onError: setOperationError,
     });
 
-  const upcomingCount = useMemo(
-    () => allScheduledEvents.filter((occurrence) => occurrence.status !== 'live').length,
-    [allScheduledEvents],
-  );
+  const { allScheduledEvents, liveNowCount, next24HoursCount, sections } = useOccurrenceFeed({
+    nowTick,
+    occurrences,
+    subscribedAll,
+    subscribedKeys,
+  });
+
   const activeParticipantCount = useMemo(() => {
     const uniqueUsers = new Set(activePresence.map((entry) => entry.userId));
     return uniqueUsers.size;
   }, [activePresence]);
 
+  const uiError = operationError ?? occurrencesError ?? activePresenceError;
+
   const onOpenOccurrence = useCallback(
     (occurrence: ScheduledEventOccurrence) => {
-      const params: EventsStackParamList['EventRoom'] = {
-        allowAudioGeneration: false,
-        durationMinutes: occurrence.durationMinutes,
-        eventSource: occurrence.source,
-        eventTitle: occurrence.title,
-        occurrenceKey: occurrence.occurrenceKey,
-        scheduledStartAt: occurrence.startsAt,
-        scriptText: occurrence.script,
-        ...(occurrence.source === 'template' ? { eventTemplateId: occurrence.favoriteKey } : {}),
-      };
+      if (occurrence.status === 'live' || occurrence.status === 'waiting_room') {
+        const roomParams: EventsStackParamList['EventRoom'] = {
+          allowAudioGeneration: false,
+          durationMinutes: occurrence.durationMinutes,
+          eventTitle: occurrence.title,
+          occurrenceKey: occurrence.occurrenceKey,
+          scheduledStartAt: occurrence.startsAt,
+          scriptText: occurrence.script,
+          ...(occurrence.occurrenceId ? { occurrenceId: occurrence.occurrenceId } : {}),
+          ...(occurrence.roomId ? { roomId: occurrence.roomId } : {}),
+        };
 
-      navigation.navigate('EventRoom', params);
-    },
-    [navigation],
-  );
-
-  const onOpenEventRoom = useCallback(
-    (event: AppEvent) => {
-      navigation.navigate('EventRoom', {
-        durationMinutes: event.durationMinutes,
-        eventId: event.id,
-        eventTitle: event.title,
-        scheduledStartAt: event.startsAt,
-      });
-    },
-    [navigation],
-  );
-
-  const onOpenEventDetails = useCallback(
-    (event: AppEvent) => {
-      navigation.navigate('EventDetails', {
-        eventId: event.id,
-      });
-    },
-    [navigation],
-  );
-
-  const onOpenOccurrenceDetails = useCallback(
-    (occurrence: ScheduledEventOccurrence) => {
-      if (occurrence.source !== 'template') {
+        navigation.navigate('EventRoom', {
+          ...roomParams,
+        });
         return;
       }
 
+      if (!occurrence.occurrenceId && !occurrence.roomId) {
+        setOperationError('This live item has no valid occurrence target.');
+        return;
+      }
+
+      const detailParams: EventsStackParamList['EventDetails'] = {
+        ...(occurrence.occurrenceId ? { occurrenceId: occurrence.occurrenceId } : {}),
+        ...(occurrence.roomId ? { roomId: occurrence.roomId } : {}),
+      };
+
       navigation.navigate('EventDetails', {
-        eventTemplateId: occurrence.favoriteKey,
+        ...detailParams,
       });
     },
     [navigation],
-  );
-
-  const onTimeFilterPress = useCallback(
-    (nextFilter: 'live' | 'today' | 'tomorrow') => {
-      setTimeFilter((current) => (current === nextFilter ? null : nextFilter));
-    },
-    [setTimeFilter],
-  );
-
-  const onCategoryPress = useCallback(
-    (category: string) => {
-      setSelectedCategory((current) => (current === category ? null : category));
-    },
-    [setSelectedCategory],
   );
 
   return (
@@ -150,52 +100,26 @@ export function EventsScreen() {
     >
       <EventsHeader
         deviceTimeZoneLabel={deviceTimeZoneLabel}
-        liveCount={liveFilterCount}
+        liveCount={liveNowCount}
         participantCount={activeParticipantCount}
-        upcomingCount={upcomingCount}
+        upcomingCount={next24HoursCount}
       />
 
-      {operationError ? (
+      {uiError ? (
         <AlertBanner
           action={<GhostButton onPress={() => setOperationError(null)} title="Dismiss" />}
-          message={operationError}
-          title="Event alerts unavailable"
+          message={uiError}
+          title="Live feed unavailable"
           tone="warning"
         />
       ) : null}
 
-      <EmbeddedGlobeCard
-        activePresence={activePresence}
-        allScheduledEvents={allScheduledEvents}
-        error={operationError ?? error}
-        events={events}
-        loading={loading}
-        newsSyncError={newsSyncError}
-        nowTick={nowTick}
-        onOpenEventDetails={onOpenEventDetails}
-        onOpenEventRoom={onOpenEventRoom}
-        onOpenOccurrenceDetails={onOpenOccurrenceDetails}
-        onOpenOccurrence={onOpenOccurrence}
-        visibleEvents={visibleEvents}
-      />
-
-      <EventFilterBar
-        categoryFilters={categoryFilters}
-        liveFilterCount={liveFilterCount}
-        onCategoryPress={onCategoryPress}
-        onTimeFilterPress={onTimeFilterPress}
-        selectedCategory={selectedCategory}
-        timeFilter={timeFilter}
-        todayFilterCount={todayFilterCount}
-        tomorrowFilterCount={tomorrowFilterCount}
-      />
-
       <OccurrenceList
-        libraryError={libraryError}
-        libraryLoading={libraryLoading}
+        feedError={occurrencesError}
+        feedLoading={loading}
         onOpenOccurrence={onOpenOccurrence}
-        onRetryLibrary={() => {
-          void reloadLibrary();
+        onRetryFeed={() => {
+          void reloadOccurrences();
         }}
         onToggleOccurrenceSubscription={(occurrenceKey) => {
           void toggleOccurrenceSubscription(occurrenceKey);
@@ -207,7 +131,11 @@ export function EventsScreen() {
       />
 
       {updatingSubscriptionKey ? (
-        <ToastCard message="Syncing event alert preferences..." title="Event alerts" />
+        <ToastCard message="Syncing reminder preferences..." title="Live reminders" />
+      ) : null}
+
+      {sections.length === 0 && !loading && allScheduledEvents.length === 0 ? (
+        <ToastCard message="No joinable live rooms right now." title="Live" />
       ) : null}
     </Screen>
   );

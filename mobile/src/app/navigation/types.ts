@@ -50,16 +50,25 @@ export type CommunityStackParamList = {
 };
 
 export type EventsStackParamList = {
-  EventDetails: { eventId?: string; eventTemplateId?: string } | undefined;
+  EventDetails:
+    | {
+        eventId?: string;
+        eventTemplateId?: string;
+        occurrenceId?: string;
+        roomId?: string;
+      }
+    | undefined;
   EventRoom:
     | {
         allowAudioGeneration?: boolean;
         durationMinutes?: number;
         eventId?: string;
-        eventSource?: 'news' | 'template';
+        eventSource?: 'news' | 'occurrence' | 'template';
         eventTemplateId?: string;
         eventTitle?: string;
+        occurrenceId?: string;
         occurrenceKey?: string;
+        roomId?: string;
         scheduledStartAt?: string;
         scriptText?: string;
       }

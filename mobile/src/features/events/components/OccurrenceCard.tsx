@@ -72,10 +72,19 @@ export function OccurrenceCard({
         ],
       };
 
+  const primaryActionLabel =
+    item.status === 'live'
+      ? 'Join now'
+      : item.status === 'waiting_room'
+        ? 'Enter waiting room'
+        : item.status === 'ended'
+          ? 'View details'
+          : 'View details';
+
   return (
     <Animated.View style={settleStyle}>
       <Pressable
-        accessibilityHint="Opens this event room."
+        accessibilityHint="Opens this live room."
         accessibilityLabel={`${item.title}. ${statusLabel(item.status)}. Starts ${formatOccurrenceStartLabel(item.startsAt)}. ${item.durationMinutes} minutes.`}
         accessibilityRole="button"
         onPress={onOpen}
@@ -102,12 +111,18 @@ export function OccurrenceCard({
                           borderColor: eventsSurface.occurrence.liveChipBorder,
                           textColor: eventsSurface.occurrence.liveChipText,
                         }
-                      : item.status === 'soon'
+                      : item.status === 'waiting_room' || item.status === 'soon'
                         ? {
                             backgroundColor: eventsSurface.occurrence.soonChipBackground,
                             borderColor: eventsSurface.occurrence.soonChipBorder,
                             textColor: eventsSurface.occurrence.soonChipText,
                           }
+                        : item.status === 'ended'
+                          ? {
+                              backgroundColor: eventsSurface.occurrence.upcomingChipBackground,
+                              borderColor: eventsSurface.occurrence.upcomingChipBorder,
+                              textColor: eventsSurface.occurrence.itemMeta,
+                            }
                         : {
                             backgroundColor: eventsSurface.occurrence.upcomingChipBackground,
                             borderColor: eventsSurface.occurrence.upcomingChipBorder,
@@ -131,7 +146,9 @@ export function OccurrenceCard({
             </View>
 
             <Pressable
-              accessibilityLabel={isSubscribed ? 'Disable event alerts' : 'Enable event alerts'}
+              accessibilityLabel={
+                isSubscribed ? 'Disable live reminders' : 'Enable live reminders'
+              }
               accessibilityRole="button"
               accessibilityState={{ busy: isUpdatingBell, selected: isSubscribed }}
               hitSlop={6}
@@ -194,7 +211,7 @@ export function OccurrenceCard({
               variant="Body"
               weight="bold"
             >
-              Enter room
+              {primaryActionLabel}
             </Typography>
             <MaterialCommunityIcons
               color={eventsSurface.occurrence.ctaText}
