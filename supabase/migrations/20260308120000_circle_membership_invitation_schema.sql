@@ -160,7 +160,7 @@ create table if not exists public.circle_invitations (
   target_user_id uuid references auth.users(id) on delete set null,
   target_contact_hash text,
   target_contact_label text,
-  invite_token text not null unique default encode(gen_random_bytes(16), 'hex'),
+  invite_token text not null unique default replace(gen_random_uuid()::text, '-', ''),
   channel public.circle_invitation_channel not null default 'in_app',
   status public.circle_invitation_status not null default 'pending',
   role_to_grant public.circle_membership_role not null default 'member',
@@ -290,7 +290,7 @@ set search_path = public
 as $$
 begin
   if new.invite_token is null or btrim(new.invite_token) = '' then
-    new.invite_token := encode(gen_random_bytes(16), 'hex');
+    new.invite_token := replace(gen_random_uuid()::text, '-', '');
   end if;
 
   if new.expires_at is null then
