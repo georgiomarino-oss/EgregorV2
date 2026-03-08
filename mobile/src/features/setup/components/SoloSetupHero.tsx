@@ -1,11 +1,11 @@
 import { useEffect, useMemo } from 'react';
 import { Animated, Easing, StyleSheet, View } from 'react-native';
 
-import { LinearGradient } from 'expo-linear-gradient';
-
+import { PremiumHeroPanel } from '../../../components/CinematicPrimitives';
+import { LiveLogo } from '../../../components/LiveLogo';
 import { Typography } from '../../../components/Typography';
 import { useReducedMotion } from '../../rooms/hooks/useReducedMotion';
-import { handoffSurface, motion, radii, spacing } from '../../../theme/tokens';
+import { motion, radii, sectionVisualThemes, soloSurface, spacing } from '../../../theme/tokens';
 
 interface SoloSetupHeroProps {
   intention: string;
@@ -37,7 +37,6 @@ export function SoloSetupHero({ intention, loading, sessionsToday }: SoloSetupHe
     };
   }, [reduceMotionEnabled, settle]);
 
-  const palette = handoffSurface.soloSetup.hero;
   const settleStyle = reduceMotionEnabled
     ? styles.noMotion
     : {
@@ -57,131 +56,69 @@ export function SoloSetupHero({ intention, loading, sessionsToday }: SoloSetupHe
 
   return (
     <Animated.View style={settleStyle}>
-      <View
-        style={[
-          styles.panel,
-          {
-            backgroundColor: palette.panelBackground,
-            borderColor: palette.panelBorder,
-          },
-        ]}
+      <PremiumHeroPanel
+        fallbackIcon="meditation"
+        fallbackLabel="Solo setup"
+        section="solo"
+        style={styles.panel}
       >
-        <LinearGradient
-          colors={[palette.panelGradientFrom, palette.panelGradientTo]}
-          end={{ x: 1, y: 1 }}
-          start={{ x: 0, y: 0 }}
-          style={StyleSheet.absoluteFill}
-        />
-        <View pointerEvents="none" style={[styles.glow, { backgroundColor: palette.glow }]} />
-
-        <View
-          style={[
-            styles.badge,
-            {
-              backgroundColor: palette.badgeBackground,
-              borderColor: palette.badgeBorder,
-            },
-          ]}
-        >
-          <Typography
-            allowFontScaling={false}
-            color={palette.badgeText}
-            style={styles.badgeText}
-            variant="Caption"
-            weight="bold"
-          >
+        <View style={styles.badge}>
+          <LiveLogo context="solo" size={14} />
+          <Typography color={soloSurface.hero.badgeText} style={styles.badgeText} variant="Caption" weight="bold">
             Solo setup
           </Typography>
         </View>
 
-        <Typography
-          accessibilityRole="header"
-          allowFontScaling={false}
-          style={[styles.title, { textShadowColor: palette.titleGlow }]}
-          variant="H1"
-          weight="bold"
-        >
+        <Typography accessibilityRole="header" style={styles.title} variant="H1" weight="bold">
           Prepare your solo ritual
         </Typography>
-        <Typography allowFontScaling={false} color={palette.subtitle} style={styles.subtitle}>
+        <Typography color={soloSurface.hero.subtitle} style={styles.subtitle}>
           Confirm your saved setup and enter your private room with calm focus.
         </Typography>
 
-        <View
-          style={[
-            styles.intention,
-            {
-              backgroundColor: palette.intentionBackground,
-              borderColor: palette.intentionBorder,
-            },
-          ]}
-        >
-          <Typography
-            allowFontScaling={false}
-            color={palette.statLabel}
-            variant="Label"
-            weight="bold"
-          >
+        <View style={styles.intention}>
+          <Typography color={sectionVisualThemes.solo.nav.labelIdle} variant="Label" weight="bold">
             Intention
           </Typography>
-          <Typography
-            allowFontScaling={false}
-            color={palette.intentionText}
-            variant="Body"
-            weight="medium"
-          >
+          <Typography color={soloSurface.card.title} variant="Body" weight="medium">
             {intention}
           </Typography>
         </View>
 
-        <View
-          style={[
-            styles.statChip,
-            {
-              backgroundColor: palette.statBackground,
-              borderColor: palette.statBorder,
-            },
-          ]}
-        >
-          <Typography
-            allowFontScaling={false}
-            color={palette.statLabel}
-            variant="Caption"
-            weight="bold"
-          >
+        <View style={styles.statChip}>
+          <Typography color={sectionVisualThemes.solo.nav.labelIdle} variant="Caption" weight="bold">
             Today
           </Typography>
-          <Typography
-            allowFontScaling={false}
-            color={palette.statValue}
-            variant="Caption"
-            weight="bold"
-          >
+          <Typography color={soloSurface.card.ctaText} variant="Caption" weight="bold">
             {loading
               ? 'Loading sessions...'
               : `${sessionsToday} completed session${sessionsToday === 1 ? '' : 's'}`}
           </Typography>
         </View>
-      </View>
+      </PremiumHeroPanel>
     </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
   badge: {
+    alignItems: 'center',
     alignSelf: 'flex-start',
+    backgroundColor: soloSurface.hero.badgeBackground,
+    borderColor: soloSurface.hero.badgeBorder,
     borderRadius: radii.pill,
     borderWidth: 1,
+    flexDirection: 'row',
+    gap: spacing.xxs,
     paddingHorizontal: spacing.xs,
     paddingVertical: 3,
   },
   badgeText: {
     textTransform: 'none',
   },
-  glow: {
-    ...StyleSheet.absoluteFillObject,
-  },
   intention: {
+    backgroundColor: sectionVisualThemes.solo.surface.card[0],
+    borderColor: sectionVisualThemes.solo.surface.edge,
     borderRadius: radii.md,
     borderWidth: 1,
     gap: spacing.xxs,
@@ -192,15 +129,12 @@ const styles = StyleSheet.create({
     opacity: 1,
   },
   panel: {
-    borderRadius: radii.xl,
-    borderWidth: 1,
     gap: spacing.sm,
-    overflow: 'hidden',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
   },
   statChip: {
     alignSelf: 'flex-start',
+    backgroundColor: soloSurface.card.ctaBackground,
+    borderColor: soloSurface.card.ctaBorder,
     borderRadius: radii.pill,
     borderWidth: 1,
     flexDirection: 'row',
@@ -213,7 +147,8 @@ const styles = StyleSheet.create({
     maxWidth: '95%',
   },
   title: {
-    textShadowOffset: { height: 0, width: 0 },
+    textShadowColor: soloSurface.hero.titleGlow,
+    textShadowOffset: { width: 0, height: 0 },
     textShadowRadius: 15,
   },
 });

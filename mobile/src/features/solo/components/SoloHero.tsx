@@ -1,11 +1,17 @@
 import { useEffect, useMemo } from 'react';
 import { Animated, Easing, Pressable, StyleSheet, View } from 'react-native';
 
-import { LinearGradient } from 'expo-linear-gradient';
-
+import { PremiumHeroPanel } from '../../../components/CinematicPrimitives';
 import { LiveLogo } from '../../../components/LiveLogo';
 import { Typography } from '../../../components/Typography';
-import { interaction, motion, radii, soloSurface, spacing } from '../../../theme/tokens';
+import {
+  interaction,
+  motion,
+  radii,
+  sectionVisualThemes,
+  soloSurface,
+  spacing,
+} from '../../../theme/tokens';
 import { useReducedMotion } from '../../rooms/hooks/useReducedMotion';
 
 interface SoloHeroProps {
@@ -87,42 +93,23 @@ export function SoloHero({
 
   return (
     <Animated.View style={settleStyle}>
-      <View style={styles.panel}>
-        <LinearGradient
-          colors={[soloSurface.hero.panelGradientFrom, soloSurface.hero.panelGradientTo]}
-          end={{ x: 1, y: 1 }}
-          start={{ x: 0, y: 0 }}
-          style={StyleSheet.absoluteFill}
-        />
-        <View pointerEvents="none" style={styles.glow} />
-
+      <PremiumHeroPanel
+        fallbackIcon="book-open-page-variant-outline"
+        fallbackLabel="Solo aura"
+        section="solo"
+        style={styles.panel}
+      >
         <View style={styles.badge}>
           <LiveLogo context="solo" size={14} />
-          <Typography
-            allowFontScaling={false}
-            color={soloSurface.hero.badgeText}
-            style={styles.badgeText}
-            variant="Caption"
-            weight="bold"
-          >
+          <Typography color={soloSurface.hero.badgeText} style={styles.badgeText} variant="Caption" weight="bold">
             Solo sanctuary
           </Typography>
         </View>
 
-        <Typography
-          accessibilityRole="header"
-          allowFontScaling={false}
-          style={styles.title}
-          variant="H1"
-          weight="bold"
-        >
+        <Typography accessibilityRole="header" style={styles.title} variant="H1" weight="bold">
           {title}
         </Typography>
-        <Typography
-          allowFontScaling={false}
-          color={soloSurface.hero.subtitle}
-          style={styles.subtitle}
-        >
+        <Typography color={soloSurface.hero.subtitle} style={styles.subtitle}>
           {subtitle}
         </Typography>
 
@@ -143,17 +130,12 @@ export function SoloHero({
               !reduceMotionEnabled && pressed && styles.actionPressed,
             ]}
           >
-            <Typography
-              allowFontScaling={false}
-              color={soloSurface.hero.actionText}
-              variant="Caption"
-              weight="bold"
-            >
+            <Typography color={soloSurface.hero.actionText} variant="Caption" weight="bold">
               {actionLabel}
             </Typography>
           </Pressable>
         ) : null}
-      </View>
+      </PremiumHeroPanel>
     </Animated.View>
   );
 }
@@ -161,8 +143,8 @@ export function SoloHero({
 const styles = StyleSheet.create({
   action: {
     alignSelf: 'flex-start',
-    backgroundColor: soloSurface.hero.actionBackground,
-    borderColor: soloSurface.hero.actionBorder,
+    backgroundColor: sectionVisualThemes.solo.surface.card[0],
+    borderColor: sectionVisualThemes.solo.surface.edge,
     borderRadius: radii.pill,
     borderWidth: 1,
     paddingHorizontal: spacing.sm,
@@ -186,22 +168,11 @@ const styles = StyleSheet.create({
   badgeText: {
     textTransform: 'none',
   },
-  glow: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: soloSurface.hero.glow,
-  },
   noMotion: {
     opacity: 1,
   },
   panel: {
-    backgroundColor: soloSurface.hero.panelBackground,
-    borderColor: soloSurface.hero.panelBorder,
-    borderRadius: radii.xl,
-    borderWidth: 1,
     gap: spacing.sm,
-    overflow: 'hidden',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
   },
   statPill: {
     backgroundColor: soloSurface.hero.statBackground,

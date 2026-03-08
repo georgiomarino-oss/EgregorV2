@@ -6,10 +6,11 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
 
-import { ActionPanel } from '../components/ActionPanel';
 import type { SoloStackParamList } from '../app/navigation/types';
 import { Button } from '../components/Button';
+import { PremiumPrayerCardSurface } from '../components/CinematicPrimitives';
 import { Screen } from '../components/Screen';
+import { SectionHeader } from '../components/SectionHeader';
 import { Typography } from '../components/Typography';
 import { SetupSummaryPanel } from '../features/setup/components/SetupSummaryPanel';
 import { SoloSetupHero } from '../features/setup/components/SoloSetupHero';
@@ -23,7 +24,7 @@ import {
 } from '../lib/api/data';
 import { supabase } from '../lib/supabase';
 import { sectionGap } from '../theme/layout';
-import { handoffSurface, motion, radii, spacing } from '../theme/tokens';
+import { motion, radii, sectionVisualThemes, soloSurface, spacing } from '../theme/tokens';
 
 type SoloSetupNavigation = NativeStackNavigationProp<SoloStackParamList, 'SoloSetup'>;
 type SoloSetupRoute = RouteProp<SoloStackParamList, 'SoloSetup'>;
@@ -48,7 +49,6 @@ export function SoloSetupScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const palette = handoffSurface.soloSetup;
   const intention = route.params?.intention?.trim() || 'Set your intention on the previous screen';
 
   useEffect(() => {
@@ -191,46 +191,43 @@ export function SoloSetupScreen() {
       <SetupSummaryPanel errorMessage={error} items={summaryItems} loading={loading} />
 
       <Animated.View style={actionSettleStyle}>
-        <ActionPanel
+        <PremiumPrayerCardSurface
           accessibilityHint="Contains the primary action to start your solo session."
           accessibilityLabel="Session actions"
-          accessibilityRole="summary"
-          backgroundColor={palette.actions.panelBackground}
-          borderColor={palette.actions.panelBorder}
+          fallbackIcon="play-circle-outline"
+          fallbackLabel="Begin now"
+          section="solo"
+          style={styles.actionPanel}
         >
-          <Typography allowFontScaling={false} color={palette.actions.hintText} variant="Caption">
-            {loading
-              ? 'Syncing your latest preferences...'
-              : 'You can begin now. Your selected settings are already loaded for this session.'}
-          </Typography>
+          <SectionHeader
+            compact
+            subtitle={
+              loading
+                ? 'Syncing your latest preferences...'
+                : 'You can begin now. Your selected settings are already loaded for this session.'
+            }
+            subtitleColor={sectionVisualThemes.solo.nav.labelIdle}
+            title="Begin your sanctuary session"
+            titleColor={soloSurface.card.title}
+          />
 
-          <View
-            style={[
-              styles.progressChip,
-              {
-                backgroundColor: palette.actions.progressBackground,
-                borderColor: palette.actions.progressBorder,
-              },
-            ]}
-          >
-            <Typography
-              allowFontScaling={false}
-              color={palette.actions.progressText}
-              variant="Caption"
-              weight="bold"
-            >
+          <View style={styles.progressChip}>
+            <Typography color={soloSurface.card.ctaText} variant="Caption" weight="bold">
               {`${sessionsToday} session${sessionsToday === 1 ? '' : 's'} completed today`}
             </Typography>
           </View>
 
           <Button onPress={onStartSession} title="Start solo session" variant="gold" />
-        </ActionPanel>
+        </PremiumPrayerCardSurface>
       </Animated.View>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
+  actionPanel: {
+    gap: spacing.sm,
+  },
   content: {
     gap: sectionGap,
   },
@@ -239,6 +236,8 @@ const styles = StyleSheet.create({
   },
   progressChip: {
     alignSelf: 'flex-start',
+    backgroundColor: soloSurface.card.ctaBackground,
+    borderColor: soloSurface.card.ctaBorder,
     borderRadius: radii.pill,
     borderWidth: 1,
     paddingHorizontal: spacing.sm,

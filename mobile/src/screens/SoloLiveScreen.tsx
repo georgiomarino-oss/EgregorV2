@@ -51,6 +51,7 @@ import { colors, motion, radii, roomAtmosphere, spacing } from '../theme/tokens'
 import { RoomScriptPanel } from '../features/room-player/components/RoomScriptPanel';
 import { RoomTransportControls } from '../features/room-player/components/RoomTransportControls';
 import { useRoomAudioPlayer } from '../features/room-player/hooks/useRoomAudioPlayer';
+import { RoomAtmosphereBackdrop } from '../features/rooms/components/RoomAtmosphereBackdrop';
 import { SoloAuraField } from '../features/rooms/components/SoloAuraField';
 import { useReducedMotion } from '../features/rooms/hooks/useReducedMotion';
 import {
@@ -1384,6 +1385,7 @@ export function SoloLiveScreen() {
           isVeryCompactHeight && styles.containerVeryCompact,
         ]}
       >
+        <RoomAtmosphereBackdrop mode="solo" />
         <SoloAuraField active={isRunning} mode={soloFieldMode} />
 
         <View

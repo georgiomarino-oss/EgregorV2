@@ -1,9 +1,10 @@
 import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 
+import { PremiumLiveEventCardSurface } from '../../../components/CinematicPrimitives';
 import { SectionHeader } from '../../../components/SectionHeader';
 import { Typography } from '../../../components/Typography';
-import { handoffSurface, radii, spacing } from '../../../theme/tokens';
+import { radii, sectionVisualThemes, spacing } from '../../../theme/tokens';
 
 export interface EventDetailsMetaItem {
   label: string;
@@ -18,22 +19,12 @@ interface EventDetailsMetaProps {
 }
 
 function MetaTile({ label, value }: EventDetailsMetaItem) {
-  const palette = handoffSurface.eventDetails.meta;
-
   return (
-    <View
-      style={[
-        styles.tile,
-        {
-          backgroundColor: palette.tileBackground,
-          borderColor: palette.tileBorder,
-        },
-      ]}
-    >
-      <Typography allowFontScaling={false} color={palette.tileLabel} variant="Label" weight="bold">
+    <View style={styles.tile}>
+      <Typography color={sectionVisualThemes.live.nav.labelIdle} variant="Label" weight="bold">
         {label}
       </Typography>
-      <Typography allowFontScaling={false} color={palette.tileValue} variant="Body" weight="bold">
+      <Typography color={sectionVisualThemes.live.nav.labelActive} variant="Body" weight="bold">
         {value}
       </Typography>
     </View>
@@ -41,29 +32,20 @@ function MetaTile({ label, value }: EventDetailsMetaItem) {
 }
 
 export function EventDetailsMeta({ children, helper, heading, items }: EventDetailsMetaProps) {
-  const palette = handoffSurface.eventDetails.meta;
-
   return (
-    <View
+    <PremiumLiveEventCardSurface
       accessibilityLabel={helper ? `${heading}. ${helper}` : heading}
-      accessibilityRole="summary"
-      accessible
-      style={[
-        styles.panel,
-        {
-          backgroundColor: palette.panelBackground,
-          borderColor: palette.panelBorder,
-        },
-      ]}
+      fallbackIcon="calendar-clock"
+      fallbackLabel="Room details"
+      section="live"
+      style={styles.panel}
     >
-      <View pointerEvents="none" style={[styles.glow, { backgroundColor: palette.panelGlow }]} />
-
       <SectionHeader
         compact
         subtitle={helper}
-        subtitleColor={palette.helperText}
+        subtitleColor={sectionVisualThemes.live.nav.labelIdle}
         title={heading}
-        titleColor={palette.heading}
+        titleColor={sectionVisualThemes.live.nav.labelActive}
       />
 
       <View style={styles.tilesWrap}>
@@ -73,24 +55,17 @@ export function EventDetailsMeta({ children, helper, heading, items }: EventDeta
       </View>
 
       {children}
-    </View>
+    </PremiumLiveEventCardSurface>
   );
 }
 
 const styles = StyleSheet.create({
-  glow: {
-    ...StyleSheet.absoluteFillObject,
-  },
   panel: {
-    borderRadius: radii.xl,
-    borderWidth: 1,
     gap: spacing.sm,
-    overflow: 'hidden',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-    position: 'relative',
   },
   tile: {
+    backgroundColor: sectionVisualThemes.live.surface.card[1],
+    borderColor: sectionVisualThemes.live.surface.edge,
     borderRadius: radii.md,
     borderWidth: 1,
     flexBasis: '48%',

@@ -61,7 +61,6 @@ export function StatusChip({
       ]}
     >
       <Typography
-        allowFontScaling={false}
         color={palette.textColor}
         style={[styles.label, uppercase && styles.labelUppercase, labelStyle]}
         variant="Caption"

@@ -34,7 +34,6 @@ export function SectionHeader({
       <View style={[styles.titleBlock, compact ? styles.titleBlockCompact : styles.titleBlockBase]}>
         {eyebrow ? (
           <Typography
-            allowFontScaling={false}
             style={styles.eyebrow}
             variant="Caption"
             weight="bold"
@@ -48,7 +47,6 @@ export function SectionHeader({
           {leading ? <View style={styles.leading}>{leading}</View> : null}
           <Typography
             accessibilityRole={titleRole}
-            allowFontScaling={false}
             variant="H2"
             weight="bold"
             {...(titleColor ? { color: titleColor } : {})}
@@ -59,7 +57,6 @@ export function SectionHeader({
 
         {subtitle ? (
           <Typography
-            allowFontScaling={false}
             variant="Caption"
             {...(subtitleColor ? { color: subtitleColor } : {})}
           >

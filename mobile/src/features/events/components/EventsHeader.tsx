@@ -1,6 +1,7 @@
 import { useEffect, useMemo } from 'react';
 import { Animated, Easing, StyleSheet, View } from 'react-native';
 
+import { PremiumHeroPanel } from '../../../components/CinematicPrimitives';
 import { LiveLogo } from '../../../components/LiveLogo';
 import { Typography } from '../../../components/Typography';
 import { useReducedMotion } from '../../rooms/hooks/useReducedMotion';
@@ -17,7 +18,6 @@ function StatPill({ label, value }: { label: string; value: string }) {
   return (
     <View style={styles.statPill}>
       <Typography
-        allowFontScaling={false}
         color={eventsSurface.occurrence.categoryBadgeText}
         style={styles.statPillValue}
         variant="Body"
@@ -26,7 +26,6 @@ function StatPill({ label, value }: { label: string; value: string }) {
         {value}
       </Typography>
       <Typography
-        allowFontScaling={false}
         color={eventsSurface.hero.eyebrow}
         style={styles.statPillLabel}
         variant="Caption"
@@ -86,12 +85,16 @@ export function EventsHeader({
 
   return (
     <Animated.View style={settleStyle}>
-      <View style={styles.heroPanel}>
+      <PremiumHeroPanel
+        fallbackIcon="earth"
+        fallbackLabel="Global room pulse"
+        section="live"
+        style={styles.heroPanel}
+      >
         <View style={styles.headerTopRow}>
           <View style={styles.liveBadge}>
             <LiveLogo context="events" size={18} />
             <Typography
-              allowFontScaling={false}
               color={eventsSurface.hero.accent}
               style={styles.liveBadgeText}
               variant="Caption"
@@ -101,7 +104,6 @@ export function EventsHeader({
             </Typography>
           </View>
           <Typography
-            allowFontScaling={false}
             color={eventsSurface.hero.timezone}
             style={styles.timeZoneLabel}
             variant="Caption"
@@ -112,7 +114,6 @@ export function EventsHeader({
 
         <Typography
           accessibilityRole="header"
-          allowFontScaling={false}
           style={styles.title}
           variant="H1"
           weight="bold"
@@ -120,11 +121,7 @@ export function EventsHeader({
           Collective Intention
         </Typography>
 
-        <Typography
-          allowFontScaling={false}
-          color={eventsSurface.hero.subtitle}
-          style={styles.body}
-        >
+        <Typography color={eventsSurface.hero.subtitle} style={styles.body}>
           Join real shared rooms in rhythm with your local timezone and global moments.
         </Typography>
 
@@ -134,10 +131,10 @@ export function EventsHeader({
           <StatPill label="Active" value={participantCount.toString()} />
         </View>
 
-        <Typography allowFontScaling={false} color={eventsSurface.hero.timezone} variant="Caption">
+        <Typography color={eventsSurface.hero.timezone} variant="Caption">
           Times shown in {deviceTimeZoneLabel}
         </Typography>
-      </View>
+      </PremiumHeroPanel>
     </Animated.View>
   );
 }
@@ -153,14 +150,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   heroPanel: {
-    backgroundColor: eventsSurface.hero.panelBackdrop,
-    borderColor: eventsSurface.hero.panelBorder,
-    borderRadius: radii.xl,
-    borderWidth: 1,
     gap: spacing.sm,
-    overflow: 'hidden',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
   },
   liveBadge: {
     alignItems: 'center',

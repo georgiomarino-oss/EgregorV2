@@ -6,12 +6,14 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
-import { ActionPanel } from '../components/ActionPanel';
 import type { EventsStackParamList } from '../app/navigation/types';
 import { Button } from '../components/Button';
+import { PremiumLiveEventCardSurface } from '../components/CinematicPrimitives';
 import { EmptyStateCard } from '../components/EmptyStateCard';
+import { LoadingStateCard } from '../components/LoadingStateCard';
 import { RetryPanel } from '../components/RetryPanel';
 import { Screen } from '../components/Screen';
+import { SectionHeader } from '../components/SectionHeader';
 import { Typography } from '../components/Typography';
 import {
   EventDetailsHero,
@@ -28,7 +30,7 @@ import {
 import { formatEventDateTimeInDeviceZone } from '../lib/dateTime';
 import { supabase } from '../lib/supabase';
 import { sectionGap } from '../theme/layout';
-import { handoffSurface, radii, spacing } from '../theme/tokens';
+import { sectionVisualThemes, spacing } from '../theme/tokens';
 
 type EventDetailsRoute = RouteProp<EventsStackParamList, 'EventDetails'>;
 type EventsNavigation = NativeStackNavigationProp<EventsStackParamList, 'EventDetails'>;
@@ -87,7 +89,6 @@ function toHeroTone(state: ReturnType<typeof resolveLiveOccurrenceState>): Event
 export function EventDetailsScreen() {
   const navigation = useNavigation<EventsNavigation>();
   const route = useRoute<EventDetailsRoute>();
-  const palette = handoffSurface.eventDetails;
 
   const [occurrence, setOccurrence] = useState<CanonicalEventOccurrence | null>(null);
   const [loading, setLoading] = useState(true);
@@ -225,11 +226,7 @@ export function EventDetailsScreen() {
           : 'Ended';
 
   return (
-    <Screen
-      ambientSource={ambientAnimation}
-      contentContainerStyle={styles.content}
-      variant="events"
-    >
+    <Screen ambientSource={ambientAnimation} contentContainerStyle={styles.content} variant="live">
       {occurrence ? (
         <>
           <EventDetailsHero
@@ -250,59 +247,68 @@ export function EventDetailsScreen() {
             items={metaItems}
           />
 
-          <ActionPanel
+          <PremiumLiveEventCardSurface
             accessibilityHint="Contains primary actions for this live room."
             accessibilityLabel="Live room actions"
-            accessibilityRole="summary"
-            backgroundColor={palette.actions.panelBackground}
-            borderColor={palette.actions.panelBorder}
+            fallbackIcon="play-circle-outline"
+            fallbackLabel="Primary actions"
+            section="live"
+            style={styles.actionPanel}
           >
-            <Typography allowFontScaling={false} color={palette.actions.hintText} variant="Caption">
-              {resolvedState === 'live'
-                ? 'The room is active now.'
-                : resolvedState === 'ended'
-                  ? 'This session has ended.'
-                  : 'You can enter the waiting room before the session goes live.'}
-            </Typography>
-
-            <Button
-              disabled={resolvedState === 'ended'}
-              onPress={() => {
-                const roomScriptText =
-                  occurrence.seriesPurpose?.trim() || occurrence.seriesDescription?.trim() || '';
-                const roomParams: EventsStackParamList['EventRoom'] = {
-                  durationMinutes: occurrence.durationMinutes,
-                  eventTitle: occurrence.seriesName,
-                  occurrenceId: occurrence.occurrenceId,
-                  occurrenceKey: occurrence.occurrenceKey,
-                  scheduledStartAt: occurrence.startsAtUtc,
-                  ...(occurrence.roomId ? { roomId: occurrence.roomId } : {}),
-                  ...(roomScriptText ? { scriptText: roomScriptText } : {}),
-                };
-                navigation.navigate('EventRoom', roomParams);
-              }}
-              title={primaryActionLabel}
-              variant="gold"
+            <SectionHeader
+              compact
+              subtitle={
+                resolvedState === 'live'
+                  ? 'The room is active now.'
+                  : resolvedState === 'ended'
+                    ? 'This session has ended.'
+                    : 'You can enter the waiting room before the session goes live.'
+              }
+              subtitleColor={sectionVisualThemes.live.nav.labelIdle}
+              title="Room actions"
+              titleColor={sectionVisualThemes.live.nav.labelActive}
             />
 
-            <Button
-              loading={updatingReminder}
-              onPress={() => {
-                void toggleReminder();
-              }}
-              title={reminderEnabled ? 'Remove reminder' : 'Save reminder'}
-              variant="secondary"
-            />
+            <View style={styles.actionButtons}>
+              <Button
+                disabled={resolvedState === 'ended'}
+                onPress={() => {
+                  const roomScriptText =
+                    occurrence.seriesPurpose?.trim() || occurrence.seriesDescription?.trim() || '';
+                  const roomParams: EventsStackParamList['EventRoom'] = {
+                    durationMinutes: occurrence.durationMinutes,
+                    eventTitle: occurrence.seriesName,
+                    occurrenceId: occurrence.occurrenceId,
+                    occurrenceKey: occurrence.occurrenceKey,
+                    scheduledStartAt: occurrence.startsAtUtc,
+                    ...(occurrence.roomId ? { roomId: occurrence.roomId } : {}),
+                    ...(roomScriptText ? { scriptText: roomScriptText } : {}),
+                  };
+                  navigation.navigate('EventRoom', roomParams);
+                }}
+                title={primaryActionLabel}
+                variant="gold"
+              />
 
-            <Button
-              loading={refreshing}
-              onPress={() => {
-                void refreshOccurrence();
-              }}
-              title="Refresh"
-              variant="secondary"
-            />
-          </ActionPanel>
+              <Button
+                loading={updatingReminder}
+                onPress={() => {
+                  void toggleReminder();
+                }}
+                title={reminderEnabled ? 'Remove reminder' : 'Save reminder'}
+                variant="secondary"
+              />
+
+              <Button
+                loading={refreshing}
+                onPress={() => {
+                  void refreshOccurrence();
+                }}
+                title="Refresh"
+                variant="secondary"
+              />
+            </View>
+          </PremiumLiveEventCardSurface>
         </>
       ) : null}
 
@@ -318,16 +324,16 @@ export function EventDetailsScreen() {
               variant="secondary"
             />
           }
-          backgroundColor={palette.meta.detailBackground}
+          backgroundColor={sectionVisualThemes.live.surface.card[1]}
           body="This deep link does not resolve to a valid live occurrence or room."
-          bodyColor={palette.meta.detailBody}
-          borderColor={palette.meta.detailBorder}
-          iconBackgroundColor={palette.hero.badgeBackground}
-          iconBorderColor={palette.hero.badgeBorder}
+          bodyColor={sectionVisualThemes.live.nav.labelIdle}
+          borderColor={sectionVisualThemes.live.surface.border}
+          iconBackgroundColor={sectionVisualThemes.live.surface.card[0]}
+          iconBorderColor={sectionVisualThemes.live.media.frameBorder}
           iconName="calendar-search"
-          iconTint={palette.hero.badgeText}
+          iconTint={sectionVisualThemes.live.media.icon}
           title="Live target unavailable"
-          titleColor={palette.meta.detailTitle}
+          titleColor={sectionVisualThemes.live.nav.labelActive}
         />
       ) : null}
 
@@ -345,35 +351,26 @@ export function EventDetailsScreen() {
       ) : null}
 
       {loading ? (
-        <View
-          style={[
-            styles.loadingCard,
-            {
-              backgroundColor: palette.meta.detailBackground,
-              borderColor: palette.meta.detailBorder,
-            },
-          ]}
-        >
-          <Typography allowFontScaling={false} color={palette.meta.detailBody} variant="Body">
-            Loading live room details...
-          </Typography>
-        </View>
+        <LoadingStateCard
+          subtitle="Preparing canonical occurrence metadata and actions."
+          title="Loading live room details"
+        />
       ) : null}
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
+  actionButtons: {
+    gap: spacing.xs,
+  },
+  actionPanel: {
+    gap: spacing.sm,
+  },
   content: {
     gap: sectionGap,
   },
   errorCard: {
     minHeight: 44,
-  },
-  loadingCard: {
-    borderRadius: radii.xl,
-    borderWidth: 1,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
   },
 });

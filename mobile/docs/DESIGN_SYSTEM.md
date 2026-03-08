@@ -11,19 +11,31 @@ Use `CosmicBackground` variants exactly as follows:
 - `auth`
   - `AuthScreen`
   - `MissingEnvScreen`
-- `home`
+- `circles` (or `home` during legacy compatibility)
   - `CommunityScreen`
+- `live` (or `events` during legacy compatibility)
   - `EventsScreen`
 - `solo`
   - `SoloScreen`
   - `SoloSetupScreen`
   - `PrayerLibraryScreen`
   - `SoloLiveScreen`
-- `events`
+- `eventRoom` or `events`
   - `EventDetailsScreen`
   - `EventRoomScreen`
 - `profile`
   - `ProfileScreen`
+
+## Cinematic Primitives
+Use shared premium primitives for authored surfaces:
+
+- `PremiumHeroPanel`: top-of-screen hero shells.
+- `PremiumPrayerCardSurface`: solo prayer card shells.
+- `PremiumLiveEventCardSurface`: live/event card shells.
+- `PremiumCircleCardSurface`: circles and invite card shells.
+- `PremiumProfileTrustCardSurface`: profile/trust card shells.
+
+These primitives must be section-aware (`solo`, `circles`, `live`, `profile`) and should be preferred over one-off gradient cards.
 
 ## SurfaceCard Variants
 Use `SurfaceCard` variants by intent:

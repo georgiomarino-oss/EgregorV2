@@ -6,12 +6,12 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import type { CommunityStackParamList } from '../app/navigation/types';
 import { Button } from '../components/Button';
+import { PremiumCircleCardSurface, PremiumHeroPanel } from '../components/CinematicPrimitives';
 import { EmptyStateCard } from '../components/EmptyStateCard';
 import { LoadingStateCard } from '../components/LoadingStateCard';
 import { RetryPanel } from '../components/RetryPanel';
 import { Screen } from '../components/Screen';
 import { StatusChip } from '../components/StatusChip';
-import { SurfaceCard } from '../components/SurfaceCard';
 import { Typography } from '../components/Typography';
 import {
   acceptCircleInvite,
@@ -21,7 +21,7 @@ import {
   type CircleInvitePreview,
 } from '../lib/api/circles';
 import { sectionGap } from '../theme/layout';
-import { colors, spacing } from '../theme/tokens';
+import { sectionVisualThemes, spacing } from '../theme/tokens';
 import {
   formatInviteExpiry,
   toInviteStatusLabel,
@@ -136,12 +136,17 @@ export function InviteDecisionScreen({ navigation, route }: Props) {
   };
 
   return (
-    <Screen ambientSource={ambientAnimation} contentContainerStyle={styles.content} variant="home">
-      <SurfaceCard radius="lg" variant="profileImpact">
+    <Screen ambientSource={ambientAnimation} contentContainerStyle={styles.content} variant="circles">
+      <PremiumHeroPanel
+        fallbackIcon="email-seal-outline"
+        fallbackLabel="Invite decision"
+        section="circles"
+        style={styles.heroPanel}
+      >
         <Typography variant="H1" weight="bold">
           Invite decision
         </Typography>
-        <Typography color={colors.textCaption} variant="Caption">
+        <Typography color={sectionVisualThemes.circles.nav.labelIdle} variant="Caption">
           Review circle context, inviter, role, and status before taking action.
         </Typography>
         <StatusChip
@@ -149,7 +154,7 @@ export function InviteDecisionScreen({ navigation, route }: Props) {
           tone={toInviteStatusTone(status)}
           uppercase={false}
         />
-      </SurfaceCard>
+      </PremiumHeroPanel>
 
       {loading ? (
         <LoadingStateCard
@@ -159,23 +164,30 @@ export function InviteDecisionScreen({ navigation, route }: Props) {
       ) : null}
 
       {!loading && preview ? (
-        <SurfaceCard radius="lg" variant="default">
+        <PremiumCircleCardSurface
+          fallbackIcon="account-check-outline"
+          fallbackLabel="Invite details"
+          section="circles"
+          style={styles.detailsCard}
+        >
           <Typography variant="H2" weight="bold">
             {preview.circleName}
           </Typography>
-          <Typography color={colors.textCaption} variant="Caption">
+          <Typography color={sectionVisualThemes.circles.nav.labelIdle} variant="Caption">
             {preview.circleDescription?.trim() || 'No circle description provided.'}
           </Typography>
-          <Typography color={colors.textCaption} variant="Caption">
+          <Typography color={sectionVisualThemes.circles.nav.labelIdle} variant="Caption">
             Invited by {preview.inviterDisplayName}
           </Typography>
-          <Typography color={colors.textCaption} variant="Caption">
+          <Typography color={sectionVisualThemes.circles.nav.labelIdle} variant="Caption">
             Role on accept: {toRoleLabel(preview.roleToGrant)}
           </Typography>
-          <Typography color={colors.textCaption} variant="Caption">
+          <Typography color={sectionVisualThemes.circles.nav.labelIdle} variant="Caption">
             {formatInviteExpiry(preview.expiresAt)}
           </Typography>
-          <Typography variant="Caption">{getStatusSummary(status)}</Typography>
+          <Typography color={sectionVisualThemes.circles.nav.labelIdle} variant="Caption">
+            {getStatusSummary(status)}
+          </Typography>
 
           {status === 'pending' ? (
             <View style={styles.actionRow}>
@@ -206,21 +218,21 @@ export function InviteDecisionScreen({ navigation, route }: Props) {
               variant="secondary"
             />
           ) : null}
-        </SurfaceCard>
+        </PremiumCircleCardSurface>
       ) : null}
 
       {!loading && !preview ? (
         <EmptyStateCard
-          backgroundColor="rgba(10, 30, 45, 0.68)"
+          backgroundColor={sectionVisualThemes.circles.surface.card[1]}
           body={getStatusSummary('invalid')}
-          bodyColor={colors.textCaption}
-          borderColor={colors.borderSoft}
-          iconBackgroundColor="rgba(24, 50, 67, 0.9)"
-          iconBorderColor="rgba(113, 165, 195, 0.55)"
+          bodyColor={sectionVisualThemes.circles.nav.labelIdle}
+          borderColor={sectionVisualThemes.circles.surface.border}
+          iconBackgroundColor={sectionVisualThemes.circles.surface.card[0]}
+          iconBorderColor={sectionVisualThemes.circles.media.frameBorder}
           iconName="alert-circle-outline"
-          iconTint="rgba(212, 242, 255, 0.9)"
+          iconTint={sectionVisualThemes.circles.media.icon}
           title="Invalid invite"
-          titleColor={colors.textPrimary}
+          titleColor={sectionVisualThemes.circles.nav.labelActive}
         />
       ) : null}
 
@@ -247,5 +259,11 @@ const styles = StyleSheet.create({
   content: {
     gap: sectionGap,
     paddingBottom: sectionGap,
+  },
+  detailsCard: {
+    gap: spacing.xs,
+  },
+  heroPanel: {
+    gap: spacing.sm,
   },
 });

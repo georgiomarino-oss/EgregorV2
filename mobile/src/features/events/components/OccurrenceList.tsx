@@ -94,13 +94,20 @@ export function OccurrenceList({
   return (
     <>
       {sections.map((section) => (
-        <View key={section.category} style={[styles.categorySection, styles.sectionShell]}>
+        <View
+          key={section.category}
+          style={[
+            styles.categorySection,
+            styles.sectionShell,
+            section.key === 'ritual_1111' ? styles.sectionSignature : null,
+            section.key === 'global_flagships' ? styles.sectionFlagship : null,
+          ]}
+        >
           <SectionHeader
             title={section.category}
             titleColor={eventsSurface.occurrence.itemTitle}
             trailing={
               <Typography
-                allowFontScaling={false}
                 color={eventsSurface.occurrence.itemMeta}
                 variant="Body"
                 weight="bold"
@@ -111,7 +118,6 @@ export function OccurrenceList({
           />
           {section.description ? (
             <Typography
-              allowFontScaling={false}
               color={eventsSurface.occurrence.itemMeta}
               style={styles.sectionDescription}
               variant="Caption"
@@ -159,6 +165,7 @@ export function OccurrenceList({
                   onOpen={() => onOpenOccurrence(item)}
                   onToggleSubscription={() => onToggleOccurrenceSubscription(subscriptionKey)}
                   orderIndex={index}
+                  {...(section.key ? { sectionKey: section.key } : {})}
                   width={eventCardWidth}
                 />
               );
@@ -228,5 +235,11 @@ const styles = StyleSheet.create({
   },
   sectionDescription: {
     marginTop: -2,
+  },
+  sectionFlagship: {
+    borderColor: eventsSurface.hero.accent,
+  },
+  sectionSignature: {
+    borderColor: eventsSurface.occurrence.soonChipBorder,
   },
 });

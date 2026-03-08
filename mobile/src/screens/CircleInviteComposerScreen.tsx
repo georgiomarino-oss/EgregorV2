@@ -7,6 +7,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import type { CommunityStackParamList } from '../app/navigation/types';
 import { Button } from '../components/Button';
+import { PremiumCircleCardSurface, PremiumHeroPanel } from '../components/CinematicPrimitives';
 import { EmptyStateCard } from '../components/EmptyStateCard';
 import { LoadingStateCard } from '../components/LoadingStateCard';
 import { ModalSheet } from '../components/ModalSheet';
@@ -14,7 +15,6 @@ import { RetryPanel } from '../components/RetryPanel';
 import { Screen } from '../components/Screen';
 import { SegmentedTabs } from '../components/SegmentedTabs';
 import { StatusChip } from '../components/StatusChip';
-import { SurfaceCard } from '../components/SurfaceCard';
 import { TextField } from '../components/TextField';
 import { Typography } from '../components/Typography';
 import {
@@ -27,7 +27,7 @@ import {
 } from '../lib/api/circles';
 import { buildCircleInviteUrl } from '../lib/invite';
 import { sectionGap } from '../theme/layout';
-import { colors, radii, spacing } from '../theme/tokens';
+import { radii, sectionVisualThemes, spacing } from '../theme/tokens';
 import {
   toInviteStatusLabel,
   toInviteStatusTone,
@@ -204,15 +204,20 @@ export function CircleInviteComposerScreen({ route }: Props) {
   };
 
   return (
-    <Screen ambientSource={ambientAnimation} contentContainerStyle={styles.content} variant="home">
-      <SurfaceCard radius="lg" variant="profileImpact">
+    <Screen ambientSource={ambientAnimation} contentContainerStyle={styles.content} variant="circles">
+      <PremiumHeroPanel
+        fallbackIcon="email-fast-outline"
+        fallbackLabel="Invite flow"
+        section="circles"
+        style={styles.heroPanel}
+      >
         <Typography variant="H1" weight="bold">
           Invite to {circleName}
         </Typography>
-        <Typography color={colors.textCaption} variant="Caption">
+        <Typography color={sectionVisualThemes.circles.nav.labelIdle} variant="Caption">
           Send in-app or external invites with clear role and pending state tracking.
         </Typography>
-      </SurfaceCard>
+      </PremiumHeroPanel>
 
       <SegmentedTabs
         activeKey={mode}
@@ -227,6 +232,7 @@ export function CircleInviteComposerScreen({ route }: Props) {
           { key: 'existing', label: 'Invite existing users' },
           { key: 'external', label: 'Invite by link' },
         ]}
+        section="circles"
       />
 
       <SegmentedTabs
@@ -239,10 +245,16 @@ export function CircleInviteComposerScreen({ route }: Props) {
           setRoleToGrant('member');
         }}
         options={roleOptions}
+        section="circles"
       />
 
       {mode === 'existing' ? (
-        <SurfaceCard radius="lg" variant="default">
+        <PremiumCircleCardSurface
+          fallbackIcon="account-search"
+          fallbackLabel="Find people"
+          section="circles"
+          style={styles.sectionPanel}
+        >
           <TextField
             accessibilityLabel="Search users"
             autoCapitalize="none"
@@ -251,6 +263,7 @@ export function CircleInviteComposerScreen({ route }: Props) {
             label="Find users"
             onChangeText={setSearchQuery}
             placeholder="Search by display name"
+            section="circles"
             value={searchQuery}
           />
 
@@ -260,16 +273,16 @@ export function CircleInviteComposerScreen({ route }: Props) {
 
           {!searching && searchResults.length === 0 ? (
             <EmptyStateCard
-              backgroundColor="rgba(10, 30, 45, 0.68)"
+              backgroundColor={sectionVisualThemes.circles.surface.card[1]}
               body="No eligible users found for this query."
-              bodyColor={colors.textCaption}
-              borderColor={colors.borderSoft}
-              iconBackgroundColor="rgba(24, 50, 67, 0.9)"
-              iconBorderColor="rgba(113, 165, 195, 0.55)"
+              bodyColor={sectionVisualThemes.circles.nav.labelIdle}
+              borderColor={sectionVisualThemes.circles.surface.border}
+              iconBackgroundColor={sectionVisualThemes.circles.surface.card[0]}
+              iconBorderColor={sectionVisualThemes.circles.media.frameBorder}
               iconName="account-search"
-              iconTint="rgba(212, 242, 255, 0.9)"
+              iconTint={sectionVisualThemes.circles.media.icon}
               title="No users found"
-              titleColor={colors.textPrimary}
+              titleColor={sectionVisualThemes.circles.nav.labelActive}
             />
           ) : null}
 
@@ -279,7 +292,7 @@ export function CircleInviteComposerScreen({ route }: Props) {
                 <Typography numberOfLines={1} variant="Body" weight="bold">
                   {user.displayName}
                 </Typography>
-                <Typography color={colors.textCaption} variant="Caption">
+                <Typography color={sectionVisualThemes.circles.nav.labelIdle} variant="Caption">
                   Invite as {toRoleLabel(roleToGrant)}
                 </Typography>
               </View>
@@ -293,9 +306,14 @@ export function CircleInviteComposerScreen({ route }: Props) {
               />
             </View>
           ))}
-        </SurfaceCard>
+        </PremiumCircleCardSurface>
       ) : (
-        <SurfaceCard radius="lg" variant="default">
+        <PremiumCircleCardSurface
+          fallbackIcon="link-variant"
+          fallbackLabel="Shareable invite"
+          section="circles"
+          style={styles.sectionPanel}
+        >
           <TextField
             accessibilityLabel="Invite contact"
             autoCapitalize="none"
@@ -304,6 +322,7 @@ export function CircleInviteComposerScreen({ route }: Props) {
             label="External contact"
             onChangeText={setExternalContact}
             placeholder="example@email.com"
+            section="circles"
             value={externalContact}
           />
           <Button
@@ -314,10 +333,10 @@ export function CircleInviteComposerScreen({ route }: Props) {
             title="Create tracked invite link"
             variant="secondary"
           />
-          <Typography color={colors.textCaption} variant="Caption">
+          <Typography color={sectionVisualThemes.circles.nav.labelIdle} variant="Caption">
             Link invites stay pending until accepted from the invite decision flow.
           </Typography>
-        </SurfaceCard>
+        </PremiumCircleCardSurface>
       )}
 
       {error ? (
@@ -332,9 +351,16 @@ export function CircleInviteComposerScreen({ route }: Props) {
       ) : null}
 
       {successMessage ? (
-        <SurfaceCard radius="md" variant="homeAlert">
-          <Typography variant="Caption">{successMessage}</Typography>
-        </SurfaceCard>
+        <PremiumCircleCardSurface
+          fallbackIcon="check-circle-outline"
+          fallbackLabel="Invite status"
+          section="circles"
+          style={styles.noticeCard}
+        >
+          <Typography color={sectionVisualThemes.circles.nav.labelActive} variant="Caption">
+            {successMessage}
+          </Typography>
+        </PremiumCircleCardSurface>
       ) : null}
 
       {latestInvite ? (
@@ -342,7 +368,7 @@ export function CircleInviteComposerScreen({ route }: Props) {
           <Typography variant="Body" weight="bold">
             Invite ready
           </Typography>
-          <Typography color={colors.textCaption} variant="Caption">
+          <Typography color={sectionVisualThemes.circles.nav.labelIdle} variant="Caption">
             Status: {toInviteStatusLabel(latestInvite.status)}. Role:{' '}
             {toRoleLabel(latestInvite.roleToGrant)}.
           </Typography>
@@ -373,13 +399,19 @@ const styles = StyleSheet.create({
     gap: sectionGap,
     paddingBottom: sectionGap,
   },
+  heroPanel: {
+    gap: spacing.sm,
+  },
   linkBox: {
-    backgroundColor: 'rgba(18, 42, 58, 0.84)',
-    borderColor: 'rgba(112, 164, 196, 0.55)',
+    backgroundColor: sectionVisualThemes.circles.surface.card[1],
+    borderColor: sectionVisualThemes.circles.surface.edge,
     borderRadius: radii.md,
     borderWidth: 1,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.sm,
+  },
+  noticeCard: {
+    minHeight: 52,
   },
   resultBody: {
     flex: 1,
@@ -387,8 +419,8 @@ const styles = StyleSheet.create({
   },
   resultRow: {
     alignItems: 'center',
-    backgroundColor: 'rgba(12, 30, 45, 0.72)',
-    borderColor: 'rgba(115, 165, 194, 0.5)',
+    backgroundColor: sectionVisualThemes.circles.surface.card[1],
+    borderColor: sectionVisualThemes.circles.surface.edge,
     borderRadius: radii.md,
     borderWidth: 1,
     flexDirection: 'row',
@@ -396,5 +428,8 @@ const styles = StyleSheet.create({
     minHeight: 62,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.sm,
+  },
+  sectionPanel: {
+    gap: spacing.sm,
   },
 });

@@ -96,7 +96,7 @@ export function EventsScreen() {
     <Screen
       ambientSource={ambientAnimation}
       contentContainerStyle={styles.content}
-      variant="events"
+      variant="live"
     >
       <EventsHeader
         deviceTimeZoneLabel={deviceTimeZoneLabel}

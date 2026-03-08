@@ -6,9 +6,19 @@ import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
 
 import { cssAngleToLinearPoints } from '../theme/gradient';
 import { figmaV2Reference } from '../theme/figma-v2-reference';
+import { getSectionThemeByBackgroundVariant } from '../theme/sectionTheme';
 import { parseRgba } from '../theme/svgStop';
+import { sectionVisualThemes } from '../theme/tokens';
 
-type CosmicBackgroundVariant = 'auth' | 'home' | 'solo' | 'events' | 'eventRoom' | 'profile';
+type CosmicBackgroundVariant =
+  | 'auth'
+  | 'home'
+  | 'circles'
+  | 'solo'
+  | 'events'
+  | 'live'
+  | 'eventRoom'
+  | 'profile';
 
 interface CosmicBackgroundProps {
   ambientSource?: unknown;
@@ -18,13 +28,16 @@ interface CosmicBackgroundProps {
   variant?: CosmicBackgroundVariant;
 }
 
-type BackgroundRecipe = (typeof figmaV2Reference.backgrounds)[CosmicBackgroundVariant];
+type RecipeKey = keyof typeof figmaV2Reference.backgrounds;
+type BackgroundRecipe = (typeof figmaV2Reference.backgrounds)[RecipeKey];
 
 const recipeByVariant: Record<CosmicBackgroundVariant, BackgroundRecipe> = {
   auth: figmaV2Reference.backgrounds.auth,
+  circles: figmaV2Reference.backgrounds.home,
   eventRoom: figmaV2Reference.backgrounds.eventRoom,
   events: figmaV2Reference.backgrounds.events,
   home: figmaV2Reference.backgrounds.home,
+  live: figmaV2Reference.backgrounds.events,
   profile: figmaV2Reference.backgrounds.profile,
   solo: figmaV2Reference.backgrounds.solo,
 };
@@ -91,6 +104,8 @@ export function CosmicBackground({
 }: CosmicBackgroundProps) {
   const recipe = recipeByVariant[variant];
   const linearPoints = cssAngleToLinearPoints(recipe.linear.angleDeg);
+  const sectionThemeKey = getSectionThemeByBackgroundVariant(variant);
+  const sectionTheme = sectionThemeKey ? sectionVisualThemes[sectionThemeKey] : null;
 
   return (
     <View style={styles.container}>
@@ -104,6 +119,25 @@ export function CosmicBackground({
 
       <RadialLayer recipe={recipe} variant={variant} />
 
+      {sectionTheme ? (
+        <>
+          <LinearGradient
+            colors={sectionTheme.background.veil}
+            end={{ x: 0.5, y: 1 }}
+            start={{ x: 0.5, y: 0 }}
+            style={StyleSheet.absoluteFill}
+          />
+          <View
+            pointerEvents="none"
+            style={[styles.orb, styles.orbLarge, { backgroundColor: sectionTheme.background.orbA }]}
+          />
+          <View
+            pointerEvents="none"
+            style={[styles.orb, styles.orbSmall, { backgroundColor: sectionTheme.background.orbB }]}
+          />
+        </>
+      ) : null}
+
       <View style={[styles.content, contentStyle]}>{children}</View>
     </View>
   );
@@ -115,5 +149,21 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+  },
+  orb: {
+    borderRadius: 320,
+    position: 'absolute',
+  },
+  orbLarge: {
+    height: 260,
+    right: -60,
+    top: -40,
+    width: 260,
+  },
+  orbSmall: {
+    bottom: 80,
+    height: 180,
+    left: -70,
+    width: 180,
   },
 });

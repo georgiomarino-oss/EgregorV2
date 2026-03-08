@@ -2,12 +2,12 @@ import { StyleSheet, View } from 'react-native';
 
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
+import { PremiumCircleCardSurface } from '../../../components/CinematicPrimitives';
 import { StatusChip } from '../../../components/StatusChip';
-import { SurfaceCard } from '../../../components/SurfaceCard';
 import { SurfaceListRow } from '../../../components/SurfaceListRow';
 import { Typography } from '../../../components/Typography';
 import type { CanonicalCircleSummary } from '../../../lib/api/circles';
-import { radii, spacing } from '../../../theme/tokens';
+import { radii, sectionVisualThemes, spacing } from '../../../theme/tokens';
 import { toRoleLabel } from '../invitePresentation';
 
 interface CircleSummaryCardProps {
@@ -17,11 +17,16 @@ interface CircleSummaryCardProps {
 
 export function CircleSummaryCard({ circle, onPress }: CircleSummaryCardProps) {
   return (
-    <SurfaceCard contentPadding={0} radius="lg" variant="profileRow">
+    <PremiumCircleCardSurface
+      fallbackIcon="account-group"
+      fallbackLabel="Shared circle"
+      section="circles"
+      style={styles.card}
+    >
       <SurfaceListRow
         leading={
           <MaterialCommunityIcons
-            color="rgba(204, 231, 248, 0.95)"
+            color={sectionVisualThemes.circles.media.icon}
             name="account-group"
             size={20}
           />
@@ -29,14 +34,14 @@ export function CircleSummaryCard({ circle, onPress }: CircleSummaryCardProps) {
         onPress={() => onPress(circle)}
         style={styles.row}
         trailing={
-          <MaterialCommunityIcons color="rgba(174, 208, 231, 0.8)" name="chevron-right" size={22} />
+          <MaterialCommunityIcons color={sectionVisualThemes.circles.nav.labelIdle} name="chevron-right" size={22} />
         }
       >
         <View style={styles.content}>
           <Typography numberOfLines={1} variant="Body" weight="bold">
             {circle.name}
           </Typography>
-          <Typography color="rgba(185, 212, 228, 0.88)" numberOfLines={2} variant="Caption">
+          <Typography color={sectionVisualThemes.circles.nav.labelIdle} numberOfLines={2} variant="Caption">
             {circle.description?.trim() || 'No circle description yet.'}
           </Typography>
           <View style={styles.badges}>
@@ -53,7 +58,7 @@ export function CircleSummaryCard({ circle, onPress }: CircleSummaryCardProps) {
           </View>
         </View>
       </SurfaceListRow>
-    </SurfaceCard>
+    </PremiumCircleCardSurface>
   );
 }
 
@@ -65,6 +70,10 @@ const styles = StyleSheet.create({
   },
   content: {
     gap: spacing.xxs,
+  },
+  card: {
+    paddingHorizontal: spacing.xs,
+    paddingVertical: spacing.xs,
   },
   row: {
     borderRadius: radii.xl,

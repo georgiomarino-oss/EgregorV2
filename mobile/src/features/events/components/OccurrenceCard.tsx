@@ -3,12 +3,22 @@ import { Animated, Easing, Pressable, StyleSheet, View } from 'react-native';
 
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
+import { PremiumLiveEventCardSurface } from '../../../components/CinematicPrimitives';
 import { StatusChip } from '../../../components/StatusChip';
 import { Typography } from '../../../components/Typography';
 import { useReducedMotion } from '../../rooms/hooks/useReducedMotion';
-import { eventsSurface, interaction, motion, radii, spacing } from '../../../theme/tokens';
+import {
+  eventsSurface,
+  interaction,
+  motion,
+  radii,
+  sectionVisualThemes,
+  spacing,
+} from '../../../theme/tokens';
+import type { LiveFeedSectionKey } from '../types';
 import type { ScheduledEventOccurrence } from '../types';
 import { formatOccurrenceStartLabel, statusLabel } from '../utils/occurrence';
+import { resolveOccurrenceVisualState } from '../utils/occurrenceVisualState';
 
 interface OccurrenceCardProps {
   isSubscribed: boolean;
@@ -17,6 +27,7 @@ interface OccurrenceCardProps {
   onOpen: () => void;
   onToggleSubscription: () => void;
   orderIndex?: number;
+  sectionKey?: LiveFeedSectionKey;
   width: number;
 }
 
@@ -27,10 +38,13 @@ export function OccurrenceCard({
   onOpen,
   onToggleSubscription,
   orderIndex = 0,
+  sectionKey,
   width,
 }: OccurrenceCardProps) {
   const reduceMotionEnabled = useReducedMotion();
   const settle = useMemo(() => new Animated.Value(0), []);
+  const { emphasisIcon, emphasisLabel, fallbackLabel, isElevenEleven, isFlagship } =
+    resolveOccurrenceVisualState(sectionKey);
 
   useEffect(() => {
     if (reduceMotionEnabled) {
@@ -90,11 +104,38 @@ export function OccurrenceCard({
         onPress={onOpen}
         style={({ pressed }) => [!reduceMotionEnabled && pressed && styles.cardPressed]}
       >
-        <View style={[styles.card, { width }]}>
+        <PremiumLiveEventCardSurface
+          fallbackIcon="earth"
+          fallbackLabel={fallbackLabel ?? item.category}
+          section="live"
+          style={[
+            styles.card,
+            { width },
+            isElevenEleven ? styles.signatureCard : null,
+            isFlagship ? styles.flagshipCard : null,
+          ]}
+        >
+          {emphasisLabel ? (
+            <View style={styles.signatureBadge}>
+              <MaterialCommunityIcons
+                color={sectionVisualThemes.live.surface.highlight}
+                name={emphasisIcon}
+                size={14}
+              />
+              <Typography
+                color={sectionVisualThemes.live.surface.highlight}
+                style={styles.signatureBadgeText}
+                variant="Caption"
+                weight="bold"
+              >
+                {emphasisLabel}
+              </Typography>
+            </View>
+          ) : null}
+
           <View style={styles.cardHeader}>
             <View style={styles.cardTitleWrap}>
               <Typography
-                allowFontScaling={false}
                 numberOfLines={2}
                 style={styles.cardTitle}
                 variant="H2"
@@ -133,7 +174,6 @@ export function OccurrenceCard({
                 />
                 <View style={styles.categoryBadge}>
                   <Typography
-                    allowFontScaling={false}
                     color={eventsSurface.occurrence.categoryBadgeText}
                     style={styles.categoryBadgeText}
                     variant="Caption"
@@ -177,7 +217,6 @@ export function OccurrenceCard({
           </View>
 
           <Typography
-            allowFontScaling={false}
             color={eventsSurface.occurrence.itemBody}
             style={styles.cardBody}
           >
@@ -186,7 +225,6 @@ export function OccurrenceCard({
 
           <View style={styles.bottomMetaRow}>
             <Typography
-              allowFontScaling={false}
               color={eventsSurface.occurrence.itemMeta}
               variant="Caption"
               weight="bold"
@@ -194,7 +232,6 @@ export function OccurrenceCard({
               {formatOccurrenceStartLabel(item.startsAt)}
             </Typography>
             <Typography
-              allowFontScaling={false}
               color={eventsSurface.occurrence.itemMeta}
               variant="Caption"
               weight="bold"
@@ -205,7 +242,6 @@ export function OccurrenceCard({
 
           <View style={styles.ctaRow}>
             <Typography
-              allowFontScaling={false}
               color={eventsSurface.occurrence.ctaText}
               style={styles.ctaText}
               variant="Body"
@@ -219,7 +255,7 @@ export function OccurrenceCard({
               size={17}
             />
           </View>
-        </View>
+        </PremiumLiveEventCardSurface>
       </Pressable>
     </Animated.View>
   );
@@ -245,10 +281,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   card: {
-    backgroundColor: eventsSurface.occurrence.itemBackground,
-    borderColor: eventsSurface.occurrence.itemBorder,
-    borderRadius: radii.lg,
-    borderWidth: 1,
     gap: spacing.xs,
     minHeight: 232,
     overflow: 'hidden',
@@ -276,6 +308,9 @@ const styles = StyleSheet.create({
   cardTitleWrap: {
     flex: 1,
     gap: spacing.xxs,
+  },
+  flagshipCard: {
+    borderColor: sectionVisualThemes.live.surface.highlight,
   },
   categoryBadge: {
     alignItems: 'center',
@@ -314,6 +349,25 @@ const styles = StyleSheet.create({
   },
   noMotion: {
     opacity: 1,
+  },
+  signatureBadge: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: sectionVisualThemes.live.surface.card[0],
+    borderColor: sectionVisualThemes.live.surface.edge,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: spacing.xxs,
+    minHeight: 24,
+    paddingHorizontal: spacing.xs,
+    paddingVertical: 2,
+  },
+  signatureBadgeText: {
+    textTransform: 'none',
+  },
+  signatureCard: {
+    borderColor: sectionVisualThemes.live.surface.edge,
   },
   subscriptionButtonActive: {
     backgroundColor: eventsSurface.occurrence.bellActiveBackground,

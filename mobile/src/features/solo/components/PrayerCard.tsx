@@ -3,9 +3,17 @@ import { Animated, Easing, Pressable, StyleSheet, View } from 'react-native';
 
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
+import { PremiumPrayerCardSurface } from '../../../components/CinematicPrimitives';
 import { Typography } from '../../../components/Typography';
 import type { PrayerLibraryItem } from '../../../lib/api/data';
-import { interaction, motion, radii, soloSurface, spacing } from '../../../theme/tokens';
+import {
+  interaction,
+  motion,
+  radii,
+  sectionVisualThemes,
+  soloSurface,
+  spacing,
+} from '../../../theme/tokens';
 import { useReducedMotion } from '../../rooms/hooks/useReducedMotion';
 
 interface PrayerCardProps {
@@ -81,15 +89,14 @@ export function PrayerCard({
         onPress={onStartPrayer}
         style={({ pressed }) => [!reduceMotionEnabled && pressed && styles.cardPressed]}
       >
-        <View style={[styles.card, { width }, featured ? styles.cardFeatured : styles.cardRegular]}>
+        <PremiumPrayerCardSurface
+          fallbackIcon="book-open-page-variant-outline"
+          fallbackLabel={categoryLabel}
+          section="solo"
+          style={[styles.card, { width }, featured ? styles.cardFeatured : styles.cardRegular]}
+        >
           <View style={styles.header}>
-            <Typography
-              allowFontScaling={false}
-              color={soloSurface.card.title}
-              style={styles.title}
-              variant="H2"
-              weight="bold"
-            >
+            <Typography color={soloSurface.card.title} style={styles.title} variant="H2" weight="bold">
               {item.title}
             </Typography>
             <Pressable
@@ -117,35 +124,24 @@ export function PrayerCard({
             </Pressable>
           </View>
 
-          <Typography allowFontScaling={false} color={soloSurface.card.body} style={styles.body}>
+          <Typography color={soloSurface.card.body} style={styles.body}>
             {item.body}
           </Typography>
 
-          <Typography
-            allowFontScaling={false}
-            color={soloSurface.card.detail}
-            variant="Body"
-            weight="bold"
-          >
+          <Typography color={soloSurface.card.detail} variant="Body" weight="bold">
             {`${item.durationMinutes} min - ${categoryLabel}`}
           </Typography>
-          <Typography allowFontScaling={false} color={soloSurface.card.meta} variant="Caption">
+          <Typography color={soloSurface.card.meta} variant="Caption">
             {`${item.startsCount} starts`}
           </Typography>
 
           <View style={styles.cta}>
-            <Typography
-              allowFontScaling={false}
-              color={soloSurface.card.ctaText}
-              style={styles.ctaText}
-              variant="Caption"
-              weight="bold"
-            >
+            <Typography color={soloSurface.card.ctaText} style={styles.ctaText} variant="Caption" weight="bold">
               Begin prayer
             </Typography>
             <MaterialCommunityIcons color={soloSurface.card.ctaText} name="arrow-right" size={16} />
           </View>
-        </View>
+        </PremiumPrayerCardSurface>
       </Pressable>
     </Animated.View>
   );
@@ -160,23 +156,19 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
     minHeight: 220,
     overflow: 'hidden',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-    borderRadius: radii.md,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm,
   },
   cardFeatured: {
-    backgroundColor: soloSurface.card.featuredBackground,
-    borderColor: soloSurface.card.featuredBorder,
-    borderWidth: 1,
+    borderColor: sectionVisualThemes.solo.surface.edge,
   },
   cardPressed: {
     opacity: interaction.card.pressedOpacity,
     transform: [{ scale: interaction.card.pressedScale }],
   },
   cardRegular: {
-    backgroundColor: soloSurface.card.itemBackground,
-    borderColor: soloSurface.card.itemBorder,
-    borderWidth: 1,
+    borderColor: sectionVisualThemes.solo.surface.border,
+    opacity: 0.98,
   },
   cta: {
     alignItems: 'center',

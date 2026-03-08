@@ -17,7 +17,7 @@ import { CircleSummaryCard } from '../features/circles/components/CircleSummaryC
 import { CirclesHeroPanel } from '../features/circles/components/CirclesHeroPanel';
 import { useCirclesDashboard } from '../features/circles/hooks/useCirclesDashboard';
 import { sectionGap } from '../theme/layout';
-import { colors, spacing } from '../theme/tokens';
+import { colors, sectionVisualThemes, spacing } from '../theme/tokens';
 
 type CommunityNavigation = NativeStackNavigationProp<CommunityStackParamList, 'CommunityHome'>;
 type CircleSegment = 'invites' | 'my' | 'shared';
@@ -32,7 +32,11 @@ export function CommunityScreen() {
     segment === 'my' ? myCircles : segment === 'shared' ? sharedCircles : pendingInvites;
 
   return (
-    <Screen ambientSource={ambientAnimation} contentContainerStyle={styles.content} variant="home">
+    <Screen
+      ambientSource={ambientAnimation}
+      contentContainerStyle={styles.content}
+      variant="circles"
+    >
       <CirclesHeroPanel
         myCount={myCircles.length}
         pendingCount={pendingInvites.length}
@@ -54,6 +58,7 @@ export function CommunityScreen() {
           { key: 'shared', label: `Shared With Me (${sharedCircles.length})` },
           { key: 'invites', label: `Pending Invites (${pendingInvites.length})` },
         ]}
+        section="circles"
       />
 
       {loading ? (
@@ -111,7 +116,7 @@ export function CommunityScreen() {
       {!loading && segmentItems.length === 0 ? (
         <EmptyStateCard
           action={undefined}
-          backgroundColor="rgba(10, 30, 45, 0.7)"
+          backgroundColor={sectionVisualThemes.circles.surface.card[0]}
           body={
             segment === 'my'
               ? 'Create or accept invites to start building your circles.'
@@ -120,11 +125,11 @@ export function CommunityScreen() {
                 : 'Pending invitations will appear here when someone invites you.'
           }
           bodyColor={colors.textCaption}
-          borderColor={colors.borderSoft}
-          iconBackgroundColor="rgba(22, 50, 68, 0.9)"
-          iconBorderColor="rgba(120, 170, 198, 0.6)"
+          borderColor={sectionVisualThemes.circles.surface.edge}
+          iconBackgroundColor={sectionVisualThemes.circles.surface.card[0]}
+          iconBorderColor={sectionVisualThemes.circles.surface.edge}
           iconName={segment === 'invites' ? 'email-outline' : 'account-group-outline'}
-          iconTint="rgba(214, 244, 255, 0.9)"
+          iconTint={sectionVisualThemes.circles.media.icon}
           title={
             segment === 'my'
               ? 'No circles yet'

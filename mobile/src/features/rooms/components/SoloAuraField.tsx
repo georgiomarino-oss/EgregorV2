@@ -4,8 +4,9 @@ import { Animated, Easing, StyleSheet, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
 
-import { motion, roomAtmosphere } from '../../../theme/tokens';
+import { motion, roomAtmosphere, roomVisualFoundation, signatureMoments } from '../../../theme/tokens';
 import { useReducedMotion } from '../hooks/useReducedMotion';
+import { useRoomAtmosphereQuality } from '../hooks/useRoomAtmosphereQuality';
 
 interface SoloAuraFieldProps {
   active?: boolean;
@@ -16,13 +17,14 @@ const FIELD_VIEWBOX = 1000;
 
 export function SoloAuraField({ active = true, mode = 'solo' }: SoloAuraFieldProps) {
   const reduceMotionEnabled = useReducedMotion();
+  const atmosphereQuality = useRoomAtmosphereQuality();
   const breathe = useMemo(() => new Animated.Value(0), []);
   const drift = useMemo(() => new Animated.Value(0), []);
   const syncWave = useMemo(() => new Animated.Value(0), []);
-  const mistOpacity = active ? 1 : 0.42;
+  const mistOpacity = active ? 1 : roomVisualFoundation.lowPerfStaticOpacity;
 
   useEffect(() => {
-    if (!active || reduceMotionEnabled) {
+    if (!active || reduceMotionEnabled || atmosphereQuality === 'static') {
       breathe.stopAnimation();
       drift.stopAnimation();
       syncWave.stopAnimation();
@@ -32,6 +34,7 @@ export function SoloAuraField({ active = true, mode = 'solo' }: SoloAuraFieldPro
       return;
     }
 
+    const shouldRenderFullEffects = atmosphereQuality === 'full';
     const breathHalfCycle = Math.max(
       motion.durationMs.slow,
       Math.floor(motion.room.solo.breathCycleMs / 2),
@@ -59,23 +62,25 @@ export function SoloAuraField({ active = true, mode = 'solo' }: SoloAuraFieldPro
       { resetBeforeIteration: true },
     );
 
-    const driftLoop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(drift, {
-          duration: driftHalfCycle,
-          easing: Easing.inOut(Easing.sin),
-          toValue: 1,
-          useNativeDriver: true,
-        }),
-        Animated.timing(drift, {
-          duration: driftHalfCycle,
-          easing: Easing.inOut(Easing.sin),
-          toValue: 0,
-          useNativeDriver: true,
-        }),
-      ]),
-      { resetBeforeIteration: true },
-    );
+    const driftLoop = shouldRenderFullEffects
+      ? Animated.loop(
+          Animated.sequence([
+            Animated.timing(drift, {
+              duration: driftHalfCycle,
+              easing: Easing.inOut(Easing.sin),
+              toValue: 1,
+              useNativeDriver: true,
+            }),
+            Animated.timing(drift, {
+              duration: driftHalfCycle,
+              easing: Easing.inOut(Easing.sin),
+              toValue: 0,
+              useNativeDriver: true,
+            }),
+          ]),
+          { resetBeforeIteration: true },
+        )
+      : null;
 
     const syncLoop = Animated.loop(
       Animated.sequence([
@@ -96,15 +101,15 @@ export function SoloAuraField({ active = true, mode = 'solo' }: SoloAuraFieldPro
     );
 
     loop.start();
-    driftLoop.start();
+    driftLoop?.start();
     syncLoop.start();
 
     return () => {
       loop.stop();
-      driftLoop.stop();
+      driftLoop?.stop();
       syncLoop.stop();
     };
-  }, [active, breathe, drift, reduceMotionEnabled, syncWave]);
+  }, [active, atmosphereQuality, breathe, drift, reduceMotionEnabled, syncWave]);
 
   const auraOpacity = !active
     ? 0.16
@@ -173,6 +178,9 @@ export function SoloAuraField({ active = true, mode = 'solo' }: SoloAuraFieldPro
           inputRange: [0, 1],
           outputRange: [0.2, 0.56],
         });
+  const showFullDetail = atmosphereQuality === 'full';
+  const showSyncOverlay = mode === 'participant' && atmosphereQuality !== 'static';
+  const showHostBeacon = mode === 'host' && atmosphereQuality !== 'static';
 
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
@@ -223,48 +231,50 @@ export function SoloAuraField({ active = true, mode = 'solo' }: SoloAuraFieldPro
         </Svg>
       </Animated.View>
 
-      <Animated.View
-        style={[
-          styles.veilAura,
-          {
-            opacity: veilOpacity,
-            transform: [{ scale: 1 + motion.amplitude.medium }],
-          },
-        ]}
-      >
-        <Svg
-          height="100%"
-          preserveAspectRatio="none"
-          viewBox={`0 0 ${FIELD_VIEWBOX} ${FIELD_VIEWBOX}`}
-          width="100%"
+      {showFullDetail ? (
+        <Animated.View
+          style={[
+            styles.veilAura,
+            {
+              opacity: veilOpacity,
+              transform: [{ scale: 1 + motion.amplitude.medium }],
+            },
+          ]}
         >
-          <Defs>
-            <RadialGradient
-              cx="0"
-              cy="0"
-              gradientTransform="translate(500 520) rotate(90) scale(360)"
-              gradientUnits="userSpaceOnUse"
-              id="solo-aura-veil"
-              r="1"
-            >
-              <Stop offset="0" stopColor={roomAtmosphere.solo.auraOuter} />
-              <Stop offset="1" stopColor={roomAtmosphere.solo.mistTo} />
-            </RadialGradient>
-          </Defs>
+          <Svg
+            height="100%"
+            preserveAspectRatio="none"
+            viewBox={`0 0 ${FIELD_VIEWBOX} ${FIELD_VIEWBOX}`}
+            width="100%"
+          >
+            <Defs>
+              <RadialGradient
+                cx="0"
+                cy="0"
+                gradientTransform="translate(500 520) rotate(90) scale(360)"
+                gradientUnits="userSpaceOnUse"
+                id="solo-aura-veil"
+                r="1"
+              >
+                <Stop offset="0" stopColor={roomAtmosphere.solo.auraOuter} />
+                <Stop offset="1" stopColor={roomAtmosphere.solo.mistTo} />
+              </RadialGradient>
+            </Defs>
 
-          <Rect
-            fill="url(#solo-aura-veil)"
-            height={FIELD_VIEWBOX}
-            width={FIELD_VIEWBOX}
-            x="0"
-            y="0"
-          />
-        </Svg>
-      </Animated.View>
+            <Rect
+              fill="url(#solo-aura-veil)"
+              height={FIELD_VIEWBOX}
+              width={FIELD_VIEWBOX}
+              x="0"
+              y="0"
+            />
+          </Svg>
+        </Animated.View>
+      ) : null}
 
       <Animated.View style={[styles.innerGlow, { opacity: innerGlowOpacity }]} />
 
-      {mode === 'participant' ? (
+      {showSyncOverlay ? (
         <Animated.View
           style={[styles.syncOverlay, { opacity: syncOpacity, transform: [{ scale: syncScale }] }]}
         >
@@ -275,7 +285,7 @@ export function SoloAuraField({ active = true, mode = 'solo' }: SoloAuraFieldPro
         </Animated.View>
       ) : null}
 
-      {mode === 'host' ? (
+      {showHostBeacon ? (
         <Animated.View style={[styles.hostBeacon, { opacity: hostBeaconOpacity }]} />
       ) : null}
     </View>
@@ -288,8 +298,8 @@ const styles = StyleSheet.create({
   },
   hostBeacon: {
     alignSelf: 'center',
-    backgroundColor: 'rgba(255, 218, 166, 0.16)',
-    borderColor: 'rgba(255, 218, 166, 0.46)',
+    backgroundColor: signatureMoments.collectiveField.stageGlow,
+    borderColor: signatureMoments.sharedSync.wave,
     borderRadius: 120,
     borderWidth: 1,
     bottom: 192,
@@ -302,8 +312,8 @@ const styles = StyleSheet.create({
     backgroundColor: roomAtmosphere.solo.mistFrom,
   },
   syncNodeHost: {
-    backgroundColor: 'rgba(249, 211, 156, 0.94)',
-    borderColor: 'rgba(255, 226, 182, 0.92)',
+    backgroundColor: signatureMoments.sharedSync.hostNode,
+    borderColor: signatureMoments.sharedSync.wave,
     borderRadius: 37,
     borderWidth: 1,
     height: 74,
@@ -313,8 +323,8 @@ const styles = StyleSheet.create({
     width: 74,
   },
   syncNodeParticipant: {
-    backgroundColor: 'rgba(181, 223, 255, 0.92)',
-    borderColor: 'rgba(199, 234, 255, 0.9)',
+    backgroundColor: signatureMoments.sharedSync.participantNode,
+    borderColor: signatureMoments.sharedSync.tetherCore,
     borderRadius: 37,
     borderWidth: 1,
     bottom: 38,
@@ -327,7 +337,7 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
   },
   syncTether: {
-    backgroundColor: 'rgba(159, 214, 255, 0.56)',
+    backgroundColor: signatureMoments.sharedSync.tetherGlow,
     borderRadius: 8,
     height: 10,
     left: 110,
@@ -337,7 +347,7 @@ const styles = StyleSheet.create({
     width: 170,
   },
   syncWave: {
-    borderColor: 'rgba(255, 218, 166, 0.6)',
+    borderColor: signatureMoments.sharedSync.wave,
     borderRadius: 92,
     borderWidth: 1,
     height: 184,

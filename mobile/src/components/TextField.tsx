@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import {
   TextInput,
   View,
@@ -8,19 +8,30 @@ import {
   type ViewStyle,
 } from 'react-native';
 
+import type { SectionThemeKey } from '../theme/tokens';
 import { figmaV2Reference } from '../theme/figma-v2-reference';
-import { radii, spacing, typography } from '../theme/tokens';
+import { premiumInteraction, radii, sectionVisualThemes, spacing, typography } from '../theme/tokens';
 import { Typography } from './Typography';
 
 interface TextFieldProps extends TextInputProps {
   helperText?: string;
   label: string;
   message?: string | null;
+  section?: SectionThemeKey;
   style?: StyleProp<ViewStyle>;
 }
 
-export function TextField({ helperText, label, message, style, ...inputProps }: TextFieldProps) {
+export function TextField({
+  helperText,
+  label,
+  message,
+  section,
+  style,
+  ...inputProps
+}: TextFieldProps) {
   const hasMessage = Boolean(message && message.trim().length > 0);
+  const [focused, setFocused] = useState(false);
+  const sectionPalette = section ? sectionVisualThemes[section] : null;
   const computedAccessibilityHint = useMemo(() => {
     const parts = [helperText, hasMessage ? message : undefined].filter(Boolean);
     return parts.length > 0 ? parts.join('. ') : undefined;
@@ -29,23 +40,56 @@ export function TextField({ helperText, label, message, style, ...inputProps }: 
   return (
     <View style={[styles.wrapper, style]}>
       <View style={styles.labelRow}>
-        <Typography variant="Label">{label}</Typography>
+        <Typography
+          color={sectionPalette ? sectionPalette.nav.labelActive : figmaV2Reference.text.label}
+          variant="Label"
+        >
+          {label}
+        </Typography>
         {helperText ? (
-          <Typography color={figmaV2Reference.text.caption} variant="Caption">
+          <Typography
+            color={sectionPalette ? sectionPalette.nav.labelIdle : figmaV2Reference.text.caption}
+            variant="Caption"
+          >
             {helperText}
           </Typography>
         ) : null}
       </View>
 
       <TextInput
+        onBlur={(event) => {
+          setFocused(false);
+          inputProps.onBlur?.(event);
+        }}
+        onFocus={(event) => {
+          setFocused(true);
+          inputProps.onFocus?.(event);
+        }}
         placeholderTextColor={figmaV2Reference.text.body}
-        style={styles.input}
+        style={[
+          styles.input,
+          sectionPalette
+            ? {
+                backgroundColor: sectionPalette.surface.card[1],
+                borderColor: focused
+                  ? premiumInteraction.focus.ringColor
+                  : sectionPalette.surface.border,
+                borderWidth: focused
+                  ? premiumInteraction.focus.ringWidth
+                  : StyleSheet.hairlineWidth + 0.8,
+                color: sectionPalette.nav.labelActive,
+              }
+            : null,
+        ]}
         {...inputProps}
         accessibilityHint={inputProps.accessibilityHint ?? computedAccessibilityHint}
       />
 
       {hasMessage ? (
-        <Typography color={figmaV2Reference.text.caption} variant="Caption">
+        <Typography
+          color={sectionPalette ? sectionPalette.nav.labelIdle : figmaV2Reference.text.caption}
+          variant="Caption"
+        >
           {message}
         </Typography>
       ) : null}

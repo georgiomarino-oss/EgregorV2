@@ -74,7 +74,6 @@ export function EmptyStateCard({
 
       <View style={styles.content}>
         <Typography
-          allowFontScaling={false}
           variant="Body"
           weight="bold"
           {...(titleColor ? { color: titleColor } : {})}
@@ -83,7 +82,6 @@ export function EmptyStateCard({
         </Typography>
         {body ? (
           <Typography
-            allowFontScaling={false}
             style={styles.body}
             variant="Caption"
             {...(bodyColor ? { color: bodyColor } : {})}

@@ -9,13 +9,15 @@ import { Button } from '../components/Button';
 import { EmptyStateCard } from '../components/EmptyStateCard';
 import { LoadingStateCard } from '../components/LoadingStateCard';
 import { ModalSheet } from '../components/ModalSheet';
+import { PremiumCircleCardSurface, PremiumHeroPanel } from '../components/CinematicPrimitives';
 import { RetryPanel } from '../components/RetryPanel';
 import { Screen } from '../components/Screen';
 import { SectionHeader } from '../components/SectionHeader';
-import { SurfaceCard } from '../components/SurfaceCard';
+import { StatusChip } from '../components/StatusChip';
 import { Typography } from '../components/Typography';
 import { CircleDetailMemberRow } from '../features/circles/components/CircleDetailMemberRow';
 import { CircleInviteRecordRow } from '../features/circles/components/CircleInviteRecordRow';
+import { toRoleLabel } from '../features/circles/invitePresentation';
 import {
   listCircleInvitesForManager,
   listCircleMembers,
@@ -30,7 +32,7 @@ import {
 } from '../lib/api/circles';
 import { supabase } from '../lib/supabase';
 import { sectionGap } from '../theme/layout';
-import { colors, spacing } from '../theme/tokens';
+import { sectionVisualThemes, spacing } from '../theme/tokens';
 
 type Props = NativeStackScreenProps<CommunityStackParamList, 'CircleDetails'>;
 
@@ -209,21 +211,24 @@ export function CircleDetailsScreen({ navigation, route }: Props) {
     }
   };
 
+  const circleName = circle?.name ?? fallbackCircleName;
+
   return (
-    <Screen ambientSource={ambientAnimation} contentContainerStyle={styles.content} variant="home">
-      <SurfaceCard radius="lg" variant="profileImpact">
+    <Screen ambientSource={ambientAnimation} contentContainerStyle={styles.content} variant="circles">
+      <PremiumHeroPanel
+        fallbackIcon="account-group-outline"
+        fallbackLabel="Circle governance"
+        section="circles"
+        style={styles.heroPanel}
+      >
         <View style={styles.headerTopRow}>
-          <Button
-            onPress={() => navigation.navigate('CommunityHome')}
-            title="Back"
-            variant="ghost"
-          />
+          <Button onPress={() => navigation.navigate('CommunityHome')} title="Back" variant="ghost" />
           {canManageMembers ? (
             <Button
               onPress={() => {
                 navigation.navigate('CircleInviteComposer', {
                   circleId,
-                  circleName: circle?.name ?? fallbackCircleName,
+                  circleName,
                 });
               }}
               title="Invite"
@@ -231,37 +236,56 @@ export function CircleDetailsScreen({ navigation, route }: Props) {
             />
           ) : null}
         </View>
+
         <SectionHeader
           subtitle={
             circle?.description?.trim() ||
             'Members, invite states, and permissions for this circle.'
           }
-          title={circle?.name ?? fallbackCircleName}
+          subtitleColor={sectionVisualThemes.circles.nav.labelIdle}
+          title={circleName}
+          titleColor={sectionVisualThemes.circles.nav.labelActive}
         />
-        <Typography color={colors.textCaption} variant="Caption">
-          Active members: {members.length}
-        </Typography>
-      </SurfaceCard>
+
+        <View style={styles.heroMetaRow}>
+          <StatusChip label={`Members ${members.length}`} tone="upcoming" uppercase={false} />
+          <StatusChip
+            label={`Role ${toRoleLabel(actorRole ?? 'member')}`}
+            tone={canManageMembers ? 'success' : 'neutral'}
+            uppercase={false}
+          />
+        </View>
+      </PremiumHeroPanel>
 
       {loading ? (
         <LoadingStateCard subtitle="Syncing members and invite states." title="Loading circle" />
       ) : null}
 
       {!loading ? (
-        <SurfaceCard radius="lg" variant="default">
-          <SectionHeader subtitle="Active members only" title="Members" />
+        <PremiumCircleCardSurface
+          fallbackIcon="account-multiple-outline"
+          fallbackLabel="Circle members"
+          section="circles"
+          style={styles.sectionPanel}
+        >
+          <SectionHeader
+            subtitle="Active members only"
+            subtitleColor={sectionVisualThemes.circles.nav.labelIdle}
+            title="Members"
+            titleColor={sectionVisualThemes.circles.nav.labelActive}
+          />
           {sortedMembers.length === 0 ? (
             <EmptyStateCard
-              backgroundColor="rgba(10, 30, 45, 0.68)"
+              backgroundColor={sectionVisualThemes.circles.surface.card[1]}
               body="No active members are visible for this circle."
-              bodyColor={colors.textCaption}
-              borderColor={colors.borderSoft}
-              iconBackgroundColor="rgba(24, 50, 67, 0.9)"
-              iconBorderColor="rgba(113, 165, 195, 0.55)"
+              bodyColor={sectionVisualThemes.circles.nav.labelIdle}
+              borderColor={sectionVisualThemes.circles.surface.border}
+              iconBackgroundColor={sectionVisualThemes.circles.surface.card[0]}
+              iconBorderColor={sectionVisualThemes.circles.media.frameBorder}
               iconName="account-outline"
-              iconTint="rgba(212, 242, 255, 0.9)"
+              iconTint={sectionVisualThemes.circles.media.icon}
               title="No active members"
-              titleColor={colors.textPrimary}
+              titleColor={sectionVisualThemes.circles.nav.labelActive}
             />
           ) : (
             sortedMembers.map((member) => (
@@ -274,27 +298,34 @@ export function CircleDetailsScreen({ navigation, route }: Props) {
               />
             ))
           )}
-        </SurfaceCard>
+        </PremiumCircleCardSurface>
       ) : null}
 
       {!loading && canManageMembers ? (
-        <SurfaceCard radius="lg" variant="default">
+        <PremiumCircleCardSurface
+          fallbackIcon="email-outline"
+          fallbackLabel="Invite tracking"
+          section="circles"
+          style={styles.sectionPanel}
+        >
           <SectionHeader
             subtitle="Pending, accepted, declined, revoked, and expired"
+            subtitleColor={sectionVisualThemes.circles.nav.labelIdle}
             title="Invites"
+            titleColor={sectionVisualThemes.circles.nav.labelActive}
           />
           {inviteRecords.length === 0 ? (
             <EmptyStateCard
-              backgroundColor="rgba(10, 30, 45, 0.68)"
+              backgroundColor={sectionVisualThemes.circles.surface.card[1]}
               body="No invites have been created for this circle yet."
-              bodyColor={colors.textCaption}
-              borderColor={colors.borderSoft}
-              iconBackgroundColor="rgba(24, 50, 67, 0.9)"
-              iconBorderColor="rgba(113, 165, 195, 0.55)"
+              bodyColor={sectionVisualThemes.circles.nav.labelIdle}
+              borderColor={sectionVisualThemes.circles.surface.border}
+              iconBackgroundColor={sectionVisualThemes.circles.surface.card[0]}
+              iconBorderColor={sectionVisualThemes.circles.media.frameBorder}
               iconName="email-outline"
-              iconTint="rgba(212, 242, 255, 0.9)"
+              iconTint={sectionVisualThemes.circles.media.icon}
               title="No invites yet"
-              titleColor={colors.textPrimary}
+              titleColor={sectionVisualThemes.circles.nav.labelActive}
             />
           ) : (
             inviteRecords.map((invite) => (
@@ -306,7 +337,7 @@ export function CircleDetailsScreen({ navigation, route }: Props) {
               />
             ))
           )}
-        </SurfaceCard>
+        </PremiumCircleCardSurface>
       ) : null}
 
       {error ? (
@@ -322,9 +353,16 @@ export function CircleDetailsScreen({ navigation, route }: Props) {
       ) : null}
 
       {toast ? (
-        <SurfaceCard radius="md" variant="homeAlert">
-          <Typography variant="Caption">{toast}</Typography>
-        </SurfaceCard>
+        <PremiumCircleCardSurface
+          fallbackIcon="check-circle-outline"
+          fallbackLabel="Update"
+          section="circles"
+          style={styles.toastCard}
+        >
+          <Typography color={sectionVisualThemes.circles.nav.labelActive} variant="Caption">
+            {toast}
+          </Typography>
+        </PremiumCircleCardSurface>
       ) : null}
 
       {selectedMember ? (
@@ -338,7 +376,7 @@ export function CircleDetailsScreen({ navigation, route }: Props) {
           <Typography variant="Body" weight="bold">
             Manage {selectedMember.displayName}
           </Typography>
-          <Typography color={colors.textCaption} variant="Caption">
+          <Typography color={sectionVisualThemes.circles.nav.labelIdle} variant="Caption">
             Choose a role action or remove this member from the circle.
           </Typography>
           {actorRole === 'owner' && selectedMember.role !== 'steward' ? (
@@ -395,5 +433,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: spacing.xs,
     justifyContent: 'space-between',
+  },
+  heroMetaRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+  },
+  heroPanel: {
+    gap: spacing.sm,
+  },
+  sectionPanel: {
+    gap: spacing.xs,
+  },
+  toastCard: {
+    minHeight: 52,
   },
 });

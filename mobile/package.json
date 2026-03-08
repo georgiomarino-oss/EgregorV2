@@ -15,6 +15,7 @@
     "lottie:sync:check": "node ./scripts/sync-lottie-assets.mjs --check",
     "typecheck": "tsc --noEmit",
     "test:phase3b-live": "node ./scripts/run-phase3b-live-tests.mjs",
+    "test:phase4b-visual": "node ./scripts/run-phase4b-visual-tests.mjs",
     "format": "prettier --check .",
     "format:fix": "prettier --write ."
   },

@@ -3,12 +3,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, PanResponder, StyleSheet } from 'react-native';
 import type { User } from '@supabase/supabase-js';
 
-import { ActionPanel } from '../components/ActionPanel';
 import { SecondaryButton } from '../components/AppButtons';
 import { Badge } from '../components/Badge';
+import { PremiumProfileTrustCardSurface } from '../components/CinematicPrimitives';
+import { EmptyStateCard } from '../components/EmptyStateCard';
 import { InlineErrorCard } from '../components/InlineErrorCard';
 import { RetryPanel } from '../components/RetryPanel';
 import { Screen } from '../components/Screen';
+import { SectionHeader } from '../components/SectionHeader';
 import { Typography } from '../components/Typography';
 import { JournalPanel } from '../features/profile/components/JournalPanel';
 import { TrustHero } from '../features/profile/components/TrustHero';
@@ -534,32 +536,39 @@ export function ProfileScreen() {
         totalPages={journalPages.length}
       />
 
-      <ActionPanel
+      {!loadingProfile && !summary ? (
+        <EmptyStateCard
+          backgroundColor={profileSurface.utility.panelBackground}
+          body="Your trust snapshot is still syncing. You can continue journaling while metrics refresh."
+          bodyColor={profileSurface.utility.subtitle}
+          borderColor={profileSurface.utility.panelBorder}
+          iconBackgroundColor={profileSurface.utility.panelBackground}
+          iconBorderColor={profileSurface.utility.panelBorder}
+          iconName="shield-refresh-outline"
+          iconTint={profileSurface.utility.title}
+          title="Profile snapshot pending"
+          titleColor={profileSurface.utility.title}
+        />
+      ) : null}
+
+      <PremiumProfileTrustCardSurface
         accessibilityHint="Contains account-level actions."
         accessibilityLabel="Account actions"
-        accessibilityRole="summary"
-        backgroundColor={profileSurface.utility.panelBackground}
-        borderColor={profileSurface.utility.panelBorder}
+        fallbackIcon="shield-account-outline"
+        fallbackLabel="Secure controls"
+        section="profile"
         style={styles.utilityPanel}
       >
-        <Badge label="Secure account" tone="success" />
-        <Typography
-          allowFontScaling={false}
-          color={profileSurface.utility.title}
-          variant="Body"
-          weight="bold"
-        >
-          Account actions
-        </Typography>
-        <Typography
-          allowFontScaling={false}
-          color={profileSurface.utility.subtitle}
-          variant="Caption"
-        >
-          Sign out at any time while your journal and progress remain synced.
-        </Typography>
+        <SectionHeader
+          compact
+          subtitle="Sign out at any time while your journal and progress remain synced."
+          subtitleColor={profileSurface.utility.subtitle}
+          title="Account sanctuary"
+          titleColor={profileSurface.utility.title}
+          trailing={<Badge label="Secure account" tone="success" />}
+        />
         <SecondaryButton loading={loadingSignOut} onPress={onSignOut} title="Sign out" />
-      </ActionPanel>
+      </PremiumProfileTrustCardSurface>
 
       {error ? (
         <RetryPanel

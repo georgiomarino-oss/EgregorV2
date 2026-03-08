@@ -18,7 +18,7 @@ export const PROFILE_ROW_PAD_TOP = 10.8;
 export const PROFILE_ROW_PAD_BOTTOM = 0.8;
 
 // Shared app layout constants already used in navigation/components.
-export const CUSTOM_TAB_BAR_HEIGHT = 52;
+export const CUSTOM_TAB_BAR_HEIGHT = 72;
 export const HOME_TITLE_SUBTITLE_GAP = TITLE_TO_SUBTITLE_GAP;
 export const HOME_SUBTITLE_TO_STAT_GAP = SUBTITLE_TO_MAINCARD_GAP;
 export const CARD_PADDING_LG = 15;

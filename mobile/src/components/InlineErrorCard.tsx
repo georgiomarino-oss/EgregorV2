@@ -119,10 +119,10 @@ export function InlineErrorCard({
           />
         </View>
         <View style={styles.textWrap}>
-          <Typography allowFontScaling={false} color={palette.title} variant="Body" weight="bold">
+          <Typography color={palette.title} variant="Body" weight="bold">
             {title ?? (tone === 'warning' ? 'Attention needed' : 'Something went wrong')}
           </Typography>
-          <Typography allowFontScaling={false} color={palette.body} variant="Caption">
+          <Typography color={palette.body} variant="Caption">
             {message}
           </Typography>
         </View>

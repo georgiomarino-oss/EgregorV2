@@ -4,8 +4,15 @@ import { Animated, Easing, StyleSheet, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
 
-import { motion, roomAtmosphere, type CollectiveEnergyLevel } from '../../../theme/tokens';
+import {
+  motion,
+  roomAtmosphere,
+  roomVisualFoundation,
+  signatureMoments,
+  type CollectiveEnergyLevel,
+} from '../../../theme/tokens';
 import { useReducedMotion } from '../hooks/useReducedMotion';
+import { useRoomAtmosphereQuality } from '../hooks/useRoomAtmosphereQuality';
 
 interface CollectiveEnergyFieldProps {
   energyLevel: CollectiveEnergyLevel;
@@ -16,6 +23,7 @@ const FIELD_VIEWBOX = 1000;
 
 export function CollectiveEnergyField({ energyLevel, isLive }: CollectiveEnergyFieldProps) {
   const reduceMotionEnabled = useReducedMotion();
+  const atmosphereQuality = useRoomAtmosphereQuality();
   const primaryPulse = useMemo(() => new Animated.Value(0), []);
   const secondaryPulse = useMemo(() => new Animated.Value(0), []);
   const depthShift = useMemo(() => new Animated.Value(0), []);
@@ -24,10 +32,10 @@ export function CollectiveEnergyField({ energyLevel, isLive }: CollectiveEnergyF
   const preset = roomAtmosphere.collective.energy[energyLevel];
   const liveIntensity =
     energyLevel === 'high' ? motion.amplitude.pronounced : motion.amplitude.medium;
-  const mistOpacity = isLive ? 0.92 : 0.2;
+  const mistOpacity = isLive ? 0.92 : roomVisualFoundation.lowPerfStaticOpacity * 0.34;
 
   useEffect(() => {
-    if (!isLive || reduceMotionEnabled) {
+    if (!isLive || reduceMotionEnabled || atmosphereQuality === 'static') {
       primaryPulse.stopAnimation();
       secondaryPulse.stopAnimation();
       depthShift.stopAnimation();
@@ -39,6 +47,7 @@ export function CollectiveEnergyField({ energyLevel, isLive }: CollectiveEnergyF
       return;
     }
 
+    const shouldRenderFullEffects = atmosphereQuality === 'full';
     const primaryLoop = Animated.loop(
       Animated.sequence([
         Animated.timing(primaryPulse, {
@@ -75,48 +84,61 @@ export function CollectiveEnergyField({ energyLevel, isLive }: CollectiveEnergyF
       { resetBeforeIteration: true },
     );
 
-    const depthLoop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(depthShift, {
-          duration: motion.room.collective.depthCycleMs,
-          easing: Easing.inOut(Easing.sin),
-          toValue: 1,
-          useNativeDriver: true,
-        }),
-        Animated.timing(depthShift, {
-          duration: motion.room.collective.depthCycleMs,
-          easing: Easing.inOut(Easing.sin),
-          toValue: 0,
-          useNativeDriver: true,
-        }),
-      ]),
-      { resetBeforeIteration: true },
-    );
+    const depthLoop = shouldRenderFullEffects
+      ? Animated.loop(
+          Animated.sequence([
+            Animated.timing(depthShift, {
+              duration: motion.room.collective.depthCycleMs,
+              easing: Easing.inOut(Easing.sin),
+              toValue: 1,
+              useNativeDriver: true,
+            }),
+            Animated.timing(depthShift, {
+              duration: motion.room.collective.depthCycleMs,
+              easing: Easing.inOut(Easing.sin),
+              toValue: 0,
+              useNativeDriver: true,
+            }),
+          ]),
+          { resetBeforeIteration: true },
+        )
+      : null;
 
-    const orbitLoop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(nodeOrbit, {
-          duration: 8600,
-          easing: Easing.linear,
-          toValue: 1,
-          useNativeDriver: true,
-        }),
-      ]),
-      { resetBeforeIteration: true },
-    );
+    const orbitLoop = shouldRenderFullEffects
+      ? Animated.loop(
+          Animated.sequence([
+            Animated.timing(nodeOrbit, {
+              duration: 8600,
+              easing: Easing.linear,
+              toValue: 1,
+              useNativeDriver: true,
+            }),
+          ]),
+          { resetBeforeIteration: true },
+        )
+      : null;
 
     primaryLoop.start();
     secondaryLoop.start();
-    depthLoop.start();
-    orbitLoop.start();
+    depthLoop?.start();
+    orbitLoop?.start();
 
     return () => {
       primaryLoop.stop();
       secondaryLoop.stop();
-      depthLoop.stop();
-      orbitLoop.stop();
+      depthLoop?.stop();
+      orbitLoop?.stop();
     };
-  }, [depthShift, isLive, nodeOrbit, preset, primaryPulse, reduceMotionEnabled, secondaryPulse]);
+  }, [
+    atmosphereQuality,
+    depthShift,
+    isLive,
+    nodeOrbit,
+    preset,
+    primaryPulse,
+    reduceMotionEnabled,
+    secondaryPulse,
+  ]);
 
   const primaryOpacity = !isLive
     ? preset.fieldOpacity * 0.09
@@ -185,6 +207,8 @@ export function CollectiveEnergyField({ energyLevel, isLive }: CollectiveEnergyF
           inputRange: [0, 1],
           outputRange: [0.36, 0.74],
         });
+  const showFullDepth = atmosphereQuality === 'full';
+  const showRing = atmosphereQuality !== 'static';
 
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
@@ -274,53 +298,57 @@ export function CollectiveEnergyField({ energyLevel, isLive }: CollectiveEnergyF
         </Svg>
       </Animated.View>
 
-      <Animated.View style={[styles.depthLayer, { opacity: depthOpacity }]}>
-        <Svg
-          height="100%"
-          preserveAspectRatio="none"
-          viewBox={`0 0 ${FIELD_VIEWBOX} ${FIELD_VIEWBOX}`}
-          width="100%"
+      {showFullDepth ? (
+        <Animated.View style={[styles.depthLayer, { opacity: depthOpacity }]}>
+          <Svg
+            height="100%"
+            preserveAspectRatio="none"
+            viewBox={`0 0 ${FIELD_VIEWBOX} ${FIELD_VIEWBOX}`}
+            width="100%"
+          >
+            <Defs>
+              <RadialGradient
+                cx="0"
+                cy="0"
+                gradientTransform="translate(496 504) rotate(90) scale(520)"
+                gradientUnits="userSpaceOnUse"
+                id="collective-energy-depth"
+                r="1"
+              >
+                <Stop offset="0" stopColor={roomAtmosphere.collective.auraOuter} />
+                <Stop offset="1" stopColor={roomAtmosphere.collective.mistTo} />
+              </RadialGradient>
+            </Defs>
+
+            <Rect
+              fill="url(#collective-energy-depth)"
+              height={FIELD_VIEWBOX}
+              width={FIELD_VIEWBOX}
+              x="0"
+              y="0"
+            />
+          </Svg>
+        </Animated.View>
+      ) : null}
+
+      {showRing ? (
+        <Animated.View
+          style={[
+            styles.collectiveRingWrap,
+            {
+              opacity: nodeOpacity,
+              transform: [{ rotate: orbitRotate }],
+            },
+          ]}
         >
-          <Defs>
-            <RadialGradient
-              cx="0"
-              cy="0"
-              gradientTransform="translate(496 504) rotate(90) scale(520)"
-              gradientUnits="userSpaceOnUse"
-              id="collective-energy-depth"
-              r="1"
-            >
-              <Stop offset="0" stopColor={roomAtmosphere.collective.auraOuter} />
-              <Stop offset="1" stopColor={roomAtmosphere.collective.mistTo} />
-            </RadialGradient>
-          </Defs>
-
-          <Rect
-            fill="url(#collective-energy-depth)"
-            height={FIELD_VIEWBOX}
-            width={FIELD_VIEWBOX}
-            x="0"
-            y="0"
-          />
-        </Svg>
-      </Animated.View>
-
-      <Animated.View
-        style={[
-          styles.collectiveRingWrap,
-          {
-            opacity: nodeOpacity,
-            transform: [{ rotate: orbitRotate }],
-          },
-        ]}
-      >
-        <View style={styles.collectiveRingStrong} />
-        <View style={styles.collectiveRingSoft} />
-        <View style={[styles.presenceNode, styles.presenceNodeA]} />
-        <View style={[styles.presenceNode, styles.presenceNodeB]} />
-        <View style={[styles.presenceNodeMuted, styles.presenceNodeC]} />
-        <View style={[styles.presenceNodeMuted, styles.presenceNodeD]} />
-      </Animated.View>
+          <View style={styles.collectiveRingStrong} />
+          <View style={styles.collectiveRingSoft} />
+          <View style={[styles.presenceNode, styles.presenceNodeA]} />
+          <View style={[styles.presenceNode, styles.presenceNodeB]} />
+          <View style={[styles.presenceNodeMuted, styles.presenceNodeC]} />
+          <View style={[styles.presenceNodeMuted, styles.presenceNodeD]} />
+        </Animated.View>
+      ) : null}
     </View>
   );
 }
@@ -333,7 +361,7 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
   },
   collectiveRingSoft: {
-    borderColor: 'rgba(147, 223, 255, 0.3)',
+    borderColor: signatureMoments.collectiveField.ringSoft,
     borderRadius: 110,
     borderWidth: 1,
     height: 220,
@@ -341,7 +369,7 @@ const styles = StyleSheet.create({
     width: 220,
   },
   collectiveRingStrong: {
-    borderColor: 'rgba(147, 223, 255, 0.62)',
+    borderColor: signatureMoments.collectiveField.ringStrong,
     borderRadius: 82,
     borderWidth: 1,
     height: 164,
@@ -358,8 +386,8 @@ const styles = StyleSheet.create({
     width: 220,
   },
   presenceNode: {
-    backgroundColor: '#C2EEFF',
-    borderColor: 'rgba(209, 241, 255, 0.9)',
+    backgroundColor: signatureMoments.collectiveField.presenceNode,
+    borderColor: signatureMoments.collectiveField.ringStrong,
     borderRadius: 6,
     borderWidth: 1,
     height: 12,
@@ -383,8 +411,8 @@ const styles = StyleSheet.create({
     top: 6,
   },
   presenceNodeMuted: {
-    backgroundColor: 'rgba(194, 238, 255, 0.52)',
-    borderColor: 'rgba(194, 238, 255, 0.62)',
+    backgroundColor: signatureMoments.collectiveField.presenceNodeMuted,
+    borderColor: signatureMoments.collectiveField.ringSoft,
     borderRadius: 5,
     borderWidth: 1,
     height: 10,

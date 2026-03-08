@@ -6,7 +6,7 @@ import { Button } from '../../../components/Button';
 import { StatusChip } from '../../../components/StatusChip';
 import { Typography } from '../../../components/Typography';
 import type { CircleMemberRecord } from '../../../lib/api/circles';
-import { radii, spacing } from '../../../theme/tokens';
+import { radii, sectionVisualThemes, spacing } from '../../../theme/tokens';
 import { toRoleLabel } from '../invitePresentation';
 
 interface CircleDetailMemberRowProps {
@@ -42,7 +42,7 @@ export function CircleDetailMemberRow({
             tone={member.isOwner ? 'success' : 'neutral'}
             uppercase={false}
           />
-          <Typography color="rgba(162, 197, 219, 0.86)" variant="Caption">
+          <Typography color={sectionVisualThemes.circles.nav.labelIdle} variant="Caption">
             Joined {new Date(member.joinedAt).toLocaleDateString()}
           </Typography>
         </View>
@@ -63,13 +63,13 @@ export function CircleDetailMemberRow({
 const styles = StyleSheet.create({
   avatar: {
     alignItems: 'center',
-    backgroundColor: 'rgba(29, 56, 74, 0.88)',
-    borderColor: 'rgba(132, 178, 204, 0.5)',
+    backgroundColor: sectionVisualThemes.circles.surface.card[0],
+    borderColor: sectionVisualThemes.circles.media.frameBorder,
     borderRadius: radii.pill,
     borderWidth: 1,
-    height: 30,
+    height: 34,
     justifyContent: 'center',
-    width: 30,
+    width: 34,
   },
   body: {
     flex: 1,
@@ -83,13 +83,13 @@ const styles = StyleSheet.create({
   },
   row: {
     alignItems: 'center',
-    backgroundColor: 'rgba(14, 33, 48, 0.65)',
-    borderColor: 'rgba(118, 168, 197, 0.42)',
+    backgroundColor: sectionVisualThemes.circles.surface.card[1],
+    borderColor: sectionVisualThemes.circles.surface.edge,
     borderRadius: radii.md,
     borderWidth: 1,
     flexDirection: 'row',
     gap: spacing.xs,
-    minHeight: 64,
+    minHeight: 68,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
   },

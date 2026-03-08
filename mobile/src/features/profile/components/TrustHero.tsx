@@ -1,8 +1,7 @@
 import { useEffect, useMemo } from 'react';
 import { Animated, Easing, StyleSheet, View } from 'react-native';
 
-import { LinearGradient } from 'expo-linear-gradient';
-
+import { PremiumHeroPanel } from '../../../components/CinematicPrimitives';
 import { LiveLogo } from '../../../components/LiveLogo';
 import { LoadingStateCard } from '../../../components/LoadingStateCard';
 import { Typography } from '../../../components/Typography';
@@ -73,42 +72,23 @@ export function TrustHero({
 
   return (
     <Animated.View style={settleStyle}>
-      <View style={styles.panel}>
-        <LinearGradient
-          colors={[profileSurface.hero.panelGradientFrom, profileSurface.hero.panelGradientTo]}
-          end={{ x: 1, y: 1 }}
-          start={{ x: 0, y: 0 }}
-          style={StyleSheet.absoluteFill}
-        />
-        <View pointerEvents="none" style={styles.glow} />
-
+      <PremiumHeroPanel
+        fallbackIcon="shield-check-outline"
+        fallbackLabel="Trust ledger"
+        section="profile"
+        style={styles.panel}
+      >
         <View style={styles.badge}>
           <LiveLogo context="profile" size={14} />
-          <Typography
-            allowFontScaling={false}
-            color={profileSurface.hero.badgeText}
-            style={styles.badgeText}
-            variant="Caption"
-            weight="bold"
-          >
+          <Typography color={profileSurface.hero.badgeText} style={styles.badgeText} variant="Caption" weight="bold">
             Trust sanctuary
           </Typography>
         </View>
 
-        <Typography
-          accessibilityRole="header"
-          allowFontScaling={false}
-          style={styles.title}
-          variant="H1"
-          weight="bold"
-        >
+        <Typography accessibilityRole="header" style={styles.title} variant="H1" weight="bold">
           Trust and progress
         </Typography>
-        <Typography
-          allowFontScaling={false}
-          color={profileSurface.hero.subtitle}
-          style={styles.subtitle}
-        >
+        <Typography color={profileSurface.hero.subtitle} style={styles.subtitle}>
           Reflect on your practice, track your consistency, and hold your intention with clarity.
         </Typography>
 
@@ -124,7 +104,6 @@ export function TrustHero({
           <>
             <View style={styles.metricRow}>
               <Typography
-                allowFontScaling={false}
                 color={profileSurface.hero.metricValue}
                 variant="Metric"
                 weight="bold"
@@ -132,7 +111,6 @@ export function TrustHero({
                 {formatImpact(weeklyImpactChangePercent)}
               </Typography>
               <Typography
-                allowFontScaling={false}
                 color={profileSurface.hero.metricLabel}
                 style={styles.metricLabel}
                 variant="Label"
@@ -144,7 +122,6 @@ export function TrustHero({
             <View style={styles.metaRow}>
               <View style={styles.metaChip}>
                 <Typography
-                  allowFontScaling={false}
                   color={profileSurface.hero.chipText}
                   variant="Caption"
                   weight="bold"
@@ -154,7 +131,6 @@ export function TrustHero({
               </View>
               <View style={styles.metaChip}>
                 <Typography
-                  allowFontScaling={false}
                   color={profileSurface.hero.chipText}
                   variant="Caption"
                   weight="bold"
@@ -168,7 +144,6 @@ export function TrustHero({
 
         <View style={styles.accountRow}>
           <Typography
-            allowFontScaling={false}
             color={profileSurface.hero.accountLabel}
             variant="Caption"
             weight="bold"
@@ -176,14 +151,13 @@ export function TrustHero({
             Account
           </Typography>
           <Typography
-            allowFontScaling={false}
             color={profileSurface.hero.accountValue}
             variant="Caption"
           >
             {accountEmail ?? 'Unavailable'}
           </Typography>
         </View>
-      </View>
+      </PremiumHeroPanel>
     </Animated.View>
   );
 }
@@ -209,10 +183,6 @@ const styles = StyleSheet.create({
   },
   badgeText: {
     textTransform: 'none',
-  },
-  glow: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: profileSurface.hero.glow,
   },
   loadingCard: {
     backgroundColor: profileSurface.hero.panelBackground,
@@ -242,14 +212,7 @@ const styles = StyleSheet.create({
     opacity: 1,
   },
   panel: {
-    backgroundColor: profileSurface.hero.panelBackground,
-    borderColor: profileSurface.hero.panelBorder,
-    borderRadius: radii.xl,
-    borderWidth: 1,
     gap: spacing.sm,
-    overflow: 'hidden',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
   },
   subtitle: {
     lineHeight: 19,

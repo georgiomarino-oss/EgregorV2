@@ -101,7 +101,6 @@ export function LoadingStateCard({
         </View>
         <View style={styles.headerTextWrap}>
           <Typography
-            allowFontScaling={false}
             color={feedbackSurface.loadingTitle}
             variant="Body"
             weight="bold"
@@ -109,7 +108,6 @@ export function LoadingStateCard({
             {title}
           </Typography>
           <Typography
-            allowFontScaling={false}
             color={feedbackSurface.loadingBody}
             variant="Caption"
           >

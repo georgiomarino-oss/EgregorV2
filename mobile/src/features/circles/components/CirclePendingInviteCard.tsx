@@ -3,11 +3,11 @@ import { StyleSheet, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 import { Button } from '../../../components/Button';
+import { PremiumCircleCardSurface } from '../../../components/CinematicPrimitives';
 import { StatusChip } from '../../../components/StatusChip';
-import { SurfaceCard } from '../../../components/SurfaceCard';
 import { Typography } from '../../../components/Typography';
 import type { CircleInviteSummary } from '../../../lib/api/circles';
-import { radii, spacing } from '../../../theme/tokens';
+import { radii, sectionVisualThemes, spacing } from '../../../theme/tokens';
 import {
   formatInviteExpiry,
   toInviteStatusLabel,
@@ -22,16 +22,21 @@ interface CirclePendingInviteCardProps {
 
 export function CirclePendingInviteCard({ invite, onReview }: CirclePendingInviteCardProps) {
   return (
-    <SurfaceCard radius="lg" variant="profileRow">
+    <PremiumCircleCardSurface
+      fallbackIcon="email-outline"
+      fallbackLabel="Invitation waiting"
+      section="circles"
+      style={styles.card}
+    >
       <View style={styles.headerRow}>
         <View style={styles.iconWrap}>
-          <MaterialCommunityIcons color="rgba(222, 243, 255, 0.9)" name="mail" size={16} />
+          <MaterialCommunityIcons color={sectionVisualThemes.circles.media.icon} name="mail" size={16} />
         </View>
         <View style={styles.headerTextWrap}>
           <Typography numberOfLines={1} variant="Body" weight="bold">
             {invite.circleName}
           </Typography>
-          <Typography color="rgba(177, 209, 226, 0.9)" numberOfLines={2} variant="Caption">
+          <Typography color={sectionVisualThemes.circles.nav.labelIdle} numberOfLines={2} variant="Caption">
             Invited by {invite.inviterDisplayName}.
           </Typography>
         </View>
@@ -42,23 +47,26 @@ export function CirclePendingInviteCard({ invite, onReview }: CirclePendingInvit
         />
       </View>
 
-      <Typography color="rgba(177, 209, 226, 0.9)" numberOfLines={2} variant="Caption">
+      <Typography color={sectionVisualThemes.circles.nav.labelIdle} numberOfLines={2} variant="Caption">
         {invite.circleDescription?.trim() || 'No circle description yet.'}
       </Typography>
 
       <View style={styles.metaRow}>
         <StatusChip label={toRoleLabel(invite.roleToGrant)} tone="neutral" uppercase={false} />
-        <Typography color="rgba(164, 197, 216, 0.88)" variant="Caption">
+        <Typography color={sectionVisualThemes.circles.nav.labelIdle} variant="Caption">
           {formatInviteExpiry(invite.expiresAt)}
         </Typography>
       </View>
 
       <Button onPress={() => onReview(invite)} title="Review invite" variant="secondary" />
-    </SurfaceCard>
+    </PremiumCircleCardSurface>
   );
 }
 
 const styles = StyleSheet.create({
+  card: {
+    gap: spacing.xs,
+  },
   headerRow: {
     alignItems: 'center',
     flexDirection: 'row',
@@ -70,7 +78,7 @@ const styles = StyleSheet.create({
   },
   iconWrap: {
     alignItems: 'center',
-    borderColor: 'rgba(123, 171, 197, 0.6)',
+    borderColor: sectionVisualThemes.circles.surface.edge,
     borderRadius: radii.pill,
     borderWidth: 1,
     height: 28,

@@ -49,6 +49,7 @@ import { RoomScriptPanel } from '../features/room-player/components/RoomScriptPa
 import { RoomTransportControls } from '../features/room-player/components/RoomTransportControls';
 import { useRoomAudioPlayer } from '../features/room-player/hooks/useRoomAudioPlayer';
 import { CollectiveEnergyField } from '../features/rooms/components/CollectiveEnergyField';
+import { RoomAtmosphereBackdrop } from '../features/rooms/components/RoomAtmosphereBackdrop';
 import { resolveCollectiveEnergyLevel } from '../features/rooms/energyModel';
 import { useReducedMotion } from '../features/rooms/hooks/useReducedMotion';
 import {
@@ -1046,6 +1047,7 @@ export function EventRoomScreen() {
           isVeryCompactHeight && styles.containerVeryCompact,
         ]}
       >
+        <RoomAtmosphereBackdrop mode="live" />
         <CollectiveEnergyField
           energyLevel={collectiveEnergyLevel}
           isLive={isCollectiveRoomLive && isRunning}

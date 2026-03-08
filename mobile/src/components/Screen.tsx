@@ -20,7 +20,15 @@ import {
 } from '../theme/layout';
 import { CosmicBackground } from './CosmicBackground';
 
-type CosmicBackgroundVariant = 'auth' | 'home' | 'solo' | 'events' | 'eventRoom' | 'profile';
+type CosmicBackgroundVariant =
+  | 'auth'
+  | 'home'
+  | 'circles'
+  | 'solo'
+  | 'events'
+  | 'live'
+  | 'eventRoom'
+  | 'profile';
 
 interface ScreenProps {
   ambientSource?: unknown;

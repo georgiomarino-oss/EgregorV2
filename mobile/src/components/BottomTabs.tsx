@@ -1,4 +1,5 @@
-import { Pressable, StyleSheet, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Animated, Easing, Pressable, StyleSheet, View } from 'react-native';
 
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -8,7 +9,12 @@ import Svg, { Path } from 'react-native-svg';
 import { cssAngleToLinearPoints } from '../theme/gradient';
 import { figmaV2Reference } from '../theme/figma-v2-reference';
 import { tabBarInsetX } from '../theme/layout';
-import { colors, navigationSurface, radii, spacing } from '../theme/tokens';
+import {
+  getSectionThemeByRoute,
+  getSectionThemePalette,
+} from '../theme/sectionTheme';
+import { radii, spacing, transitionMotion } from '../theme/tokens';
+import { Typography } from './Typography';
 
 const TAB_ICON_SIZE = 23;
 
@@ -57,6 +63,24 @@ function TabLogo({ color, routeName }: { color: string; routeName: string }) {
   );
 }
 
+function SectionNavLayer({ section }: { section: ReturnType<typeof getSectionThemeByRoute> }) {
+  const palette = getSectionThemePalette(section);
+
+  return (
+    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+      <LinearGradient
+        colors={palette.nav.gradient}
+        end={{ x: 1, y: 1 }}
+        start={{ x: 0, y: 0 }}
+        style={StyleSheet.absoluteFill}
+      />
+      <View style={[styles.sectionGlow, { backgroundColor: palette.nav.edgeGlow }]} />
+      <View style={[styles.sectionOrbLeft, { backgroundColor: palette.background.orbA }]} />
+      <View style={[styles.sectionOrbRight, { backgroundColor: palette.background.orbB }]} />
+    </View>
+  );
+}
+
 export function BottomTabs({ descriptors, navigation, state }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
   const points = cssAngleToLinearPoints(figmaV2Reference.tabs.containerGradient.angleDeg);
@@ -75,20 +99,58 @@ export function BottomTabs({ descriptors, navigation, state }: BottomTabBarProps
     return null;
   }
 
+  const activeRouteName = state.routes[state.index]?.name ?? 'SoloTab';
+  const nextSection = getSectionThemeByRoute(activeRouteName);
+  const [currentSection, setCurrentSection] = useState(nextSection);
+  const [previousSection, setPreviousSection] = useState(nextSection);
+  const transition = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    if (nextSection === currentSection) {
+      return;
+    }
+
+    setPreviousSection(currentSection);
+    setCurrentSection(nextSection);
+    transition.setValue(0);
+    const animation = Animated.timing(transition, {
+      duration: transitionMotion.navTheme.duration,
+      easing: Easing.out(Easing.cubic),
+      toValue: 1,
+      useNativeDriver: true,
+    });
+    animation.start();
+
+    return () => {
+      animation.stop();
+    };
+  }, [currentSection, nextSection, transition]);
+
+  const currentPalette = getSectionThemePalette(currentSection);
+  const previousLayerOpacity = transition.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 0],
+  });
+
   return (
     <View style={[styles.wrapper, { paddingBottom: Math.max(insets.bottom, spacing.sm) }]}>
-      <LinearGradient
-        colors={figmaV2Reference.tabs.containerGradient.colors}
-        end={points.end}
-        locations={figmaV2Reference.tabs.containerGradient.locations}
-        start={points.start}
-        style={styles.container}
-      >
-        <View
-          accessible={false}
-          importantForAccessibility="no-hide-descendants"
+      <View style={[styles.container, { borderColor: currentPalette.nav.border }]}>
+        <Animated.View
           pointerEvents="none"
-          style={styles.containerGlow}
+          style={[StyleSheet.absoluteFill, { opacity: previousLayerOpacity }]}
+        >
+          <SectionNavLayer section={previousSection} />
+        </Animated.View>
+        <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { opacity: transition }]}>
+          <SectionNavLayer section={currentSection} />
+        </Animated.View>
+        <LinearGradient
+          colors={figmaV2Reference.tabs.containerGradient.colors}
+          end={points.end}
+          locations={figmaV2Reference.tabs.containerGradient.locations}
+          pointerEvents="none"
+          start={points.start}
+          style={styles.globalVeil}
         />
         {state.routes.map((route, index) => {
           const isFocused = state.index === index;
@@ -127,70 +189,117 @@ export function BottomTabs({ descriptors, navigation, state }: BottomTabBarProps
               }}
               style={styles.tabButton}
             >
-              <View style={styles.iconBubbleWrap}>
-                {isFocused ? <View style={styles.iconBubbleHalo} /> : null}
-                <View style={[styles.iconBubble, isFocused && styles.iconBubbleActive]}>
-                  <TabLogo
-                    color={isFocused ? figmaV2Reference.text.activeTab : colors.textMuted}
-                    routeName={route.name}
-                  />
+              <View style={styles.tabContent}>
+                <View style={styles.iconBubbleWrap}>
+                  {isFocused ? (
+                    <View
+                      style={[
+                        styles.iconBubbleHalo,
+                        {
+                          borderColor: currentPalette.nav.itemBorder,
+                        },
+                      ]}
+                    />
+                  ) : null}
+                  {isFocused ? (
+                    <LinearGradient
+                      colors={currentPalette.nav.itemActive}
+                      end={{ x: 1, y: 1 }}
+                      start={{ x: 0, y: 0 }}
+                      style={styles.iconBubble}
+                    >
+                      <TabLogo color={currentPalette.nav.iconActive} routeName={route.name} />
+                    </LinearGradient>
+                  ) : (
+                    <View style={styles.iconBubble}>
+                      <TabLogo color={currentPalette.nav.iconIdle} routeName={route.name} />
+                    </View>
+                  )}
                 </View>
+                <Typography
+                  color={isFocused ? currentPalette.nav.labelActive : currentPalette.nav.labelIdle}
+                  numberOfLines={1}
+                  style={styles.label}
+                  variant="Caption"
+                  weight={isFocused ? 'bold' : 'medium'}
+                >
+                  {label}
+                </Typography>
               </View>
             </Pressable>
           );
         })}
-      </LinearGradient>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: navigationSurface.tabBar.backgroundFrom,
-    borderColor: navigationSurface.tabBar.border,
-    borderRadius: radii.lg,
-    borderWidth: figmaV2Reference.tabs.containerBorderWidth,
+    borderRadius: radii.xl,
+    borderWidth: 1,
     flexDirection: 'row',
     gap: spacing.xs,
     overflow: 'hidden',
-    padding: spacing.xs,
+    paddingHorizontal: spacing.xs,
+    paddingVertical: spacing.xs,
+    position: 'relative',
   },
-  containerGlow: {
+  globalVeil: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: navigationSurface.tabBar.glow,
+    opacity: 0.28,
   },
   iconBubble: {
     alignItems: 'center',
     backgroundColor: 'transparent',
     borderRadius: radii.pill,
     borderWidth: 0,
-    height: 44,
+    height: 40,
     justifyContent: 'center',
     overflow: 'hidden',
-    width: 44,
-  },
-  iconBubbleActive: {
-    backgroundColor: figmaV2Reference.tabs.activeBackground,
-    borderColor: 'transparent',
-    borderWidth: 0,
+    width: 40,
   },
   iconBubbleHalo: {
     backgroundColor: 'transparent',
-    borderColor: figmaV2Reference.tabs.activeBorder,
-    borderWidth: figmaV2Reference.tabs.activeBorderWidth,
+    borderWidth: 1,
     borderRadius: radii.pill,
-    height: 52,
-    opacity: 0.85,
+    height: 46,
+    opacity: 0.9,
     position: 'absolute',
-    width: 52,
+    width: 46,
   },
   iconBubbleWrap: {
     alignItems: 'center',
     borderRadius: radii.pill,
-    height: 52,
+    height: 46,
     justifyContent: 'center',
     overflow: 'visible',
-    width: 52,
+    width: 46,
+  },
+  label: {
+    textTransform: 'none',
+  },
+  sectionGlow: {
+    ...StyleSheet.absoluteFillObject,
+    opacity: 0.92,
+  },
+  sectionOrbLeft: {
+    borderRadius: 80,
+    bottom: -46,
+    height: 90,
+    left: -26,
+    opacity: 0.26,
+    position: 'absolute',
+    width: 90,
+  },
+  sectionOrbRight: {
+    borderRadius: 100,
+    height: 110,
+    opacity: 0.22,
+    position: 'absolute',
+    right: -24,
+    top: -42,
+    width: 110,
   },
   tabButton: {
     alignItems: 'center',
@@ -198,9 +307,16 @@ const styles = StyleSheet.create({
     borderWidth: 0,
     flex: 1,
     justifyContent: 'center',
-    minHeight: 40,
+    minHeight: 56,
     paddingHorizontal: spacing.xs,
+    paddingVertical: spacing.xxs,
     shadowOpacity: 0,
+  },
+  tabContent: {
+    alignItems: 'center',
+    gap: spacing.xxs,
+    justifyContent: 'center',
+    width: '100%',
   },
   wrapper: {
     paddingHorizontal: tabBarInsetX,
