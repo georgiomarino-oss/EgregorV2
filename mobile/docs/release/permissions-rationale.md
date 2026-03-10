@@ -4,35 +4,29 @@ Date: 2026-03-08
 
 ## 1) Kept Permissions
 
-1. `android.permission.ACCESS_COARSE_LOCATION`
-- Used for location-aware live event discovery/map context.
-
-2. `android.permission.ACCESS_FINE_LOCATION`
-- Used for higher precision nearby live event experiences.
-
-3. `android.permission.POST_NOTIFICATIONS`
+1. `android.permission.POST_NOTIFICATIONS`
 - Used for reminder and invite push notifications.
 - Prompt is contextual (reminder actions), not auth-gate forced.
 
-4. `android.permission.INTERNET`
+2. `android.permission.INTERNET`
 - Required for Supabase APIs, real-time data, and push registration.
 
-5. `android.permission.VIBRATE`
+3. `android.permission.VIBRATE`
 - Notification haptics/alert behavior.
 
-6. `android.permission.MODIFY_AUDIO_SETTINGS`
+4. `android.permission.MODIFY_AUDIO_SETTINGS`
 - Audio playback session behavior in solo/live room playback surfaces.
 
-7. `android.permission.FOREGROUND_SERVICE`
+5. `android.permission.FOREGROUND_SERVICE`
 - Required by transitive Android components used for runtime playback/service behavior.
 
-8. `android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK`
+6. `android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK`
 - Required by `expo-audio` playback service declarations.
 
-9. `android.permission.ACCESS_NETWORK_STATE`
+7. `android.permission.ACCESS_NETWORK_STATE`
 - Transitive network reachability checks used by Android framework/library internals.
 
-10. `android.permission.ACCESS_WIFI_STATE`
+8. `android.permission.ACCESS_WIFI_STATE`
 - Transitive connectivity state checks used by Android framework/library internals.
 
 ## 2) Explicitly Removed/Blocked
@@ -41,11 +35,16 @@ Date: 2026-03-08
 - Removed and blocked.
 - App does not require microphone capture in current product scope.
 
-2. `android.permission.SYSTEM_ALERT_WINDOW`
+2. Android location permissions are not used in current product scope:
+- `android.permission.ACCESS_COARSE_LOCATION`
+- `android.permission.ACCESS_FINE_LOCATION`
+- Live globe markers are generated from canonical room/occurrence metadata and region/timezone-safe approximations, not device geolocation.
+
+3. `android.permission.SYSTEM_ALERT_WINDOW`
 - Removed and blocked.
 - No overlay/chat-head style behavior is implemented.
 
-3. Legacy storage/media read permissions removed/blocked:
+4. Legacy storage/media read permissions removed/blocked:
 - `android.permission.READ_EXTERNAL_STORAGE`
 - `android.permission.WRITE_EXTERNAL_STORAGE`
 - `android.permission.READ_MEDIA_AUDIO`
@@ -53,11 +52,11 @@ Date: 2026-03-08
 - `android.permission.READ_MEDIA_VIDEO`
 - `android.permission.READ_MEDIA_VISUAL_USER_SELECTED`
 
-4. `android.permission.FOREGROUND_SERVICE_MICROPHONE`
+5. `android.permission.FOREGROUND_SERVICE_MICROPHONE`
 - Blocked.
 - No foreground microphone capture flow in current scope.
 
-5. Merged-manifest strip hardening:
+6. Merged-manifest strip hardening:
 - `mobile/plugins/withPhase6aAndroidHardening.js` strips sensitive transitive permissions from merged manifests during Android prebuild output:
   - `RECORD_AUDIO`
   - `SYSTEM_ALERT_WINDOW`
@@ -87,7 +86,8 @@ Date: 2026-03-08
 
 1. Notification permission prompts occur on reminder opt-in surfaces (Event Details, Event Room, Profile notification panel).
 2. No auth-gate permission prompt for notifications.
-3. No microphone prompt should appear in current Android release path.
+3. No location prompt should appear in current Android release path.
+4. No microphone prompt should appear in current Android release path.
 
 ## 5) Store Review Notes
 

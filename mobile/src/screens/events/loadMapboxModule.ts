@@ -1,5 +1,7 @@
 import { NativeModules } from 'react-native';
 
+import { clientEnv } from '../../lib/env';
+
 interface MapboxModuleLike {
   Camera?: unknown;
   CircleLayer?: unknown;
@@ -31,6 +33,17 @@ export function loadMapboxModule() {
     // Dynamic require prevents Expo Go startup crashes when @rnmapbox/maps is not present.
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const moduleRef = require('@rnmapbox/maps') as MapboxModuleLike;
+
+    // Configure access token immediately before any MapView is mounted.
+    const runtimeToken = clientEnv.mapboxToken?.trim();
+    if (runtimeToken && moduleRef.setAccessToken) {
+      try {
+        moduleRef.setAccessToken(runtimeToken);
+      } catch {
+        // Guard only; EmbeddedGlobeCard fallback handles runtime failures.
+      }
+    }
+
     cachedMapboxModule = moduleRef;
     return moduleRef;
   } catch {

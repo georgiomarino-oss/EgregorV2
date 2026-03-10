@@ -26,12 +26,10 @@ import { Typography } from '../components/Typography';
 import {
   createSharedSoloSession,
   endSharedSoloSession,
-  fetchPrayerCircleMembers,
   fetchPrayerScriptVariantByTitle,
   findReusableSharedSoloSession,
   fetchSharedSoloSessionSnapshot,
   fetchUserPreferences,
-  getCachedPrayerCircleMembers,
   joinSharedSoloSession,
   leaveSharedSoloSession,
   prefetchPrayerScriptVariantByTitle,
@@ -43,6 +41,7 @@ import {
   type SharedSoloSession,
   type SharedSoloSessionParticipant,
 } from '../lib/api/data';
+import { listInviteContextMembers } from '../lib/api/circles';
 import { prefetchPrayerAudio } from '../lib/api/functions';
 import { buildSoloInviteMessage, buildSoloInviteUrl, buildSoloShareMessage } from '../lib/invite';
 import { supabase } from '../lib/supabase';
@@ -194,6 +193,9 @@ export function SoloLiveScreen() {
   const sharedUnsubscribeRef = useRef<(() => void) | null>(null);
   const sharedJoinNoticeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingSharedSessionPromiseRef = useRef<Promise<string> | null>(null);
+  const inviteMembersCacheRef = useRef<Awaited<ReturnType<typeof listInviteContextMembers>> | null>(
+    null,
+  );
   const { height: viewportHeight, width: viewportWidth } = useWindowDimensions();
   const reduceMotionEnabled = useReducedMotion();
   const headerIntro = useMemo(() => new Animated.Value(0), []);
@@ -1300,14 +1302,15 @@ export function SoloLiveScreen() {
     sharedSessionId,
   ]);
 
-  const resolvePrayerCircleMembers = useCallback(async () => {
-    const cachedMembers = getCachedPrayerCircleMembers();
-    if (cachedMembers) {
-      return cachedMembers;
+  const resolveInviteMembers = useCallback(async () => {
+    if (inviteMembersCacheRef.current) {
+      return inviteMembersCacheRef.current;
     }
 
     try {
-      return await fetchPrayerCircleMembers();
+      const members = await listInviteContextMembers();
+      inviteMembersCacheRef.current = members;
+      return members;
     } catch {
       return [];
     }
@@ -1341,7 +1344,7 @@ export function SoloLiveScreen() {
             normalizedOption === 'invite your circle'
               ? buildSoloInviteMessage({
                   ...inviteContext,
-                  members: await resolvePrayerCircleMembers(),
+                  members: await resolveInviteMembers(),
                 })
               : buildSoloShareMessage(inviteContext);
 
@@ -1362,7 +1365,7 @@ export function SoloLiveScreen() {
       activePrayerTitle,
       ensureSharedSessionForInvite,
       prayerLibraryItemId,
-      resolvePrayerCircleMembers,
+      resolveInviteMembers,
       selectedMinutes,
     ],
   );

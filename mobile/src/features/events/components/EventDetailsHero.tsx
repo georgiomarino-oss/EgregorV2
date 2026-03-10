@@ -5,6 +5,7 @@ import { PremiumHeroPanel } from '../../../components/CinematicPrimitives';
 import { LiveLogo } from '../../../components/LiveLogo';
 import { StatusChip } from '../../../components/StatusChip';
 import { Typography } from '../../../components/Typography';
+import { resolveCinematicArt } from '../../../lib/art/cinematicArt';
 import { useReducedMotion } from '../../rooms/hooks/useReducedMotion';
 import { motion, sectionVisualThemes, spacing } from '../../../theme/tokens';
 
@@ -68,6 +69,7 @@ export function EventDetailsHero({
   return (
     <Animated.View style={settleStyle}>
       <PremiumHeroPanel
+        artSource={resolveCinematicArt('live.hero.details')}
         fallbackIcon="earth"
         fallbackLabel="Live room"
         section="live"

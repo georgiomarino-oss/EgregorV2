@@ -18,6 +18,7 @@ import { Typography } from '../components/Typography';
 import { CircleDetailMemberRow } from '../features/circles/components/CircleDetailMemberRow';
 import { CircleInviteRecordRow } from '../features/circles/components/CircleInviteRecordRow';
 import { toRoleLabel } from '../features/circles/invitePresentation';
+import { resolveCinematicArt } from '../lib/art/cinematicArt';
 import {
   listCircleInvitesForManager,
   listCircleMembers,
@@ -311,6 +312,7 @@ export function CircleDetailsScreen({ navigation, route }: Props) {
   return (
     <Screen ambientSource={ambientAnimation} contentContainerStyle={styles.content} variant="circles">
       <PremiumHeroPanel
+        artSource={resolveCinematicArt('circles.hero.governance')}
         fallbackIcon="account-group-outline"
         fallbackLabel="Circle governance"
         section="circles"

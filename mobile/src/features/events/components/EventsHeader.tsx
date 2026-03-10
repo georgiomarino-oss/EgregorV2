@@ -4,6 +4,7 @@ import { Animated, Easing, StyleSheet, View } from 'react-native';
 import { PremiumHeroPanel } from '../../../components/CinematicPrimitives';
 import { LiveLogo } from '../../../components/LiveLogo';
 import { Typography } from '../../../components/Typography';
+import { resolveCinematicArt } from '../../../lib/art/cinematicArt';
 import { useReducedMotion } from '../../rooms/hooks/useReducedMotion';
 import { eventsSurface, motion, radii, spacing } from '../../../theme/tokens';
 
@@ -86,6 +87,7 @@ export function EventsHeader({
   return (
     <Animated.View style={settleStyle}>
       <PremiumHeroPanel
+        artSource={resolveCinematicArt('live.hero.feed')}
         fallbackIcon="earth"
         fallbackLabel="Global room pulse"
         section="live"
@@ -127,7 +129,7 @@ export function EventsHeader({
 
         <View style={styles.statsRow}>
           <StatPill label="Live now" value={liveCount.toString()} />
-          <StatPill label="Next up" value={upcomingCount.toString()} />
+          <StatPill label="Next 24h" value={upcomingCount.toString()} />
           <StatPill label="Active" value={participantCount.toString()} />
         </View>
 

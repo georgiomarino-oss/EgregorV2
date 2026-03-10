@@ -1,0 +1,11 @@
+{
+  "name": "EgregorV2 Staging Importer",
+  "id": "egregorv2-staging-importer",
+  "api": "1.0.0",
+  "main": "dist/code.js",
+  "ui": "src/ui.html",
+  "editorType": ["figma"],
+  "networkAccess": {
+    "allowedDomains": ["none"]
+  }
+}

@@ -1,8 +1,16 @@
 import { useEffect, useMemo } from 'react';
-import { Animated, Easing, StyleSheet, View } from 'react-native';
+import {
+  Animated,
+  Easing,
+  Image,
+  StyleSheet,
+  View,
+  type ImageSourcePropType,
+} from 'react-native';
 
 import { LinearGradient } from 'expo-linear-gradient';
 
+import { resolveCinematicArt } from '../../../lib/art/cinematicArt';
 import { roomVisualFoundation, sectionVisualThemes } from '../../../theme/tokens';
 import {
   useRoomAtmosphereQuality,
@@ -10,11 +18,12 @@ import {
 } from '../hooks/useRoomAtmosphereQuality';
 
 interface RoomAtmosphereBackdropProps {
+  artSource?: ImageSourcePropType;
   mode: 'live' | 'solo';
   quality?: RoomAtmosphereQuality;
 }
 
-export function RoomAtmosphereBackdrop({ mode, quality }: RoomAtmosphereBackdropProps) {
+export function RoomAtmosphereBackdrop({ artSource, mode, quality }: RoomAtmosphereBackdropProps) {
   const detectedQuality = useRoomAtmosphereQuality();
   const resolvedQuality = quality ?? detectedQuality;
   const drift = useMemo(() => new Animated.Value(0), []);
@@ -26,6 +35,11 @@ export function RoomAtmosphereBackdrop({ mode, quality }: RoomAtmosphereBackdrop
     mode === 'solo'
       ? roomVisualFoundation.readabilityScrim.solo
       : roomVisualFoundation.readabilityScrim.live;
+  const atmosphereArt =
+    artSource ??
+    (mode === 'solo'
+      ? resolveCinematicArt('room.solo.overlay')
+      : resolveCinematicArt('room.live.overlay'));
 
   useEffect(() => {
     if (resolvedQuality !== 'full') {
@@ -133,6 +147,17 @@ export function RoomAtmosphereBackdrop({ mode, quality }: RoomAtmosphereBackdrop
         start={{ x: 0, y: 0 }}
         style={[StyleSheet.absoluteFill, { opacity: 0.26 * staticOpacity }]}
       />
+      {atmosphereArt ? (
+        <Image
+          accessibilityIgnoresInvertColors
+          resizeMode="cover"
+          source={atmosphereArt}
+          style={[
+            styles.atmosphereArt,
+            { opacity: (resolvedQuality === 'static' ? 0.12 : 0.2) * staticOpacity },
+          ]}
+        />
+      ) : null}
       <Animated.View
         style={[
           styles.lightOrbPrimary,
@@ -227,6 +252,9 @@ export function RoomAtmosphereBackdrop({ mode, quality }: RoomAtmosphereBackdrop
 }
 
 const styles = StyleSheet.create({
+  atmosphereArt: {
+    ...StyleSheet.absoluteFillObject,
+  },
   edgeBandLeft: {
     borderRadius: 210,
     height: 280,

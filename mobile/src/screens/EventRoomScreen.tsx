@@ -25,18 +25,14 @@ import { Typography } from '../components/Typography';
 import { ReminderStatusNotice } from '../features/events/components/ReminderStatusNotice';
 import {
   fetchEventNotificationState,
-  fetchEventLibraryItemById,
-  fetchEventsCircleMembers,
   type EventJoinTarget,
   fetchEventRoomSnapshot,
-  getCachedEventsCircleMembers,
-  getCachedEventById,
-  getCachedEventLibraryItemById,
   joinEventRoom,
   leaveEventRoom,
   refreshEventPresence,
   setEventNotificationSubscription,
 } from '../lib/api/data';
+import { listInviteContextMembers } from '../lib/api/circles';
 import { prefetchPrayerAudio } from '../lib/api/functions';
 import { submitModerationReport } from '../lib/api/safety';
 import {
@@ -171,64 +167,35 @@ export function EventRoomScreen() {
   const route = useRoute<EventRoomRoute>();
   const { height: viewportHeight, width: viewportWidth } = useWindowDimensions();
   const routeOccurrenceId = route.params?.occurrenceId?.trim() || '';
-  const routeEventTemplateId = route.params?.eventTemplateId?.trim() || '';
   const routeOccurrenceKey = route.params?.occurrenceKey?.trim() || '';
   const routeRoomId = route.params?.roomId?.trim() || '';
-  const rawRouteLegacyEventId = route.params?.eventId?.trim() || '';
   const hasCanonicalIdentifiers = Boolean(routeOccurrenceId || routeOccurrenceKey || routeRoomId);
-  const routeLegacyEventId = hasCanonicalIdentifiers ? '' : rawRouteLegacyEventId;
   const routeScript = route.params?.scriptText?.trim() || '';
-  const cachedTemplate =
-    !routeScript && !hasCanonicalIdentifiers && routeEventTemplateId
-      ? (getCachedEventLibraryItemById(routeEventTemplateId) ?? null)
-      : null;
-  const cachedEvent =
-    !routeScript && !cachedTemplate && routeLegacyEventId
-      ? (getCachedEventById(routeLegacyEventId) ?? null)
-      : null;
-  const cachedEventScript = cachedEvent
-    ? buildFallbackEventScript(cachedEvent.description, cachedEvent.hostNote)
-    : '';
-  const initialEventTitle =
-    route.params?.eventTitle?.trim() || cachedTemplate?.title || cachedEvent?.title || 'Live Room';
-  const initialEventBody =
-    routeScript || cachedTemplate?.body || cachedEvent?.description?.trim() || '';
-  const initialEventScript =
-    routeScript ||
-    cachedTemplate?.script?.trim() ||
-    cachedTemplate?.body?.trim() ||
-    cachedEventScript;
-  const initialEventDurationMinutes =
-    route.params?.durationMinutes ??
-    cachedTemplate?.durationMinutes ??
-    cachedEvent?.durationMinutes ??
-    10;
-  const initialEventStartAt =
-    route.params?.scheduledStartAt?.trim() || cachedEvent?.startsAt || new Date().toISOString();
-  const hasInitialEventData = Boolean(initialEventScript || cachedTemplate || cachedEvent);
+  const initialEventTitle = route.params?.eventTitle?.trim() || 'Live Room';
+  const initialEventBody = routeScript;
+  const initialEventScript = routeScript;
+  const initialEventDurationMinutes = route.params?.durationMinutes ?? 10;
+  const initialEventStartAt = route.params?.scheduledStartAt?.trim() || new Date().toISOString();
+  const hasInitialEventData = Boolean(initialEventScript);
   const allowAudioGeneration = route.params?.allowAudioGeneration === true;
   const joinTarget = useMemo<EventJoinTarget>(
     () => ({
-      ...(routeLegacyEventId ? { legacyEventId: routeLegacyEventId } : {}),
       ...(routeOccurrenceId ? { occurrenceId: routeOccurrenceId } : {}),
       ...(routeOccurrenceKey ? { occurrenceKey: routeOccurrenceKey } : {}),
       ...(routeRoomId ? { roomId: routeRoomId } : {}),
     }),
-    [routeLegacyEventId, routeOccurrenceId, routeOccurrenceKey, routeRoomId],
+    [routeOccurrenceId, routeOccurrenceKey, routeRoomId],
   );
   const joinTargetKey = useMemo(
     () =>
       [
-        joinTarget.legacyEventId ?? '',
         joinTarget.occurrenceId ?? '',
         joinTarget.occurrenceKey ?? '',
         joinTarget.roomId ?? '',
       ].join('|'),
     [joinTarget],
   );
-  const hasCanonicalJoinTarget = Boolean(
-    routeLegacyEventId || routeOccurrenceId || routeOccurrenceKey || routeRoomId,
-  );
+  const hasCanonicalJoinTarget = hasCanonicalIdentifiers;
 
   const [selectedVoice, setSelectedVoice] = useState<(typeof VOICE_OPTIONS)[number]>('Dominic');
   const [isVoiceMenuOpen, setIsVoiceMenuOpen] = useState(false);
@@ -251,13 +218,16 @@ export function EventRoomScreen() {
   const [eventScript, setEventScript] = useState(initialEventScript);
   const [eventDurationMinutes, setEventDurationMinutes] = useState(initialEventDurationMinutes);
   const [eventStartAt, setEventStartAt] = useState(initialEventStartAt);
-  const [participantCount, setParticipantCount] = useState(cachedEvent?.participants ?? 0);
+  const [participantCount, setParticipantCount] = useState(0);
 
   const [nowTick, setNowTick] = useState(() => Date.now());
 
   const hasInitialEventDataRef = useRef(hasInitialEventData);
   const autoStartTriggeredRef = useRef(false);
   const eventPresenceUserIdRef = useRef<string | null>(null);
+  const inviteMembersCacheRef = useRef<Awaited<ReturnType<typeof listInviteContextMembers>> | null>(
+    null,
+  );
   const presenceJoinedRef = useRef(false);
   const presenceLeftRef = useRef(false);
   const reduceMotionEnabled = useReducedMotion();
@@ -329,7 +299,7 @@ export function EventRoomScreen() {
     : 'soon';
   const roomStateLabel = isCollectiveRoomLive ? 'Live now' : hasEnded ? 'Ended' : 'Waiting room';
   const roomStateDescription = isCollectiveRoomLive
-    ? 'This room is active. Join the live room now.'
+    ? 'This room is active now. Settle in and sync with the current cadence.'
     : hasEnded
       ? 'This room has ended. You can still review details and reminders.'
       : `You are early. This shared room goes live in ${startCountdownPhrase}.`;
@@ -551,87 +521,46 @@ export function EventRoomScreen() {
           setLoadingEvent(true);
         }
 
-        if (hasCanonicalJoinTarget) {
-          const snapshot = await fetchEventRoomSnapshot(joinTarget, '');
-          if (!active) {
-            return;
-          }
-
-          const snapshotEvent = snapshot.event;
-          const fallbackScript = buildFallbackEventScript(
-            snapshotEvent.description,
-            snapshotEvent.hostNote,
-          );
-
-          setEventTitle(route.params?.eventTitle?.trim() || snapshotEvent.title);
-          setEventBody(snapshotEvent.description?.trim() || 'Hold intention for this live room.');
-          setEventScript(
-            fallbackScript || 'We gather in shared intention and focus for this live room.',
-          );
-          setEventDurationMinutes(
-            route.params?.durationMinutes ?? snapshotEvent.durationMinutes ?? 10,
-          );
-          setEventStartAt(
-            route.params?.scheduledStartAt?.trim() ||
-              snapshotEvent.startsAt ||
-              new Date().toISOString(),
-          );
-          setParticipantCount(snapshot.joinedCount);
-          if (snapshot.occurrenceId) {
-            setResolvedOccurrenceId(snapshot.occurrenceId);
-          }
-          if (snapshot.roomId) {
-            setResolvedRoomId(snapshot.roomId);
-          }
-          hasInitialEventDataRef.current = true;
-          setError(null);
+        if (!hasCanonicalJoinTarget) {
+          setError('Invalid live link: no room target was provided.');
           return;
         }
 
-        const nextRouteScript = route.params?.scriptText?.trim();
-        if (nextRouteScript && nextRouteScript.length > 0) {
-          if (!active) {
-            return;
-          }
-
-          setEventScript(nextRouteScript);
-          setEventBody(nextRouteScript);
-          setEventTitle(route.params?.eventTitle?.trim() || 'Live Room');
-          setEventDurationMinutes(route.params?.durationMinutes ?? 10);
-          setEventStartAt(route.params?.scheduledStartAt?.trim() || new Date().toISOString());
-          setParticipantCount(0);
-          hasInitialEventDataRef.current = true;
-          setError(null);
-          return;
-        }
-
-        const templateId = route.params?.eventTemplateId?.trim();
-        if (templateId) {
-          const template = await fetchEventLibraryItemById(templateId);
-          if (!active) {
-            return;
-          }
-
-          if (template) {
-            setEventTitle(route.params?.eventTitle?.trim() || template.title);
-            setEventBody(template.body);
-            setEventScript(template.script || template.body);
-            setEventDurationMinutes(
-              route.params?.durationMinutes ?? template.durationMinutes ?? 10,
-            );
-            setEventStartAt(route.params?.scheduledStartAt?.trim() || new Date().toISOString());
-            setParticipantCount(0);
-            hasInitialEventDataRef.current = true;
-            setError(null);
-            return;
-          }
-        }
-
+        const snapshot = await fetchEventRoomSnapshot(joinTarget, '');
         if (!active) {
           return;
         }
 
-        setError('Could not find live room details for this room.');
+        const snapshotEvent = snapshot.event;
+        const fallbackScript = buildFallbackEventScript(
+          snapshotEvent.description,
+          snapshotEvent.hostNote,
+        );
+
+        setEventTitle(route.params?.eventTitle?.trim() || snapshotEvent.title);
+        setEventBody(snapshotEvent.description?.trim() || 'Hold intention for this live room.');
+        setEventScript(
+          route.params?.scriptText?.trim() ||
+            fallbackScript ||
+            'We gather in shared intention and focus for this live room.',
+        );
+        setEventDurationMinutes(
+          route.params?.durationMinutes ?? snapshotEvent.durationMinutes ?? 10,
+        );
+        setEventStartAt(
+          route.params?.scheduledStartAt?.trim() ||
+            snapshotEvent.startsAt ||
+            new Date().toISOString(),
+        );
+        setParticipantCount(snapshot.joinedCount);
+        if (snapshot.occurrenceId) {
+          setResolvedOccurrenceId(snapshot.occurrenceId);
+        }
+        if (snapshot.roomId) {
+          setResolvedRoomId(snapshot.roomId);
+        }
+        hasInitialEventDataRef.current = true;
+        setError(null);
       } catch (nextError) {
         if (!active) {
           return;
@@ -653,9 +582,7 @@ export function EventRoomScreen() {
     hasCanonicalJoinTarget,
     joinTarget,
     route.params?.durationMinutes,
-    route.params?.eventId,
     route.params?.occurrenceId,
-    route.params?.eventTemplateId,
     route.params?.eventTitle,
     route.params?.occurrenceKey,
     route.params?.roomId,
@@ -947,14 +874,15 @@ export function EventRoomScreen() {
         ],
       };
 
-  const resolveEventsCircleMembers = useCallback(async () => {
-    const cachedMembers = getCachedEventsCircleMembers();
-    if (cachedMembers) {
-      return cachedMembers;
+  const resolveInviteMembers = useCallback(async () => {
+    if (inviteMembersCacheRef.current) {
+      return inviteMembersCacheRef.current;
     }
 
     try {
-      return await fetchEventsCircleMembers();
+      const members = await listInviteContextMembers();
+      inviteMembersCacheRef.current = members;
+      return members;
     } catch {
       return [];
     }
@@ -1115,6 +1043,9 @@ export function EventRoomScreen() {
             ...(routeOccurrenceKey ? { occurrenceKey: routeOccurrenceKey } : {}),
             ...(resolvedRoomId ? { roomId: resolvedRoomId } : {}),
           };
+          if (!inviteContext.occurrenceId && !inviteContext.roomId) {
+            throw new Error('Invite links are available once this live room target is ready.');
+          }
 
           if (normalizedOption === 'copy invite link') {
             await Clipboard.setStringAsync(buildEventInviteUrl(inviteContext));
@@ -1129,7 +1060,7 @@ export function EventRoomScreen() {
             normalizedOption === 'invite your circle'
               ? buildEventInviteMessage({
                   ...inviteContext,
-                  members: await resolveEventsCircleMembers(),
+                  members: await resolveInviteMembers(),
                 })
               : buildEventShareMessage(inviteContext);
 
@@ -1150,7 +1081,7 @@ export function EventRoomScreen() {
       eventDurationMinutes,
       eventStartAt,
       eventTitle,
-      resolveEventsCircleMembers,
+      resolveInviteMembers,
       routeOccurrenceKey,
       resolvedOccurrenceId,
       resolvedRoomId,

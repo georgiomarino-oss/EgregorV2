@@ -1,0 +1,79 @@
+[
+  {
+    "flow": "Solo prayer start",
+    "steps": [
+      "SoloHome",
+      "PrayerCard or PrayerLibrary selection",
+      "SoloLive"
+    ],
+    "statesCovered": [
+      "library loading",
+      "library error",
+      "no filtered prayers",
+      "audio and script prefetch"
+    ]
+  },
+  {
+    "flow": "Solo setup to live",
+    "steps": [
+      "SoloSetup",
+      "SoloLive"
+    ],
+    "statesCovered": [
+      "setup loading",
+      "setup error",
+      "start action"
+    ]
+  },
+  {
+    "flow": "Circles browse and governance",
+    "steps": [
+      "CommunityHome",
+      "CircleDetails",
+      "CircleInviteComposer",
+      "InviteDecision"
+    ],
+    "statesCovered": [
+      "my/shared/invites segments",
+      "empty segment variants",
+      "invite lifecycle",
+      "member governance actions",
+      "error and retry"
+    ]
+  },
+  {
+    "flow": "Live feed to room",
+    "steps": [
+      "EventsHome",
+      "Global Pulse inline",
+      "Global Pulse fullscreen",
+      "EventDetails",
+      "EventRoom"
+    ],
+    "statesCovered": [
+      "live now",
+      "waiting room",
+      "upcoming",
+      "ended",
+      "reminder saved",
+      "permission denied"
+    ]
+  },
+  {
+    "flow": "Profile and settings",
+    "steps": [
+      "ProfileHome",
+      "ProfileSettings",
+      "Notifications",
+      "Privacy and Presence",
+      "Safety and Support",
+      "Account Deletion"
+    ],
+    "statesCovered": [
+      "profile loading",
+      "journal saved/saving/unsaved",
+      "notification permission states",
+      "deletion lifecycle states"
+    ]
+  }
+]

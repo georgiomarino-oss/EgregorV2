@@ -1,0 +1,56 @@
+[
+  {
+    "surface": "Solo live room atmosphere",
+    "type": "atmospheric",
+    "intendedRole": "Atmospheric background for solo room and shared solo sync mode.",
+    "layerStructure": [
+      "Background veil gradient",
+      "Hero gradient",
+      "Atmosphere art overlay (room.solo.overlay)",
+      "SoloAuraField (core aura, veil, inner glow, sync overlay/host beacon)",
+      "Readable script content layer",
+      "Controls overlay"
+    ],
+    "reducedMotionExpectation": "Switch to balanced/static quality; keep readability scrim and state labels."
+  },
+  {
+    "surface": "Event live room atmosphere",
+    "type": "state-signaling",
+    "intendedRole": "Collective energy field signaling waiting/live/ended states.",
+    "layerStructure": [
+      "Background veil gradient",
+      "Hero gradient",
+      "Atmosphere art overlay (room.live.overlay)",
+      "CollectiveEnergyField (primary/secondary pulses, depth, orbit ring, nodes)",
+      "Live state chips and reminder banner",
+      "Script and controls overlay"
+    ],
+    "reducedMotionExpectation": "Disable pulse/orbit loops when reduced motion; preserve chip/state semantics."
+  },
+  {
+    "surface": "Global Pulse globe",
+    "type": "state-signaling",
+    "intendedRole": "Global live-state map with inline and fullscreen interaction.",
+    "layerStructure": [
+      "Mapbox globe or fallback animation layer",
+      "State pulse rings (live/waiting/upcoming/news)",
+      "Accent rings (ritual_1111 and flagship)",
+      "Legend chips and meta labels",
+      "Fullscreen top bar and selection preview card",
+      "Fullscreen spotlight list when nothing selected"
+    ],
+    "reducedMotionExpectation": "Fallback rendering or reduced pulse intensity while keeping data hierarchy and labels."
+  },
+  {
+    "surface": "Hero and card transitions",
+    "type": "decorative",
+    "intendedRole": "Introduce surfaces without changing semantics.",
+    "layerStructure": [
+      "Hero media",
+      "Title/subtitle",
+      "Metric and status chips",
+      "Staggered card rails"
+    ],
+    "reducedMotionExpectation": "Settle instantly with opacity-only or no transition."
+  }
+]

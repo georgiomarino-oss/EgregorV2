@@ -1,0 +1,155 @@
+{
+  "schemaVersion": 1,
+  "defaults": {
+    "model": "gpt-image-1",
+    "quality": "medium",
+    "size": "1536x1024"
+  },
+  "assets": [
+    {
+      "id": "solo_home_hero",
+      "section": "solo",
+      "output": "solo/solo-home-hero.png",
+      "size": "1536x1024",
+      "usage": ["Solo home hero", "Solo setup hero"],
+      "prompt": "Cinematic celestial sanctuary, luminous indigo and plum atmosphere, soft sacred geometry and warm gold aura, premium spiritual editorial mood, no text, no logos, no people",
+      "fallbackPalette": ["#1D1236", "#50306E", "#B088FF", "#FFD28A"]
+    },
+    {
+      "id": "solo_category_prayer_card",
+      "section": "solo",
+      "output": "solo/solo-category-prayer-card.png",
+      "usage": ["Solo prayer cards"],
+      "prompt": "Refined spiritual card artwork, intimate prayer chamber glow, violet gradients, soft mist and sacred geometry rings, premium cinematic render, no text",
+      "fallbackPalette": ["#281A45", "#5A3A81", "#A67FF5", "#F8C978"]
+    },
+    {
+      "id": "solo_category_manifestation_card",
+      "section": "solo",
+      "output": "solo/solo-category-manifestation-card.png",
+      "usage": ["Solo category alternates"],
+      "prompt": "Manifestation-themed premium spiritual art, deep violet dusk with rose-gold highlights, subtle sacred geometry, cinematic depth, no text",
+      "fallbackPalette": ["#271541", "#69397E", "#C28CFF", "#FDB88A"]
+    },
+    {
+      "id": "live_feed_global_pulse_hero",
+      "section": "live",
+      "output": "live/live-feed-global-pulse-hero.png",
+      "usage": ["Live feed hero"],
+      "prompt": "Global consciousness hero art, planetary horizon glow, deep navy and sky blue gradients, synchronized energy arcs, premium cinematic atmosphere, no text",
+      "fallbackPalette": ["#0C1E3E", "#103E69", "#3C82C5", "#A9D8FF"]
+    },
+    {
+      "id": "live_flagship_1111_card",
+      "section": "live",
+      "output": "live/live-flagship-1111-card.png",
+      "usage": ["11:11 signature cards"],
+      "prompt": "Flagship 11:11 ritual artwork, celestial alignment lights, blue aurora with amber accents, refined spiritual cinematic style, no text",
+      "fallbackPalette": ["#10234A", "#185890", "#4E9FE4", "#FFD38B"]
+    },
+    {
+      "id": "live_room_detail_hero",
+      "section": "live",
+      "output": "live/live-room-detail-hero.png",
+      "usage": ["Event details hero"],
+      "prompt": "Live room detail hero, immersive celestial depth, volumetric blue beams, subtle warm edge light, premium and clean, no text",
+      "fallbackPalette": ["#111E3E", "#1E3E6A", "#5DA3DA", "#F0C57F"]
+    },
+    {
+      "id": "circles_home_hero",
+      "section": "circles",
+      "output": "circles/circles-home-hero.png",
+      "usage": ["Circles home hero"],
+      "prompt": "Community constellation hero, deep teal and cyan gradients, luminous trust network nodes, welcoming premium spiritual mood, no text",
+      "fallbackPalette": ["#0D2B34", "#14606D", "#5FD4D7", "#C9F7F3"]
+    },
+    {
+      "id": "circle_governance_hero",
+      "section": "circles",
+      "output": "circles/circle-governance-hero.png",
+      "usage": ["Circle details hero", "Circle invite composer hero"],
+      "prompt": "Circle governance premium artwork, constellation patterns and gentle aurora ribbons, teal and glacier palette, cinematic spiritual clarity, no text",
+      "fallbackPalette": ["#12323E", "#1B6172", "#6BD7D5", "#E2FFFA"]
+    },
+    {
+      "id": "invite_decision_hero",
+      "section": "circles",
+      "output": "circles/invite-decision-hero.png",
+      "usage": ["Invite decision hero"],
+      "prompt": "Invite decision hero art, sacred threshold motif, luminous teal gateway, trustworthy premium cinematic style, no text",
+      "fallbackPalette": ["#0F2D39", "#1C586C", "#7ADFD8", "#CBEFF2"]
+    },
+    {
+      "id": "profile_trust_progress_hero",
+      "section": "profile",
+      "output": "profile/profile-trust-progress-hero.png",
+      "usage": ["Profile trust hero"],
+      "prompt": "Trust and progress hero, moonstone and steel-blue palette, calm archival glow, premium reflective spiritual atmosphere, no text",
+      "fallbackPalette": ["#1A2538", "#2E4564", "#7FA6C8", "#F1D3A6"]
+    },
+    {
+      "id": "profile_progress_ledger_hero",
+      "section": "profile",
+      "output": "profile/profile-progress-ledger-hero.png",
+      "usage": ["Profile progress ledger surfaces"],
+      "prompt": "Progress ledger premium artwork, elegant sacred geometry over reflective slate gradients, calm and trustworthy, no text",
+      "fallbackPalette": ["#202A3A", "#38516B", "#95B5D2", "#DBC8A2"]
+    },
+    {
+      "id": "profile_safety_privacy_settings_hero",
+      "section": "profile",
+      "output": "profile/profile-safety-privacy-settings-hero.png",
+      "usage": ["Settings hero", "Safety/privacy/settings cards"],
+      "prompt": "Safety and privacy settings hero, sanctuary steel-blue gradients with soft protective halo, premium cinematic style, no text",
+      "fallbackPalette": ["#1C2433", "#2F4A61", "#86AFCB", "#D8BE96"]
+    },
+    {
+      "id": "profile_journal_companion_art",
+      "section": "profile",
+      "output": "profile/profile-journal-companion-art.png",
+      "usage": ["Journal companion card"],
+      "prompt": "Journal companion artwork, contemplative moonlit paper texture with soft sacred light, elegant and premium, no text",
+      "fallbackPalette": ["#222B3A", "#384E65", "#9BB6CF", "#F3D9B4"]
+    },
+    {
+      "id": "shared_sacred_geometry_overlay",
+      "section": "shared",
+      "output": "shared/backgrounds/shared-sacred-geometry-overlay.png",
+      "usage": ["Shared subtle overlays"],
+      "prompt": "Subtle sacred geometry overlay for premium mobile interfaces, translucent luminous lines on deep cinematic gradient, no text",
+      "fallbackPalette": ["#111A2A", "#2A3550", "#6A7FA3", "#CAD9F5"]
+    },
+    {
+      "id": "card_solo_prayer_neutral",
+      "section": "cards",
+      "output": "cards/solo-prayer-card-neutral.png",
+      "usage": ["Fallback prayer card media"],
+      "prompt": "Neutral premium solo prayer card art, violet sanctuary tones, soft light bloom, no text",
+      "fallbackPalette": ["#251740", "#533575", "#A07CE6", "#F5C88B"]
+    },
+    {
+      "id": "card_live_occurrence_neutral",
+      "section": "cards",
+      "output": "cards/live-occurrence-card-neutral.png",
+      "usage": ["Fallback live occurrence media"],
+      "prompt": "Neutral premium live occurrence card art, deep blue cinematic gradient and subtle global pulse motifs, no text",
+      "fallbackPalette": ["#122244", "#24517E", "#62A6E8", "#E8C080"]
+    },
+    {
+      "id": "room_solo_atmosphere_overlay",
+      "section": "rooms",
+      "output": "rooms/solo-room-atmosphere-overlay.png",
+      "usage": ["Solo live room backdrop overlay"],
+      "prompt": "Solo room atmosphere overlay, sacred violet aura field, soft mist and luminous particles, premium cinematic and calm, no text",
+      "fallbackPalette": ["#1A1334", "#462F6C", "#8868D2", "#E7BC82"]
+    },
+    {
+      "id": "room_live_atmosphere_overlay",
+      "section": "rooms",
+      "output": "rooms/live-room-atmosphere-overlay.png",
+      "usage": ["Event room atmosphere overlay"],
+      "prompt": "Live event room atmosphere overlay, global blue pulse, volumetric light and subtle sacred geometry, premium cinematic quality, no text",
+      "fallbackPalette": ["#0D1C3B", "#1D4878", "#4F95D8", "#EFC580"]
+    }
+  ]
+}

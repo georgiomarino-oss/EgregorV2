@@ -4,6 +4,7 @@ import { StyleSheet, View } from 'react-native';
 import { PremiumLiveEventCardSurface } from '../../../components/CinematicPrimitives';
 import { SectionHeader } from '../../../components/SectionHeader';
 import { Typography } from '../../../components/Typography';
+import { resolveCinematicArt } from '../../../lib/art/cinematicArt';
 import { radii, sectionVisualThemes, spacing } from '../../../theme/tokens';
 
 export interface EventDetailsMetaItem {
@@ -35,8 +36,9 @@ export function EventDetailsMeta({ children, helper, heading, items }: EventDeta
   return (
     <PremiumLiveEventCardSurface
       accessibilityLabel={helper ? `${heading}. ${helper}` : heading}
+      artSource={resolveCinematicArt('live.card.default')}
       fallbackIcon="calendar-clock"
-      fallbackLabel="Room details"
+      fallbackLabel="Live metadata"
       section="live"
       style={styles.panel}
     >

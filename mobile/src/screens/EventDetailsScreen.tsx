@@ -32,6 +32,7 @@ import {
   setEventNotificationSubscription,
   type CanonicalEventOccurrence,
 } from '../lib/api/data';
+import { resolveCinematicArt } from '../lib/art/cinematicArt';
 import { submitModerationReport } from '../lib/api/safety';
 import { formatEventDateTimeInDeviceZone } from '../lib/dateTime';
 import {
@@ -51,10 +52,8 @@ type EventsNavigation = NativeStackNavigationProp<EventsStackParamList, 'EventDe
 function normalizeJoinTarget(route: EventDetailsRoute) {
   const occurrenceId = route.params?.occurrenceId?.trim() || '';
   const roomId = route.params?.roomId?.trim() || '';
-  const eventId = route.params?.eventId?.trim() || '';
 
   return {
-    legacyEventId: !occurrenceId && !roomId ? eventId : '',
     occurrenceId,
     roomId,
   };
@@ -126,7 +125,7 @@ export function EventDetailsScreen() {
 
   const loadOccurrence = useCallback(async () => {
     const target = normalizeJoinTarget(route);
-    if (!target.occurrenceId && !target.roomId && !target.legacyEventId) {
+    if (!target.occurrenceId && !target.roomId) {
       setOccurrence(null);
       setError('Invalid live link: no occurrence target was provided.');
       setLoading(false);
@@ -141,7 +140,6 @@ export function EventDetailsScreen() {
       setNotificationPermissionState(permissionState);
 
       const resolved = await getEventOccurrenceByJoinTarget({
-        ...(target.legacyEventId ? { legacyEventId: target.legacyEventId } : {}),
         ...(target.occurrenceId ? { occurrenceId: target.occurrenceId } : {}),
         ...(target.roomId ? { roomId: target.roomId } : {}),
       });
@@ -391,8 +389,9 @@ export function EventDetailsScreen() {
           <PremiumLiveEventCardSurface
             accessibilityHint="Contains primary actions for this live room."
             accessibilityLabel="Live room actions"
+            artSource={resolveCinematicArt('live.card.default')}
             fallbackIcon="play-circle-outline"
-            fallbackLabel="Primary actions"
+            fallbackLabel="Live room actions"
             section="live"
             style={styles.actionPanel}
           >

@@ -6,6 +6,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { PremiumLiveEventCardSurface } from '../../../components/CinematicPrimitives';
 import { StatusChip } from '../../../components/StatusChip';
 import { Typography } from '../../../components/Typography';
+import { resolveOccurrenceCardArt } from '../../../lib/art/cinematicArt';
 import { useReducedMotion } from '../../rooms/hooks/useReducedMotion';
 import {
   eventsSurface,
@@ -105,6 +106,7 @@ export function OccurrenceCard({
         style={({ pressed }) => [!reduceMotionEnabled && pressed && styles.cardPressed]}
       >
         <PremiumLiveEventCardSurface
+          artSource={resolveOccurrenceCardArt(sectionKey)}
           fallbackIcon="earth"
           fallbackLabel={fallbackLabel ?? item.category}
           section="live"

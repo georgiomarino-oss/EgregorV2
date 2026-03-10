@@ -6,6 +6,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { PremiumPrayerCardSurface } from '../../../components/CinematicPrimitives';
 import { Typography } from '../../../components/Typography';
 import type { PrayerLibraryItem } from '../../../lib/api/data';
+import { resolveSoloCategoryArt } from '../../../lib/art/cinematicArt';
 import {
   interaction,
   motion,
@@ -90,6 +91,7 @@ export function PrayerCard({
         style={({ pressed }) => [!reduceMotionEnabled && pressed && styles.cardPressed]}
       >
         <PremiumPrayerCardSurface
+          artSource={resolveSoloCategoryArt(categoryLabel)}
           fallbackIcon="book-open-page-variant-outline"
           fallbackLabel={categoryLabel}
           section="solo"

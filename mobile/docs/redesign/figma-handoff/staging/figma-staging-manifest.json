@@ -1,0 +1,44 @@
+﻿{
+    "generatedAt":  "2026-03-10T14:33:30.8653984+00:00",
+    "sourcePackage":  "mobile/docs/redesign/figma-handoff",
+    "directFigmaWriteAvailable":  false,
+    "rationale":  "No direct React Native-to-Figma structural write path is available in-session; staging specs are provided for deterministic manual/automation reconstruction.",
+    "figmaPageOrder":  [
+                           "Design system",
+                           "Components",
+                           "Home / Solo",
+                           "Circles",
+                           "Live",
+                           "Profile / Settings",
+                           "States",
+                           "Prayer content library",
+                           "Event/live content library",
+                           "Motion/background references"
+                       ],
+    "legacyExclusions":  [
+                             "PrayerCircle compatibility route/screen",
+                             "EventsCircle compatibility route/screen",
+                             "egregorv2://events/room deprecated deep link",
+                             "egregorv2://community/events-circle deprecated deep link",
+                             "egregorv2://community/prayer-circle deprecated deep link"
+                         ],
+    "pageSpecs":  [
+                      "mobile/docs/redesign/figma-handoff/staging/page-specs/01-design-system.md",
+                      "mobile/docs/redesign/figma-handoff/staging/page-specs/02-components.md",
+                      "mobile/docs/redesign/figma-handoff/staging/page-specs/03-home-solo.md",
+                      "mobile/docs/redesign/figma-handoff/staging/page-specs/04-circles.md",
+                      "mobile/docs/redesign/figma-handoff/staging/page-specs/05-live.md",
+                      "mobile/docs/redesign/figma-handoff/staging/page-specs/06-profile-settings.md",
+                      "mobile/docs/redesign/figma-handoff/staging/page-specs/07-states.md",
+                      "mobile/docs/redesign/figma-handoff/staging/page-specs/08-prayer-content-library.md",
+                      "mobile/docs/redesign/figma-handoff/staging/page-specs/09-event-live-content-library.md",
+                      "mobile/docs/redesign/figma-handoff/staging/page-specs/10-motion-background-references.md"
+                  ],
+    "counts":  {
+                   "activeScreens":  20,
+                   "prayerContentItems":  62,
+                   "eventTemplateItems":  61,
+                   "canonicalSeriesItems":  6,
+                   "assetMappings":  24
+               }
+}

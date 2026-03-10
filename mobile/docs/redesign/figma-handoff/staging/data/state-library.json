@@ -1,0 +1,82 @@
+{
+  "sharedStates": {
+    "base": [
+      "loading",
+      "error",
+      "success",
+      "empty"
+    ],
+    "inviteActions": [
+      "pending",
+      "accepted",
+      "declined",
+      "expired",
+      "revoked",
+      "invalid"
+    ],
+    "reminder": [
+      "saved",
+      "removed",
+      "permission_denied",
+      "permission_undetermined"
+    ]
+  },
+  "circles": {
+    "segments": [
+      "my",
+      "shared",
+      "invites"
+    ],
+    "emptyStates": [
+      "No circles yet",
+      "No shared circles yet",
+      "No pending invites"
+    ],
+    "inviteStatuses": [
+      "pending",
+      "accepted",
+      "declined",
+      "revoked",
+      "expired",
+      "invalid"
+    ]
+  },
+  "live": {
+    "occurrenceStates": [
+      "live",
+      "waiting_room",
+      "upcoming",
+      "ended"
+    ],
+    "feedSections": [
+      "live_now",
+      "next_24_hours",
+      "ritual_1111",
+      "my_circles",
+      "global_flagships",
+      "saved_reminded"
+    ]
+  },
+  "profile": {
+    "notificationPermissionStates": [
+      "granted",
+      "undetermined",
+      "denied",
+      "unsupported"
+    ],
+    "deletionStatuses": [
+      "none",
+      "requested",
+      "acknowledged",
+      "in_review",
+      "completed",
+      "cancelled",
+      "rejected"
+    ],
+    "journalSaveStates": [
+      "saved",
+      "saving",
+      "unsaved"
+    ]
+  }
+}

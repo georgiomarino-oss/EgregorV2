@@ -23,9 +23,11 @@ import {
   interaction,
   motion,
   radii,
+  sectionVisualThemes,
   spacing,
 } from '../../../theme/tokens';
 import { useGlobePoints } from '../hooks/useGlobePoints';
+import { isFlagshipSeries, isRitual1111Series } from '../services/globeVisualState';
 import type {
   MapboxCameraRefLike,
   MapboxComponent,
@@ -52,6 +54,7 @@ const GLOBE_INTERACTION_IDLE_MS = 2400;
 const GLOBE_RESET_ANIMATION_MS = 720;
 const GLOBE_PROGRAMMATIC_CAMERA_GUARD_MS = 220;
 const GLOBE_FULLSCREEN_FEATURE_TAP_GUARD_MS = 280;
+const SPOTLIGHT_NEAR_UPCOMING_WINDOW_MS = 3 * 60 * 60 * 1000;
 const TRANSPARENT_GLOBE_STYLE_JSON = JSON.stringify({
   version: 8,
   sources: {
@@ -116,6 +119,12 @@ interface FullscreenSelection {
   event: AppEvent | null;
 }
 
+interface GlobeSummaryChip {
+  key: string;
+  label: string;
+  value: number;
+}
+
 export function EmbeddedGlobeCard({
   activePresence,
   allScheduledEvents,
@@ -158,6 +167,7 @@ export function EmbeddedGlobeCard({
   const [isGlobeMapLoaded, setIsGlobeMapLoaded] = useState(false);
   const [isGlobeInteracting, setIsGlobeInteracting] = useState(false);
   const [isGlobeFullscreen, setIsGlobeFullscreen] = useState(false);
+  const [hasConfiguredMapboxToken, setHasConfiguredMapboxToken] = useState(false);
   const [fullscreenSelection, setFullscreenSelection] = useState<FullscreenSelection | null>(null);
   const reduceMotionEnabled = useReducedMotion();
   const reveal = useMemo(() => new Animated.Value(0), []);
@@ -166,17 +176,19 @@ export function EmbeddedGlobeCard({
   const previewSettle = useMemo(() => new Animated.Value(0), []);
 
   const {
+    flagshipAccentGeoJson,
     liveRingGeoJson,
     mapEventByPointId,
     mapOccurrenceByPointId,
     newsRingGeoJson,
-    scheduledRingGeoJson,
+    pointInsightByPointId,
+    ritualAccentGeoJson,
+    upcomingRingGeoJson,
     userGeoJson,
+    waitingRingGeoJson,
   } = useGlobePoints({
     activePresence,
     allScheduledEvents,
-    events,
-    mapboxReady,
     nowTick,
   });
 
@@ -184,24 +196,153 @@ export function EmbeddedGlobeCard({
     () => allScheduledEvents.filter((occurrence) => occurrence.status === 'live').length,
     [allScheduledEvents],
   );
-  const soonOccurrenceCount = useMemo(
+  const waitingOccurrenceCount = useMemo(
     () =>
       allScheduledEvents.filter(
-        (occurrence) => occurrence.status === 'soon' || occurrence.status === 'waiting_room',
+        (occurrence) => occurrence.status === 'waiting_room' || occurrence.status === 'soon',
       ).length,
+    [allScheduledEvents],
+  );
+  const ritualOccurrenceCount = useMemo(
+    () => allScheduledEvents.filter((occurrence) => isRitual1111Series(occurrence.seriesKey)).length,
+    [allScheduledEvents],
+  );
+  const flagshipOccurrenceCount = useMemo(
+    () => allScheduledEvents.filter((occurrence) => isFlagshipSeries(occurrence.seriesKey)).length,
     [allScheduledEvents],
   );
   const uniqueParticipants = useMemo(() => {
     const uniqueUsers = new Set(activePresence.map((entry) => entry.userId));
     return uniqueUsers.size;
   }, [activePresence]);
+  const globeSummaryChips = useMemo(() => {
+    const candidates: GlobeSummaryChip[] = [
+      { key: 'live', label: 'live now', value: liveOccurrenceCount },
+      { key: 'opening', label: 'opening soon', value: waitingOccurrenceCount },
+      { key: 'ritual', label: '11:11', value: ritualOccurrenceCount },
+      { key: 'flagship', label: 'flagship moments', value: flagshipOccurrenceCount },
+      { key: 'clusters', label: 'active clusters', value: uniqueParticipants },
+    ];
+
+    const nonZero = candidates.filter((chip) => chip.value > 0);
+    if (nonZero.length > 0) {
+      return nonZero;
+    }
+
+    return [{ key: 'quiet', label: 'Field settling', value: 0 }];
+  }, [
+    flagshipOccurrenceCount,
+    liveOccurrenceCount,
+    ritualOccurrenceCount,
+    uniqueParticipants,
+    waitingOccurrenceCount,
+  ]);
+  const mapboxRuntimeReady = mapboxReady && hasConfiguredMapboxToken;
+  const spotlightMoments = useMemo(() => {
+    const actionable = allScheduledEvents.filter((occurrence) => {
+      const hasCanonicalTarget = Boolean(
+        occurrence.occurrenceKey?.trim() ||
+          occurrence.occurrenceId?.trim() ||
+          occurrence.roomId?.trim(),
+      );
+      if (!hasCanonicalTarget) {
+        return false;
+      }
+
+      const startsAtMillis = new Date(occurrence.startsAt).getTime();
+      if (!Number.isFinite(startsAtMillis)) {
+        return false;
+      }
+
+      const endsAtMillis = startsAtMillis + Math.max(1, occurrence.durationMinutes) * 60 * 1000;
+      if (nowTick >= endsAtMillis) {
+        return false;
+      }
+
+      if (occurrence.status === 'live') {
+        return true;
+      }
+
+      if (occurrence.status === 'waiting_room' || occurrence.status === 'soon') {
+        return true;
+      }
+
+      if (occurrence.status === 'upcoming') {
+        return startsAtMillis > nowTick && startsAtMillis - nowTick <= SPOTLIGHT_NEAR_UPCOMING_WINDOW_MS;
+      }
+
+      return false;
+    });
+
+    const byPriority = [...actionable].sort((left, right) => {
+      const leftPriority =
+        left.status === 'live'
+          ? 0
+          : left.status === 'waiting_room' || left.status === 'soon'
+            ? 1
+            : 2;
+      const rightPriority =
+        right.status === 'live'
+          ? 0
+          : right.status === 'waiting_room' || right.status === 'soon'
+            ? 1
+            : 2;
+      if (leftPriority !== rightPriority) {
+        return leftPriority - rightPriority;
+      }
+
+      if (right.startsCount !== left.startsCount) {
+        return right.startsCount - left.startsCount;
+      }
+
+      return new Date(left.startsAt).getTime() - new Date(right.startsAt).getTime();
+    });
+
+    const picked: ScheduledEventOccurrence[] = [];
+    const seen = new Set<string>();
+    const addOccurrence = (occurrence: ScheduledEventOccurrence | undefined) => {
+      if (!occurrence) {
+        return;
+      }
+      const key = occurrence.occurrenceId?.trim() || occurrence.occurrenceKey;
+      if (!key || seen.has(key)) {
+        return;
+      }
+      seen.add(key);
+      picked.push(occurrence);
+    };
+
+    addOccurrence(byPriority.find((occurrence) => occurrence.status === 'live'));
+    addOccurrence(
+      byPriority.find(
+        (occurrence) => occurrence.status === 'waiting_room' || occurrence.status === 'soon',
+      ),
+    );
+    addOccurrence(byPriority.find((occurrence) => isRitual1111Series(occurrence.seriesKey)));
+    addOccurrence(byPriority.find((occurrence) => isFlagshipSeries(occurrence.seriesKey)));
+    for (const occurrence of byPriority) {
+      addOccurrence(occurrence);
+      if (picked.length >= 3) {
+        break;
+      }
+    }
+
+    return picked.slice(0, 3);
+  }, [allScheduledEvents, nowTick]);
 
   useEffect(() => {
+    setHasConfiguredMapboxToken(false);
+
     if (!mapboxReady || !mapboxModule?.setAccessToken || !clientEnv.mapboxToken) {
       return;
     }
 
-    mapboxModule.setAccessToken(clientEnv.mapboxToken);
+    try {
+      mapboxModule.setAccessToken(clientEnv.mapboxToken);
+      setHasConfiguredMapboxToken(true);
+    } catch {
+      setHasConfiguredMapboxToken(false);
+    }
   }, [mapboxModule, mapboxReady]);
 
   useEffect(() => {
@@ -302,7 +443,7 @@ export function EmbeddedGlobeCard({
   }, [fullscreenSelection, isGlobeFullscreen, previewSettle, reduceMotionEnabled]);
 
   useEffect(() => {
-    if (!mapboxReady) {
+    if (!mapboxRuntimeReady || reduceMotionEnabled) {
       return;
     }
 
@@ -313,7 +454,7 @@ export function EmbeddedGlobeCard({
     return () => {
       clearInterval(pulseInterval);
     };
-  }, [mapboxReady]);
+  }, [mapboxRuntimeReady, reduceMotionEnabled]);
 
   useEffect(() => {
     return () => {
@@ -325,7 +466,7 @@ export function EmbeddedGlobeCard({
   }, []);
 
   useEffect(() => {
-    if (!mapboxReady || !isGlobeMapLoaded || isGlobeInteracting) {
+    if (!mapboxRuntimeReady || !isGlobeMapLoaded || isGlobeInteracting) {
       return;
     }
 
@@ -344,10 +485,10 @@ export function EmbeddedGlobeCard({
       pitch: 0,
       zoomLevel: GLOBE_CAMERA_ZOOM_LEVEL,
     });
-  }, [isGlobeInteracting, isGlobeMapLoaded, mapboxReady]);
+  }, [isGlobeInteracting, isGlobeMapLoaded, mapboxRuntimeReady]);
 
   useEffect(() => {
-    if (!mapboxReady || !isGlobeMapLoaded || isGlobeInteracting) {
+    if (!mapboxRuntimeReady || !isGlobeMapLoaded || isGlobeInteracting || reduceMotionEnabled) {
       return;
     }
 
@@ -381,7 +522,7 @@ export function EmbeddedGlobeCard({
     return () => {
       clearInterval(interval);
     };
-  }, [isGlobeInteracting, isGlobeMapLoaded, mapboxReady]);
+  }, [isGlobeInteracting, isGlobeMapLoaded, mapboxRuntimeReady, reduceMotionEnabled]);
 
   const pulsePhasePrimary = useMemo(
     () => (pulseTick % RIPPLE_FRAME_COUNT) / RIPPLE_FRAME_COUNT,
@@ -397,13 +538,73 @@ export function EmbeddedGlobeCard({
       intensity = 1,
       selectedPointId?: string | null,
     ) => {
-      const ripple = easeOutCubic(phase);
+      const ripple = reduceMotionEnabled ? 0.2 : easeOutCubic(phase);
       const resolvedRadius = baseRadius + ripple * (12 * intensity);
       const resolvedOpacity = Math.max(0.06, (1 - ripple) * 0.56 * intensity);
       const resolvedStrokeWidth = Math.max(0.9, 2.4 - ripple * 1.5);
       const selectedBoost = 2.2;
       const selectedOpacityBoost = 0.2;
       const selectedStrokeBoost = 0.8;
+      const stateRadiusBoostExpression = [
+        'match',
+        ['get', 'pulse_state'],
+        'live',
+        1.35,
+        'waiting_room',
+        1.05,
+        'ritual_1111',
+        2.1,
+        'flagship',
+        2.35,
+        'news',
+        0.7,
+        'upcoming',
+        0.35,
+        0.3,
+      ];
+      const stateStrokeBoostExpression = [
+        'match',
+        ['get', 'pulse_state'],
+        'live',
+        0.3,
+        'waiting_room',
+        0.22,
+        'ritual_1111',
+        0.55,
+        'flagship',
+        0.65,
+        'news',
+        0.2,
+        'upcoming',
+        0.08,
+        0.06,
+      ];
+      const scaledRadiusExpression = [
+        '+',
+        ['*', resolvedRadius, ['coalesce', ['get', 'marker_scale'], 1]],
+        stateRadiusBoostExpression,
+      ];
+      const intensityOpacityExpression = [
+        '+',
+        resolvedOpacity,
+        [
+          'match',
+          ['get', 'intensity_bucket'],
+          'radiant',
+          0.22,
+          'vivid',
+          0.12,
+          'steady',
+          0.06,
+          0,
+        ],
+      ];
+      const scaledStrokeExpression = [
+        '+',
+        resolvedStrokeWidth,
+        ['*', ['coalesce', ['get', 'presence_bucket'], 0], 0.16],
+        stateStrokeBoostExpression,
+      ];
       return {
         circleBlur: 0.08 + ripple * 0.32,
         circleColor: 'rgba(0,0,0,0)',
@@ -411,30 +612,30 @@ export function EmbeddedGlobeCard({
           ? [
               'case',
               ['==', ['get', 'id'], selectedPointId],
-              resolvedRadius + selectedBoost,
-              resolvedRadius,
+              ['+', scaledRadiusExpression, selectedBoost],
+              scaledRadiusExpression,
             ]
-          : resolvedRadius,
+          : scaledRadiusExpression,
         circleStrokeColor: color,
         circleStrokeOpacity: selectedPointId
           ? [
               'case',
               ['==', ['get', 'id'], selectedPointId],
-              Math.min(1, resolvedOpacity + selectedOpacityBoost),
-              resolvedOpacity,
+              ['min', 1, ['+', intensityOpacityExpression, selectedOpacityBoost]],
+              ['min', 1, intensityOpacityExpression],
             ]
-          : resolvedOpacity,
+          : ['min', 1, intensityOpacityExpression],
         circleStrokeWidth: selectedPointId
           ? [
               'case',
               ['==', ['get', 'id'], selectedPointId],
-              resolvedStrokeWidth + selectedStrokeBoost,
-              resolvedStrokeWidth,
+              ['+', scaledStrokeExpression, selectedStrokeBoost],
+              scaledStrokeExpression,
             ]
-          : resolvedStrokeWidth,
+          : scaledStrokeExpression,
       };
     },
-    [],
+    [reduceMotionEnabled],
   );
 
   const coreLayerStyle = useCallback(
@@ -443,18 +644,71 @@ export function EmbeddedGlobeCard({
       const selectedStrokeWidth = 1.8;
       const baseStroke = eventsSurface.globe.frameBorder;
       const selectedStroke = eventsSurface.globeFullscreen.selectedStroke;
+      const stateRadiusBoostExpression = [
+        'match',
+        ['get', 'pulse_state'],
+        'live',
+        0.82,
+        'waiting_room',
+        0.5,
+        'ritual_1111',
+        1.15,
+        'flagship',
+        1.3,
+        'news',
+        0.3,
+        'upcoming',
+        0,
+        0,
+      ];
+      const stateStrokeExpression = [
+        'match',
+        ['get', 'pulse_state'],
+        'flagship',
+        eventsSurface.hero.accent,
+        'ritual_1111',
+        sectionVisualThemes.live.surface.edge,
+        'waiting_room',
+        eventsSurface.occurrence.soonChipText,
+        baseStroke,
+      ];
+      const scaledRadiusExpression = [
+        '+',
+        ['*', radius, ['coalesce', ['get', 'marker_scale'], 1]],
+        stateRadiusBoostExpression,
+      ];
+      const selectedScaledRadiusExpression = [
+        '+',
+        ['*', selectedRadius, ['coalesce', ['get', 'marker_scale'], 1]],
+        stateRadiusBoostExpression,
+      ];
+      const baseOpacityExpression = [
+        '+',
+        0.86,
+        [
+          'match',
+          ['get', 'intensity_bucket'],
+          'radiant',
+          0.1,
+          'vivid',
+          0.06,
+          'steady',
+          0.03,
+          0,
+        ],
+      ];
 
       return {
         circleColor: color,
         circleOpacity: selectedPointId
-          ? ['case', ['==', ['get', 'id'], selectedPointId], 1, 0.92]
-          : 0.95,
+          ? ['case', ['==', ['get', 'id'], selectedPointId], 1, ['min', 1, baseOpacityExpression]]
+          : ['min', 1, baseOpacityExpression],
         circleRadius: selectedPointId
-          ? ['case', ['==', ['get', 'id'], selectedPointId], selectedRadius, radius]
-          : radius,
+          ? ['case', ['==', ['get', 'id'], selectedPointId], selectedScaledRadiusExpression, scaledRadiusExpression]
+          : scaledRadiusExpression,
         circleStrokeColor: selectedPointId
-          ? ['case', ['==', ['get', 'id'], selectedPointId], selectedStroke, baseStroke]
-          : baseStroke,
+          ? ['case', ['==', ['get', 'id'], selectedPointId], selectedStroke, stateStrokeExpression]
+          : stateStrokeExpression,
         circleStrokeWidth: selectedPointId
           ? ['case', ['==', ['get', 'id'], selectedPointId], selectedStrokeWidth, 1]
           : 1,
@@ -465,15 +719,19 @@ export function EmbeddedGlobeCard({
 
   const mapFallbackReason = useMemo(() => {
     if (!clientEnv.mapboxToken) {
-      return 'Live hotspots are available in list mode while globe rendering is unavailable.';
+      return 'Global Pulse markers remain available in list mode while map rendering is unavailable.';
     }
 
     if (!mapboxReady) {
-      return 'Globe view is unavailable on this runtime, but the event feed remains fully active.';
+      return 'Interactive globe mode is unavailable on this runtime, but live rooms remain fully available.';
+    }
+
+    if (!hasConfiguredMapboxToken) {
+      return 'Initializing secure globe renderer.';
     }
 
     return '';
-  }, [mapboxReady]);
+  }, [hasConfiguredMapboxToken, mapboxReady]);
 
   const mapFallbackDetail = useMemo(() => {
     if (!__DEV__) {
@@ -492,7 +750,7 @@ export function EmbeddedGlobeCard({
   }, [mapboxReady]);
 
   const markGlobeInteraction = useCallback(() => {
-    if (!mapboxReady) {
+    if (!mapboxRuntimeReady) {
       return;
     }
 
@@ -506,7 +764,7 @@ export function EmbeddedGlobeCard({
       setIsGlobeInteracting(false);
       interactionIdleTimerRef.current = null;
     }, GLOBE_INTERACTION_IDLE_MS);
-  }, [mapboxReady]);
+  }, [mapboxRuntimeReady]);
 
   const onMapCameraChanged = useCallback(
     (event: unknown) => {
@@ -639,7 +897,7 @@ export function EmbeddedGlobeCard({
         ? styles.globeFallbackWrapFullscreen
         : styles.globeFallbackWrap;
 
-      if (mapboxReady) {
+      if (mapboxRuntimeReady) {
         return (
           <View style={frameStyle}>
             <View style={maskStyle}>
@@ -708,36 +966,60 @@ export function EmbeddedGlobeCard({
                   </MapboxShapeSourceComponent>
                 ) : null}
 
-                {scheduledRingGeoJson.features.length > 0 ? (
+                {waitingRingGeoJson.features.length > 0 ? (
                   <MapboxShapeSourceComponent
                     hitbox={MAP_TAP_HITBOX}
-                    id={`events-scheduled-source-${mode}`}
+                    id={`events-waiting-source-${mode}`}
                     onPress={onMapPointPress}
-                    shape={scheduledRingGeoJson}
+                    shape={waitingRingGeoJson}
                   >
                     <MapboxCircleLayerComponent
-                      id={`events-scheduled-ring-${mode}`}
+                      id={`events-waiting-ring-${mode}`}
                       style={ringLayerStyle(
-                        eventMapColors.scheduled,
+                        eventsSurface.occurrence.soonChipText,
                         7.8,
                         pulsePhasePrimary,
-                        1,
+                        1.12,
                         selectedPointId,
                       )}
                     />
                     <MapboxCircleLayerComponent
-                      id={`events-scheduled-ring-secondary-${mode}`}
+                      id={`events-waiting-ring-secondary-${mode}`}
                       style={ringLayerStyle(
-                        eventMapColors.scheduled,
+                        eventsSurface.occurrence.soonChipText,
                         7.8,
                         pulsePhaseSecondary,
-                        0.8,
+                        0.9,
                         selectedPointId,
                       )}
                     />
                     <MapboxCircleLayerComponent
-                      id={`events-scheduled-core-${mode}`}
-                      style={coreLayerStyle(eventMapColors.scheduled, 3.4, selectedPointId)}
+                      id={`events-waiting-core-${mode}`}
+                      style={coreLayerStyle(eventsSurface.occurrence.soonChipText, 3.6, selectedPointId)}
+                    />
+                  </MapboxShapeSourceComponent>
+                ) : null}
+
+                {upcomingRingGeoJson.features.length > 0 ? (
+                  <MapboxShapeSourceComponent
+                    hitbox={MAP_TAP_HITBOX}
+                    id={`events-upcoming-source-${mode}`}
+                    onPress={onMapPointPress}
+                    shape={upcomingRingGeoJson}
+                  >
+                    <MapboxCircleLayerComponent
+                      id={`events-upcoming-ring-${mode}`}
+                      style={ringLayerStyle(
+                        eventMapColors.scheduled,
+                        7.2,
+                        pulsePhasePrimary,
+                        0.82,
+                        selectedPointId,
+                      )}
+                    />
+                    <MapboxCircleLayerComponent
+                      id={`events-upcoming-core-${mode}`}
+                      style={coreLayerStyle(eventMapColors.scheduled, 3.1, selectedPointId)}
                     />
                   </MapboxShapeSourceComponent>
                 ) : null}
@@ -755,23 +1037,61 @@ export function EmbeddedGlobeCard({
                         eventMapColors.news,
                         8.2,
                         pulsePhasePrimary,
-                        1,
-                        selectedPointId,
-                      )}
-                    />
-                    <MapboxCircleLayerComponent
-                      id={`events-news-ring-secondary-${mode}`}
-                      style={ringLayerStyle(
-                        eventMapColors.news,
-                        8.2,
-                        pulsePhaseSecondary,
-                        0.8,
+                        0.94,
                         selectedPointId,
                       )}
                     />
                     <MapboxCircleLayerComponent
                       id={`events-news-core-${mode}`}
-                      style={coreLayerStyle(eventMapColors.news, 3.4, selectedPointId)}
+                      style={coreLayerStyle(eventMapColors.news, 3.25, selectedPointId)}
+                    />
+                  </MapboxShapeSourceComponent>
+                ) : null}
+
+                {flagshipAccentGeoJson.features.length > 0 ? (
+                  <MapboxShapeSourceComponent
+                    hitbox={MAP_TAP_HITBOX}
+                    id={`events-flagship-accent-source-${mode}`}
+                    onPress={onMapPointPress}
+                    shape={flagshipAccentGeoJson}
+                  >
+                    <MapboxCircleLayerComponent
+                      id={`events-flagship-accent-ring-${mode}`}
+                      style={ringLayerStyle(
+                        eventsSurface.hero.accent,
+                        9.6,
+                        pulsePhasePrimary,
+                        1.3,
+                        selectedPointId,
+                      )}
+                    />
+                    <MapboxCircleLayerComponent
+                      id={`events-flagship-accent-core-${mode}`}
+                      style={coreLayerStyle(eventsSurface.hero.accent, 4.3, selectedPointId)}
+                    />
+                  </MapboxShapeSourceComponent>
+                ) : null}
+
+                {ritualAccentGeoJson.features.length > 0 ? (
+                  <MapboxShapeSourceComponent
+                    hitbox={MAP_TAP_HITBOX}
+                    id={`events-ritual-accent-source-${mode}`}
+                    onPress={onMapPointPress}
+                    shape={ritualAccentGeoJson}
+                  >
+                    <MapboxCircleLayerComponent
+                      id={`events-ritual-accent-ring-${mode}`}
+                      style={ringLayerStyle(
+                        sectionVisualThemes.live.surface.edge,
+                        8.8,
+                        pulsePhaseSecondary,
+                        1.06,
+                        selectedPointId,
+                      )}
+                    />
+                    <MapboxCircleLayerComponent
+                      id={`events-ritual-accent-core-${mode}`}
+                      style={coreLayerStyle(sectionVisualThemes.live.surface.edge, 4.0, selectedPointId)}
                     />
                   </MapboxShapeSourceComponent>
                 ) : null}
@@ -782,8 +1102,18 @@ export function EmbeddedGlobeCard({
                     shape={userGeoJson}
                   >
                     <MapboxCircleLayerComponent
+                      id={`events-online-users-ring-${mode}`}
+                      style={ringLayerStyle(
+                        eventMapColors.user,
+                        6.4,
+                        pulsePhaseSecondary,
+                        0.52,
+                        selectedPointId,
+                      )}
+                    />
+                    <MapboxCircleLayerComponent
                       id={`events-online-users-core-${mode}`}
-                      style={coreLayerStyle(eventMapColors.user, 3.2, selectedPointId)}
+                      style={coreLayerStyle(eventMapColors.user, 2.7, selectedPointId)}
                     />
                   </MapboxShapeSourceComponent>
                 ) : null}
@@ -882,10 +1212,12 @@ export function EmbeddedGlobeCard({
       fullscreenSelection,
       handleFullscreenMapPress,
       handleInlineMapPress,
+      flagshipAccentGeoJson,
       liveRingGeoJson,
       mapFallbackDetail,
       mapFallbackReason,
       mapboxReady,
+      mapboxRuntimeReady,
       markGlobeInteraction,
       newsRingGeoJson,
       onMapCameraChanged,
@@ -894,8 +1226,10 @@ export function EmbeddedGlobeCard({
       pulsePhasePrimary,
       pulsePhaseSecondary,
       ringLayerStyle,
-      scheduledRingGeoJson,
+      ritualAccentGeoJson,
+      upcomingRingGeoJson,
       userGeoJson,
+      waitingRingGeoJson,
     ],
   );
 
@@ -1046,6 +1380,27 @@ export function EmbeddedGlobeCard({
 
     return `${selectedEvent.durationMinutes} min - ${selectedEvent.region?.trim() || selectedEvent.countryCode?.trim() || 'Global'}`;
   }, [fullscreenSelection]);
+  const fullscreenSelectionInsight = useMemo(() => {
+    if (!fullscreenSelection || fullscreenSelection.sourceType !== 'occurrence') {
+      return null;
+    }
+
+    return pointInsightByPointId.get(fullscreenSelection.pointId) ?? null;
+  }, [fullscreenSelection, pointInsightByPointId]);
+  const fullscreenSelectionPulseLabel = fullscreenSelectionInsight
+    ? `${fullscreenSelectionInsight.intensityLabel} pulse`
+    : null;
+  const fullscreenSelectionAccentLabel = fullscreenSelectionInsight
+    ? fullscreenSelectionInsight.isRitual1111
+      ? '11:11'
+      : fullscreenSelectionInsight.isFlagship
+        ? 'Flagship'
+        : fullscreenSelectionInsight.canonicalState === 'waiting_room'
+          ? 'Opening soon'
+          : fullscreenSelectionInsight.canonicalState === 'live'
+            ? 'Live now'
+            : 'Upcoming'
+    : null;
 
   const canOpenFullscreenDetails = useMemo(() => {
     if (!fullscreenSelection) {
@@ -1092,9 +1447,20 @@ export function EmbeddedGlobeCard({
       onOpenEventDetails(fullscreenSelection.event);
     }
   }, [closeGlobeFullscreen, fullscreenSelection, onOpenEventDetails, onOpenOccurrenceDetails]);
+  const onOpenSpotlightOccurrence = useCallback(
+    (occurrence: ScheduledEventOccurrence) => {
+      closeGlobeFullscreen();
+      onOpenOccurrence(occurrence);
+    },
+    [closeGlobeFullscreen, onOpenOccurrence],
+  );
 
   const fullscreenPrimaryActionLabel =
-    fullscreenSelectionStatus === 'live' ? 'Join live room' : 'Open room';
+    fullscreenSelectionStatus === 'live'
+      ? 'Join live room'
+      : fullscreenSelectionStatus === 'waiting_room' || fullscreenSelectionStatus === 'soon'
+        ? 'Enter waiting room'
+        : 'Open moment';
 
   return (
     <>
@@ -1111,7 +1477,7 @@ export function EmbeddedGlobeCard({
                   variant="Caption"
                   weight="bold"
                 >
-                  Live global intention
+                  Global Pulse
                 </Typography>
               </View>
               <Typography
@@ -1121,7 +1487,7 @@ export function EmbeddedGlobeCard({
                 variant="H2"
                 weight="bold"
               >
-                Discover live rooms worldwide
+                See shared rooms across the world
               </Typography>
               <Typography
                 allowFontScaling={false}
@@ -1129,7 +1495,7 @@ export function EmbeddedGlobeCard({
                 style={styles.globeHeroSubtitle}
                 variant="Caption"
               >
-                Tap map hotspots to open events and join collective intention in progress.
+                Room pulses mirror real shared activity. Brighter, larger lights signal stronger collective momentum, and clusters are approximate.
               </Typography>
             </View>
             <Pressable
@@ -1147,36 +1513,24 @@ export function EmbeddedGlobeCard({
           </View>
 
           <View style={styles.globeMetaRow}>
-            <View style={styles.metaPill}>
-              <Typography
-                allowFontScaling={false}
-                color={eventsSurface.globe.legendText}
-                variant="Caption"
-                weight="bold"
+            {globeSummaryChips.map((chip) => (
+              <View
+                key={chip.key}
+                style={[
+                  styles.metaPill,
+                  chip.value === 0 ? styles.metaPillMuted : null,
+                ]}
               >
-                {`${liveOccurrenceCount} live`}
-              </Typography>
-            </View>
-            <View style={styles.metaPill}>
-              <Typography
-                allowFontScaling={false}
-                color={eventsSurface.globe.legendText}
-                variant="Caption"
-                weight="bold"
-              >
-                {`${soonOccurrenceCount} soon`}
-              </Typography>
-            </View>
-            <View style={styles.metaPill}>
-              <Typography
-                allowFontScaling={false}
-                color={eventsSurface.globe.legendText}
-                variant="Caption"
-                weight="bold"
-              >
-                {`${uniqueParticipants} joined`}
-              </Typography>
-            </View>
+                <Typography
+                  allowFontScaling={false}
+                  color={chip.value === 0 ? eventsSurface.occurrence.itemMeta : eventsSurface.globe.legendText}
+                  variant="Caption"
+                  weight="bold"
+                >
+                  {chip.value > 0 ? `${chip.value} ${chip.label}` : chip.label}
+                </Typography>
+              </View>
+            ))}
           </View>
 
           <View style={styles.globeWrap}>
@@ -1197,11 +1551,23 @@ export function EmbeddedGlobeCard({
           </View>
 
           <View style={styles.legendRow}>
-            <LegendChip color={eventMapColors.live} label="Live" />
-            <LegendChip color={eventMapColors.scheduled} label="Scheduled" />
-            <LegendChip color={eventMapColors.news} label="News" />
-            <LegendChip color={eventMapColors.user} label="Participants" />
+            <LegendChip color={eventMapColors.live} label="Live now" />
+            <LegendChip color={eventsSurface.occurrence.soonChipText} label="Opening soon" />
+            <LegendChip color={eventsSurface.hero.accent} label="Flagship" />
+            <LegendChip color={sectionVisualThemes.live.surface.edge} label="11:11" />
+            <LegendChip color={eventMapColors.scheduled} label="Upcoming moments" />
+            <LegendChip color={eventMapColors.news} label="News pulse" />
+            <LegendChip color={eventMapColors.user} label="Active clusters" />
           </View>
+
+          <Typography
+            allowFontScaling={false}
+            color={eventsSurface.occurrence.itemMeta}
+            style={styles.globePrivacyNote}
+            variant="Caption"
+          >
+            Clusters represent room-level rhythm by region and timezone, not precise participant geolocation.
+          </Typography>
 
           {loading && events.length === 0 ? (
             <LoadingStateCard
@@ -1316,23 +1682,16 @@ export function EmbeddedGlobeCard({
                   variant="H2"
                   weight="bold"
                 >
-                  Global Intention Globe
+                  Global Pulse Globe
                 </Typography>
                 <Typography
                   allowFontScaling={false}
                   color={eventsSurface.globeFullscreen.legendText}
                   variant="Caption"
                 >
-                  Tap a hotspot to preview and enter a room
+                  Tap a pulse to preview and open the live room or moment.
                 </Typography>
               </View>
-            </View>
-
-            <View style={styles.fullscreenLegendRow}>
-              <LegendChip color={eventMapColors.live} label={`Live ${liveOccurrenceCount}`} />
-              <LegendChip color={eventMapColors.scheduled} label="Upcoming" />
-              <LegendChip color={eventMapColors.news} label="News" />
-              <LegendChip color={eventMapColors.user} label={`${uniqueParticipants} active`} />
             </View>
           </Animated.View>
 
@@ -1340,40 +1699,48 @@ export function EmbeddedGlobeCard({
             <Animated.View style={[styles.selectionPreview, previewRevealStyle]}>
               <View style={styles.selectionPreviewCard}>
                 <View style={styles.selectionHeader}>
-                  <View
-                    style={[
-                      styles.selectionStatusChip,
-                      fullscreenSelectionStatus === 'live'
-                        ? styles.selectionStatusLive
-                        : fullscreenSelectionStatus === 'soon'
-                          ? styles.selectionStatusSoon
-                          : styles.selectionStatusUpcoming,
-                    ]}
-                  >
-                    <Typography
-                      allowFontScaling={false}
+                  <View style={styles.selectionStateRow}>
+                    <View
                       style={[
-                        styles.selectionStatusText,
+                        styles.selectionStatusChip,
                         fullscreenSelectionStatus === 'live'
-                          ? styles.selectionStatusLiveText
-                          : fullscreenSelectionStatus === 'soon'
-                            ? styles.selectionStatusSoonText
-                            : styles.selectionStatusUpcomingText,
+                          ? styles.selectionStatusLive
+                          : fullscreenSelectionStatus === 'soon' ||
+                              fullscreenSelectionStatus === 'waiting_room'
+                            ? styles.selectionStatusSoon
+                            : styles.selectionStatusUpcoming,
                       ]}
-                      variant="Caption"
-                      weight="bold"
                     >
-                      {statusLabel(fullscreenSelectionStatus ?? 'upcoming')}
-                    </Typography>
+                      <Typography
+                        allowFontScaling={false}
+                        style={[
+                          styles.selectionStatusText,
+                          fullscreenSelectionStatus === 'live'
+                            ? styles.selectionStatusLiveText
+                            : fullscreenSelectionStatus === 'soon' ||
+                                fullscreenSelectionStatus === 'waiting_room'
+                              ? styles.selectionStatusSoonText
+                              : styles.selectionStatusUpcomingText,
+                        ]}
+                        variant="Caption"
+                        weight="bold"
+                      >
+                        {statusLabel(fullscreenSelectionStatus ?? 'upcoming')}
+                      </Typography>
+                    </View>
+                    {fullscreenSelectionAccentLabel ? (
+                      <View style={styles.selectionAccentChip}>
+                        <Typography
+                          allowFontScaling={false}
+                          color={eventsSurface.globeFullscreen.legendText}
+                          variant="Caption"
+                          weight="bold"
+                        >
+                          {fullscreenSelectionAccentLabel}
+                        </Typography>
+                      </View>
+                    ) : null}
                   </View>
-                  <Typography
-                    allowFontScaling={false}
-                    color={eventsSurface.globeFullscreen.previewMeta}
-                    variant="Caption"
-                    weight="bold"
-                  >
-                    {fullscreenSelectionMeta}
-                  </Typography>
                 </View>
 
                 <Typography
@@ -1385,21 +1752,39 @@ export function EmbeddedGlobeCard({
                   {fullscreenSelectionTitle}
                 </Typography>
 
+                <View style={styles.selectionMetaStack}>
+                  <Typography
+                    allowFontScaling={false}
+                    color={eventsSurface.globeFullscreen.previewMeta}
+                    variant="Caption"
+                    weight="bold"
+                  >
+                    {fullscreenSelectionStartLabel}
+                  </Typography>
+                  <Typography
+                    allowFontScaling={false}
+                    color={eventsSurface.globeFullscreen.previewMeta}
+                    variant="Caption"
+                  >
+                    {fullscreenSelectionMeta}
+                  </Typography>
+                  {fullscreenSelectionPulseLabel ? (
+                    <Typography
+                      allowFontScaling={false}
+                      color={eventsSurface.globeFullscreen.previewMeta}
+                      variant="Caption"
+                    >
+                      {fullscreenSelectionPulseLabel}
+                    </Typography>
+                  ) : null}
+                </View>
+
                 <Typography
                   allowFontScaling={false}
                   color={eventsSurface.globeFullscreen.previewBody}
                   numberOfLines={3}
                 >
                   {fullscreenSelectionBody}
-                </Typography>
-
-                <Typography
-                  allowFontScaling={false}
-                  color={eventsSurface.globeFullscreen.previewMeta}
-                  variant="Caption"
-                  weight="bold"
-                >
-                  {fullscreenSelectionStartLabel}
                 </Typography>
 
                 <View style={styles.selectionActions}>
@@ -1416,6 +1801,57 @@ export function EmbeddedGlobeCard({
                     />
                   ) : null}
                 </View>
+              </View>
+            </Animated.View>
+          ) : null}
+
+          {!fullscreenSelection && spotlightMoments.length > 0 ? (
+            <Animated.View style={[styles.fullscreenSpotlightWrap, previewRevealStyle]}>
+              <View style={styles.fullscreenSpotlightCard}>
+                <Typography
+                  allowFontScaling={false}
+                  color={eventsSurface.globeFullscreen.previewTitle}
+                  variant="Caption"
+                  weight="bold"
+                >
+                  Join from the field
+                </Typography>
+                {spotlightMoments.map((occurrence) => (
+                  <Pressable
+                    accessibilityHint="Opens this highlighted live moment."
+                    accessibilityLabel={`Open ${occurrence.title}`}
+                    accessibilityRole="button"
+                    key={`spotlight-${occurrence.occurrenceKey}`}
+                    onPress={() => onOpenSpotlightOccurrence(occurrence)}
+                    style={({ pressed }) => [
+                      styles.fullscreenSpotlightRow,
+                      !reduceMotionEnabled && pressed ? styles.fullscreenTriggerPressed : null,
+                    ]}
+                  >
+                    <View style={styles.fullscreenSpotlightCopy}>
+                      <Typography
+                        allowFontScaling={false}
+                        style={styles.fullscreenSpotlightTitle}
+                        variant="Body"
+                        weight="bold"
+                      >
+                        {occurrence.title}
+                      </Typography>
+                      <Typography
+                        allowFontScaling={false}
+                        color={eventsSurface.globeFullscreen.previewMeta}
+                        variant="Caption"
+                      >
+                        {`${statusLabel(occurrence.status)} | ${formatOccurrenceStartLabel(occurrence.startsAt)}`}
+                      </Typography>
+                    </View>
+                    <MaterialCommunityIcons
+                      color={eventsSurface.globeFullscreen.previewMeta}
+                      name="arrow-top-right"
+                      size={17}
+                    />
+                  </Pressable>
+                ))}
               </View>
             </Animated.View>
           ) : null}
@@ -1474,18 +1910,47 @@ const styles = StyleSheet.create({
     flex: 1,
     position: 'relative',
   },
-  fullscreenLegendRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+  fullscreenSpotlightCard: {
+    backgroundColor: eventsSurface.globeFullscreen.previewBackground,
+    borderColor: eventsSurface.globeFullscreen.previewBorder,
+    borderRadius: radii.lg,
+    borderWidth: 1,
     gap: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm,
+  },
+  fullscreenSpotlightCopy: {
+    flex: 1,
+    gap: 2,
+    paddingRight: spacing.xs,
+  },
+  fullscreenSpotlightRow: {
+    alignItems: 'center',
+    backgroundColor: eventsSurface.globe.legendBackground,
+    borderColor: eventsSurface.globe.legendBorder,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    minHeight: 48,
+    paddingHorizontal: spacing.xs,
+    paddingVertical: spacing.xxs,
+  },
+  fullscreenSpotlightTitle: {
+    color: eventsSurface.globeFullscreen.previewTitle,
+  },
+  fullscreenSpotlightWrap: {
+    bottom: spacing.md,
+    left: spacing.md,
+    position: 'absolute',
+    right: spacing.md,
   },
   fullscreenTitle: {
     lineHeight: 24,
   },
   fullscreenTitleWrap: {
     flex: 1,
-    gap: 2,
+    gap: 1,
   },
   fullscreenTopBar: {
     alignItems: 'center',
@@ -1495,12 +1960,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     flexDirection: 'row',
     gap: spacing.xs,
-    marginBottom: spacing.xs,
     paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
+    paddingVertical: spacing.xxs,
   },
   fullscreenTopScrim: {
-    height: 220,
+    height: 170,
     left: 0,
     position: 'absolute',
     right: 0,
@@ -1541,6 +2005,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: spacing.xs,
     justifyContent: 'space-between',
+    paddingTop: spacing.xxs,
   },
   globeHeroSubtitle: {
     lineHeight: 16,
@@ -1571,6 +2036,7 @@ const styles = StyleSheet.create({
   globeMetaRow: {
     alignItems: 'center',
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: spacing.xs,
     justifyContent: 'center',
   },
@@ -1684,13 +2150,19 @@ const styles = StyleSheet.create({
     minHeight: 0,
     overflow: 'hidden',
     paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.sm,
+    paddingBottom: spacing.sm,
+    paddingTop: spacing.md,
   },
   globeWrap: {
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: 260,
     position: 'relative',
+  },
+  globePrivacyNote: {
+    lineHeight: 15,
+    maxWidth: '98%',
+    textAlign: 'center',
   },
   glowSpot: {
     backgroundColor: eventsSurface.globe.spotCore,
@@ -1739,17 +2211,32 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xs,
     paddingVertical: 3,
   },
+  metaPillMuted: {
+    opacity: 0.78,
+  },
   noMotion: {
     opacity: 1,
+  },
+  selectionAccentChip: {
+    alignItems: 'center',
+    backgroundColor: eventsSurface.globe.legendBackground,
+    borderColor: eventsSurface.globe.legendBorder,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    justifyContent: 'center',
+    minHeight: 24,
+    paddingHorizontal: spacing.xs,
+    paddingVertical: 2,
   },
   selectionActions: {
     gap: spacing.xs,
     marginTop: spacing.xxs,
   },
   selectionHeader: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    gap: spacing.xxs,
+  },
+  selectionMetaStack: {
+    gap: 1,
   },
   selectionPreview: {
     bottom: spacing.md,
@@ -1792,6 +2279,12 @@ const styles = StyleSheet.create({
   selectionStatusText: {
     textTransform: 'uppercase',
   },
+  selectionStateRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xxs,
+  },
   selectionStatusUpcoming: {
     backgroundColor: eventsSurface.occurrence.upcomingChipBackground,
     borderColor: eventsSurface.occurrence.upcomingChipBorder,
@@ -1807,3 +2300,4 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
 });
+

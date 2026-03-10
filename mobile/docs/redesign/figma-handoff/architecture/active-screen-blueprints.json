@@ -1,0 +1,526 @@
+[
+  {
+    "route": "SoloHome",
+    "purpose": "Primary solo home with category-filtered prayer rails.",
+    "canonicalStatus": "active",
+    "keyChildComponents": [
+      "SoloHero",
+      "SoloCategoryChips",
+      "SoloSection",
+      "PrayerCard"
+    ],
+    "keyStates": [
+      "loading prayers",
+      "error",
+      "filtered empty"
+    ],
+    "motionNotes": [
+      "hero settle",
+      "prayer card stagger",
+      "ambient cosmic background"
+    ],
+    "contentDependencies": [
+      "prayer_library_items runtime data",
+      "cinematic solo hero/card assets"
+    ],
+    "source": "mobile/src/screens/SoloScreen.tsx"
+  },
+  {
+    "route": "PrayerLibrary",
+    "purpose": "Full prayer library list and single selection launch.",
+    "canonicalStatus": "active",
+    "keyChildComponents": [
+      "SoloHero",
+      "library list rows",
+      "Start selected prayer action panel"
+    ],
+    "keyStates": [
+      "loading",
+      "error",
+      "no public prayers"
+    ],
+    "motionNotes": [
+      "list settle",
+      "action panel emphasis"
+    ],
+    "contentDependencies": [
+      "prayer_library_items runtime data"
+    ],
+    "source": "mobile/src/screens/PrayerLibraryScreen.tsx"
+  },
+  {
+    "route": "SoloSetup",
+    "purpose": "Pre-live setup confirmation before entering solo room.",
+    "canonicalStatus": "active",
+    "keyChildComponents": [
+      "SoloSetupHero",
+      "SetupSummaryPanel",
+      "Start session panel"
+    ],
+    "keyStates": [
+      "loading setup",
+      "setup error"
+    ],
+    "motionNotes": [
+      "action settle animation"
+    ],
+    "contentDependencies": [
+      "user preferences",
+      "solo stats",
+      "setup route params"
+    ],
+    "source": "mobile/src/screens/SoloSetupScreen.tsx"
+  },
+  {
+    "route": "SoloLive",
+    "purpose": "Canonical solo live room experience.",
+    "canonicalStatus": "active",
+    "keyChildComponents": [
+      "RoomAtmosphereBackdrop",
+      "SoloAuraField",
+      "RoomScriptPanel",
+      "RoomTransportControls"
+    ],
+    "keyStates": [
+      "loading script/audio",
+      "shared host",
+      "shared participant",
+      "playback error"
+    ],
+    "motionNotes": [
+      "aura breathe",
+      "sync overlays",
+      "layered room backdrop"
+    ],
+    "contentDependencies": [
+      "prayer script variants",
+      "audio artifacts",
+      "shared session state"
+    ],
+    "source": "mobile/src/screens/SoloLiveScreen.tsx"
+  },
+  {
+    "route": "CommunityHome",
+    "purpose": "Circles landing with canonical My/Shared/Pending segments.",
+    "canonicalStatus": "active",
+    "keyChildComponents": [
+      "CirclesHeroPanel",
+      "SegmentedTabs",
+      "CircleSummaryCard",
+      "CirclePendingInviteCard"
+    ],
+    "keyStates": [
+      "loading",
+      "no circles",
+      "no shared circles",
+      "no invites",
+      "error/retry"
+    ],
+    "motionNotes": [
+      "hero settle",
+      "segment transitions"
+    ],
+    "contentDependencies": [
+      "my/shared/pending circles APIs"
+    ],
+    "source": "mobile/src/screens/CommunityScreen.tsx"
+  },
+  {
+    "route": "CircleDetails",
+    "purpose": "Circle governance, member management, and invite tracking.",
+    "canonicalStatus": "active",
+    "keyChildComponents": [
+      "PremiumHeroPanel",
+      "CircleDetailMemberRow",
+      "CircleInviteRecordRow",
+      "ModalSheet"
+    ],
+    "keyStates": [
+      "loading",
+      "no active members",
+      "no invites",
+      "toast updates",
+      "error/retry"
+    ],
+    "motionNotes": [
+      "hero media",
+      "management modal"
+    ],
+    "contentDependencies": [
+      "circle members",
+      "invite records",
+      "role permissions"
+    ],
+    "source": "mobile/src/screens/CircleDetailsScreen.tsx"
+  },
+  {
+    "route": "CircleInviteComposer",
+    "purpose": "Compose in-app or external circle invites.",
+    "canonicalStatus": "active",
+    "keyChildComponents": [
+      "SegmentedTabs",
+      "TextField",
+      "search result rows",
+      "ModalSheet invite link"
+    ],
+    "keyStates": [
+      "searching",
+      "no users found",
+      "invite success",
+      "invite error"
+    ],
+    "motionNotes": [
+      "panel transitions",
+      "success notice card"
+    ],
+    "contentDependencies": [
+      "invitable users search",
+      "invite creation API",
+      "role grants"
+    ],
+    "source": "mobile/src/screens/CircleInviteComposerScreen.tsx"
+  },
+  {
+    "route": "InviteDecision",
+    "purpose": "Accept/decline/report invite with full status lifecycle.",
+    "canonicalStatus": "active",
+    "keyChildComponents": [
+      "PremiumHeroPanel",
+      "StatusChip",
+      "action buttons",
+      "RetryPanel"
+    ],
+    "keyStates": [
+      "loading",
+      "pending",
+      "accepted",
+      "declined",
+      "revoked",
+      "expired",
+      "invalid"
+    ],
+    "motionNotes": [
+      "hero media",
+      "status chip emphasis"
+    ],
+    "contentDependencies": [
+      "invite token preview API",
+      "invite status mapping"
+    ],
+    "source": "mobile/src/screens/InviteDecisionScreen.tsx"
+  },
+  {
+    "route": "EventsHome",
+    "purpose": "Live tab home for occurrences and Global Pulse.",
+    "canonicalStatus": "active",
+    "keyChildComponents": [
+      "EventsHeader",
+      "EmbeddedGlobeCard",
+      "OccurrenceList",
+      "AlertBanner"
+    ],
+    "keyStates": [
+      "loading feed",
+      "feed error",
+      "empty live feed",
+      "reminder syncing"
+    ],
+    "motionNotes": [
+      "hero settle",
+      "globe pulse animations",
+      "occurrence card stagger"
+    ],
+    "contentDependencies": [
+      "canonical event feed",
+      "active presence feed",
+      "reminder subscriptions"
+    ],
+    "source": "mobile/src/screens/EventsScreen.tsx"
+  },
+  {
+    "route": "EventsHome#GlobalPulseInline",
+    "purpose": "Inline Global Pulse card in Live home.",
+    "canonicalStatus": "active",
+    "keyChildComponents": [
+      "EmbeddedGlobeCard inline mode",
+      "legend chips",
+      "fullscreen trigger"
+    ],
+    "keyStates": [
+      "mapbox ready",
+      "globe fallback",
+      "no pulses",
+      "selection inactive"
+    ],
+    "motionNotes": [
+      "pulse ripples",
+      "cluster scaling",
+      "legend transitions"
+    ],
+    "contentDependencies": [
+      "occurrence geo points",
+      "live/waiting/upcoming/news/flagship clusters"
+    ],
+    "source": "mobile/src/features/events/components/EmbeddedGlobeCard.tsx"
+  },
+  {
+    "route": "EventsHome#GlobalPulseFullscreen",
+    "purpose": "Expanded Global Pulse experience with actionable selection panel.",
+    "canonicalStatus": "active",
+    "keyChildComponents": [
+      "EmbeddedGlobeCard fullscreen mode",
+      "selection preview panel",
+      "spotlight list"
+    ],
+    "keyStates": [
+      "fullscreen open",
+      "selection active",
+      "selection empty with spotlights"
+    ],
+    "motionNotes": [
+      "fullscreen settle",
+      "selection reveal",
+      "pulse state highlighting"
+    ],
+    "contentDependencies": [
+      "selected pulse occurrence details",
+      "point insight metadata"
+    ],
+    "source": "mobile/src/features/events/components/EmbeddedGlobeCard.tsx"
+  },
+  {
+    "route": "EventDetails",
+    "purpose": "Occurrence detail, reminder, report, and room entry decisions.",
+    "canonicalStatus": "active",
+    "keyChildComponents": [
+      "EventDetailsHero",
+      "EventDetailsMeta",
+      "ReminderStatusNotice",
+      "action button stack"
+    ],
+    "keyStates": [
+      "loading",
+      "target unavailable",
+      "reminder saved/removed",
+      "permission blocked"
+    ],
+    "motionNotes": [
+      "hero settle",
+      "status chip shifts by state"
+    ],
+    "contentDependencies": [
+      "get_event_occurrence_by_join_target",
+      "reminder prefs",
+      "notification permission"
+    ],
+    "source": "mobile/src/screens/EventDetailsScreen.tsx"
+  },
+  {
+    "route": "EventRoom",
+    "purpose": "Canonical live event room with presence and transport controls.",
+    "canonicalStatus": "active",
+    "keyChildComponents": [
+      "RoomAtmosphereBackdrop",
+      "CollectiveEnergyField",
+      "RoomScriptPanel",
+      "RoomTransportControls"
+    ],
+    "keyStates": [
+      "waiting room",
+      "live now",
+      "ended",
+      "loading room details",
+      "playback error"
+    ],
+    "motionNotes": [
+      "collective pulse field",
+      "live chip pulse",
+      "room atmosphere layers"
+    ],
+    "contentDependencies": [
+      "event room snapshot",
+      "room presence heartbeat",
+      "occurrence reminder prefs",
+      "script/audio"
+    ],
+    "source": "mobile/src/screens/EventRoomScreen.tsx"
+  },
+  {
+    "route": "ProfileHome",
+    "purpose": "Profile overview for trust/progress and journal.",
+    "canonicalStatus": "active",
+    "keyChildComponents": [
+      "TrustHero",
+      "TrustMetricsPanel",
+      "JournalPanel",
+      "settings summary card"
+    ],
+    "keyStates": [
+      "loading profile",
+      "journal sync issue",
+      "profile snapshot pending"
+    ],
+    "motionNotes": [
+      "journal page turn",
+      "hero settle"
+    ],
+    "contentDependencies": [
+      "profile summary",
+      "journal entries",
+      "deletion status"
+    ],
+    "source": "mobile/src/screens/ProfileScreen.tsx"
+  },
+  {
+    "route": "ProfileSettings",
+    "purpose": "Dedicated settings surfaces from profile cog entry.",
+    "canonicalStatus": "active",
+    "keyChildComponents": [
+      "NotificationSettingsPanel",
+      "PrivacyPresencePanel",
+      "SafetySupportPanel",
+      "account/deletion panels"
+    ],
+    "keyStates": [
+      "settings loading",
+      "permission denied",
+      "updating toggles",
+      "deletion request active"
+    ],
+    "motionNotes": [
+      "panel reveal/settle",
+      "status badge updates"
+    ],
+    "contentDependencies": [
+      "notification prefs",
+      "privacy settings",
+      "blocked users",
+      "deletion workflow"
+    ],
+    "source": "mobile/src/screens/ProfileScreen.tsx"
+  },
+  {
+    "route": "ProfileSettings#Notifications",
+    "purpose": "Notifications section in settings.",
+    "canonicalStatus": "active",
+    "keyChildComponents": [
+      "NotificationSettingsPanel rows",
+      "permission card",
+      "reminder card"
+    ],
+    "keyStates": [
+      "permission granted",
+      "permission undetermined",
+      "permission denied",
+      "permission unsupported"
+    ],
+    "motionNotes": [
+      "status chip transitions",
+      "row loading states"
+    ],
+    "contentDependencies": [
+      "notification permission state",
+      "notification category prefs",
+      "reminder state summary"
+    ],
+    "source": "mobile/src/features/profile/components/NotificationSettingsPanel.tsx"
+  },
+  {
+    "route": "ProfileSettings#PrivacyPresence",
+    "purpose": "Privacy and presence section in settings.",
+    "canonicalStatus": "active",
+    "keyChildComponents": [
+      "PrivacyPresencePanel segmented controls",
+      "invite toggle cards"
+    ],
+    "keyStates": [
+      "member visibility variants",
+      "presence visibility variants",
+      "invite request on/off"
+    ],
+    "motionNotes": [
+      "segmented control transitions"
+    ],
+    "contentDependencies": [
+      "privacy settings API",
+      "privacy summary mapping"
+    ],
+    "source": "mobile/src/features/profile/components/PrivacyPresencePanel.tsx"
+  },
+  {
+    "route": "ProfileSettings#SafetySupport",
+    "purpose": "Safety and support section in settings.",
+    "canonicalStatus": "active",
+    "keyChildComponents": [
+      "SafetySupportPanel blocked rows",
+      "support action row"
+    ],
+    "keyStates": [
+      "loading blocked users",
+      "no blocked users",
+      "unblocking",
+      "error/info message"
+    ],
+    "motionNotes": [
+      "list updates",
+      "button loading states"
+    ],
+    "contentDependencies": [
+      "blocked users list",
+      "support/privacy links"
+    ],
+    "source": "mobile/src/features/profile/components/SafetySupportPanel.tsx"
+  },
+  {
+    "route": "ProfileSettings#AccountDeletion",
+    "purpose": "Account/deletion controls section in settings.",
+    "canonicalStatus": "active",
+    "keyChildComponents": [
+      "deletion badge",
+      "request deletion action",
+      "policy/support actions"
+    ],
+    "keyStates": [
+      "no request",
+      "requested",
+      "acknowledged",
+      "in review",
+      "completed",
+      "cancelled",
+      "rejected"
+    ],
+    "motionNotes": [
+      "badge state transitions"
+    ],
+    "contentDependencies": [
+      "account deletion status API",
+      "deletion request API"
+    ],
+    "source": "mobile/src/screens/ProfileScreen.tsx"
+  },
+  {
+    "route": "ProfileHome#JournalTrustProgress",
+    "purpose": "Journal, trust, and progress surfaces.",
+    "canonicalStatus": "active",
+    "keyChildComponents": [
+      "JournalPanel",
+      "TrustHero",
+      "TrustMetricsPanel"
+    ],
+    "keyStates": [
+      "saved",
+      "saving",
+      "unsaved",
+      "entry history empty/draft"
+    ],
+    "motionNotes": [
+      "page turn animation",
+      "save pulse"
+    ],
+    "contentDependencies": [
+      "journal entries API",
+      "profile summary metrics"
+    ],
+    "source": "mobile/src/features/profile/components/JournalPanel.tsx"
+  }
+]

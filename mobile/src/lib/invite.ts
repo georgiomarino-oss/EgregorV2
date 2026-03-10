@@ -1,7 +1,13 @@
-import type { PrayerCircleMember } from './api/data';
 import type { CaptureNavigationTarget } from '../app/navigation/types';
 
 const APP_SCHEME = 'egregorv2://';
+
+export interface InviteMessageMember {
+  displayName: string;
+  isOwner: boolean;
+  joinedAt: string;
+  userId: string;
+}
 
 function buildQueryString(params: Record<string, number | string | undefined>) {
   const entries = Object.entries(params)
@@ -188,68 +194,6 @@ export function parseInviteCaptureTarget(urlValue: string): CaptureNavigationTar
     };
   }
 
-  if (normalizedPath === 'events/room') {
-    const eventRoomParams: NonNullable<CaptureNavigationTarget['eventRoomParams']> = {};
-    const allowAudioGeneration = parseBoolean(parsedUrl.searchParams.get('allowAudioGeneration'));
-    const durationMinutes = parseDurationMinutes(parsedUrl.searchParams.get('durationMinutes'));
-    const occurrenceId = parsedUrl.searchParams.get('occurrenceId')?.trim();
-    const occurrenceKey = parsedUrl.searchParams.get('occurrenceKey')?.trim();
-    const roomId = parsedUrl.searchParams.get('roomId')?.trim();
-    const hasCanonicalTarget = Boolean(occurrenceId || occurrenceKey || roomId);
-    const eventId = parsedUrl.searchParams.get('eventId')?.trim();
-    const rawEventSource = parsedUrl.searchParams.get('eventSource');
-    const eventSource =
-      rawEventSource === 'news' ||
-      rawEventSource === 'template' ||
-      rawEventSource === 'occurrence'
-        ? rawEventSource
-        : undefined;
-    const eventTemplateId = parsedUrl.searchParams.get('eventTemplateId')?.trim();
-    const eventTitle = parsedUrl.searchParams.get('eventTitle')?.trim();
-    const scheduledStartAt = parsedUrl.searchParams.get('scheduledStartAt')?.trim();
-    const scriptText = parsedUrl.searchParams.get('scriptText')?.trim();
-    if (allowAudioGeneration !== undefined) {
-      eventRoomParams.allowAudioGeneration = allowAudioGeneration;
-    }
-    if (durationMinutes !== undefined) {
-      eventRoomParams.durationMinutes = durationMinutes;
-    }
-    if (!hasCanonicalTarget && eventId) {
-      eventRoomParams.eventId = eventId;
-    }
-    if (!hasCanonicalTarget && eventSource) {
-      eventRoomParams.eventSource = eventSource;
-    }
-    if (!hasCanonicalTarget && eventTemplateId) {
-      eventRoomParams.eventTemplateId = eventTemplateId;
-    }
-    if (eventTitle) {
-      eventRoomParams.eventTitle = eventTitle;
-    }
-    if (occurrenceId) {
-      eventRoomParams.occurrenceId = occurrenceId;
-    }
-    if (occurrenceKey) {
-      eventRoomParams.occurrenceKey = occurrenceKey;
-    }
-    if (roomId) {
-      eventRoomParams.roomId = roomId;
-    }
-    if (scheduledStartAt) {
-      eventRoomParams.scheduledStartAt = scheduledStartAt;
-    }
-    if (scriptText) {
-      eventRoomParams.scriptText = scriptText;
-    }
-
-    return {
-      eventRoomParams,
-      eventsRoute: 'EventRoom',
-      root: 'main',
-      tab: 'EventsTab',
-    };
-  }
-
   return null;
 }
 
@@ -257,7 +201,7 @@ export function buildCircleInviteUrl(inviteToken: string) {
   return buildInviteUrl(`invite/${inviteToken.trim()}`, {});
 }
 
-function summarizeCircleMembers(members: PrayerCircleMember[]) {
+function summarizeCircleMembers(members: InviteMessageMember[]) {
   if (members.length === 0) {
     return 'Your circle is currently empty, so this will share externally.';
   }
@@ -288,9 +232,6 @@ interface SoloInviteInput {
 
 interface EventInviteInput {
   durationMinutes?: number;
-  eventId?: string;
-  eventSource?: 'news' | 'occurrence' | 'template';
-  eventTemplateId?: string;
   eventTitle: string;
   occurrenceId?: string;
   occurrenceKey?: string;
@@ -318,24 +259,10 @@ export function buildEventInviteUrl(input: EventInviteInput) {
     return buildInviteUrl(`live/occurrence/${occurrenceId}`, {});
   }
 
-  const hasCanonicalTarget = Boolean(
-    occurrenceId || input.occurrenceKey?.trim() || roomId,
-  );
-
-  return buildInviteUrl('events/room', {
-    durationMinutes: input.durationMinutes,
-    eventId: hasCanonicalTarget ? undefined : input.eventId,
-    eventSource: hasCanonicalTarget ? undefined : input.eventSource,
-    eventTemplateId: hasCanonicalTarget ? undefined : input.eventTemplateId,
-    eventTitle: input.eventTitle,
-    occurrenceId: input.occurrenceId,
-    occurrenceKey: input.occurrenceKey,
-    roomId: input.roomId,
-    scheduledStartAt: input.scheduledStartAt,
-  });
+  throw new Error('Cannot build a live invite link without a room or occurrence target.');
 }
 
-export function buildSoloInviteMessage(input: SoloInviteInput & { members: PrayerCircleMember[] }) {
+export function buildSoloInviteMessage(input: SoloInviteInput & { members: InviteMessageMember[] }) {
   const title = input.intention.trim() || 'Solo Prayer';
   const inviteUrl = buildSoloInviteUrl(input);
   const memberSummary = summarizeCircleMembers(input.members);
@@ -355,7 +282,7 @@ export function buildSoloShareMessage(input: SoloInviteInput) {
 }
 
 export function buildEventInviteMessage(
-  input: EventInviteInput & { members: PrayerCircleMember[] },
+  input: EventInviteInput & { members: InviteMessageMember[] },
 ) {
   const title = input.eventTitle.trim() || 'Live Room';
   const inviteUrl = buildEventInviteUrl(input);

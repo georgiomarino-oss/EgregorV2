@@ -6,6 +6,7 @@ import { PremiumCircleCardSurface } from '../../../components/CinematicPrimitive
 import { StatusChip } from '../../../components/StatusChip';
 import { SurfaceListRow } from '../../../components/SurfaceListRow';
 import { Typography } from '../../../components/Typography';
+import { resolveCinematicArt } from '../../../lib/art/cinematicArt';
 import type { CanonicalCircleSummary } from '../../../lib/api/circles';
 import { radii, sectionVisualThemes, spacing } from '../../../theme/tokens';
 import { toRoleLabel } from '../invitePresentation';
@@ -18,6 +19,7 @@ interface CircleSummaryCardProps {
 export function CircleSummaryCard({ circle, onPress }: CircleSummaryCardProps) {
   return (
     <PremiumCircleCardSurface
+      artSource={resolveCinematicArt('circles.card.default')}
       fallbackIcon="account-group"
       fallbackLabel="Shared circle"
       section="circles"

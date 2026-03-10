@@ -1,0 +1,193 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>EgregorV2 Staging Importer</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 16px;
+      font-family: Inter, system-ui, sans-serif;
+      background: #f4f7fb;
+      color: #12233d;
+    }
+    h1 {
+      margin: 0 0 8px 0;
+      font-size: 18px;
+    }
+    p {
+      margin: 4px 0 10px 0;
+      font-size: 12px;
+      line-height: 1.4;
+    }
+    .panel {
+      background: #ffffff;
+      border: 1px solid #d5e1f0;
+      border-radius: 10px;
+      padding: 12px;
+      margin-bottom: 12px;
+    }
+    .row {
+      display: flex;
+      gap: 8px;
+      margin-top: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    button {
+      border: 1px solid #7ea0cb;
+      background: #2f65a8;
+      color: #fff;
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    button.secondary {
+      background: #eff4fb;
+      color: #213d62;
+      border-color: #b8cae3;
+    }
+    button:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+    #log {
+      width: 100%;
+      height: 220px;
+      resize: none;
+      border: 1px solid #c7d7ec;
+      border-radius: 8px;
+      padding: 8px;
+      font-size: 11px;
+      background: #fcfdff;
+      color: #1d3559;
+    }
+    code {
+      font-size: 11px;
+      background: #eef3fa;
+      padding: 1px 4px;
+      border-radius: 4px;
+    }
+    .small {
+      font-size: 11px;
+      color: #436286;
+    }
+  </style>
+</head>
+<body>
+  <h1>EgregorV2 Staging Importer</h1>
+  <p>Load the generated bundle file and import canonical editable pages/frames/content.</p>
+
+  <div class="panel">
+    <div><strong>Bundle file</strong></div>
+    <p class="small">Expected: <code>tools/figma-importer/dist/egregorv2-staging-bundle.json</code></p>
+    <input id="bundleFile" type="file" accept=".json,application/json" />
+    <div class="row">
+      <label class="small"><input id="clearExisting" type="checkbox" checked /> Clear existing pages with same names</label>
+    </div>
+    <div class="row">
+      <button id="validateBtn" class="secondary" disabled>Validate bundle</button>
+      <button id="dryRunBtn" class="secondary" disabled>Dry run</button>
+      <button id="buildBtn" disabled>Build Figma file</button>
+      <button id="closeBtn" class="secondary">Close</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div><strong>Log</strong></div>
+    <textarea id="log" readonly></textarea>
+  </div>
+
+  <script>
+    const fileInput = document.getElementById('bundleFile');
+    const validateBtn = document.getElementById('validateBtn');
+    const dryRunBtn = document.getElementById('dryRunBtn');
+    const buildBtn = document.getElementById('buildBtn');
+    const closeBtn = document.getElementById('closeBtn');
+    const clearExisting = document.getElementById('clearExisting');
+    const log = document.getElementById('log');
+
+    let bundleText = '';
+
+    function appendLog(text) {
+      log.value += `${text}\n`;
+      log.scrollTop = log.scrollHeight;
+    }
+
+    function setActionsEnabled(enabled) {
+      validateBtn.disabled = !enabled;
+      dryRunBtn.disabled = !enabled;
+      buildBtn.disabled = !enabled;
+    }
+
+    function post(message) {
+      parent.postMessage({ pluginMessage: message }, '*');
+    }
+
+    fileInput.addEventListener('change', async () => {
+      const file = fileInput.files && fileInput.files[0];
+      if (!file) {
+        bundleText = '';
+        setActionsEnabled(false);
+        appendLog('No bundle selected.');
+        return;
+      }
+      bundleText = await file.text();
+      setActionsEnabled(true);
+      appendLog(`Loaded bundle: ${file.name}`);
+    });
+
+    validateBtn.addEventListener('click', () => {
+      post({ type: 'validate-bundle', bundleText });
+    });
+
+    dryRunBtn.addEventListener('click', () => {
+      post({ type: 'import-bundle', bundleText, dryRun: true, clearExisting: clearExisting.checked });
+    });
+
+    buildBtn.addEventListener('click', () => {
+      post({ type: 'import-bundle', bundleText, dryRun: false, clearExisting: clearExisting.checked });
+    });
+
+    closeBtn.addEventListener('click', () => {
+      post({ type: 'close-plugin' });
+    });
+
+    onmessage = (event) => {
+      const msg = event.data.pluginMessage || {};
+      if (msg.type === 'validation-result') {
+        const v = msg.validation || {};
+        appendLog(`Validation summary: ${JSON.stringify(v.summary || {}, null, 2)}`);
+        if (v.errors && v.errors.length) {
+          appendLog('Validation errors:');
+          v.errors.forEach((e) => appendLog(`- ${e}`));
+        } else {
+          appendLog('Validation passed.');
+        }
+        if (v.warnings && v.warnings.length) {
+          appendLog('Warnings:');
+          v.warnings.forEach((w) => appendLog(`- ${w}`));
+        }
+      }
+
+      if (msg.type === 'dry-run-result') {
+        appendLog(`Dry run complete: ${JSON.stringify(msg.summary || {}, null, 2)}`);
+      }
+
+      if (msg.type === 'log') {
+        appendLog(msg.message || '');
+      }
+
+      if (msg.type === 'import-complete') {
+        appendLog(`Import complete: ${JSON.stringify(msg.stats || {}, null, 2)}`);
+        appendLog(`Expected checks: ${JSON.stringify(msg.expected || {}, null, 2)}`);
+      }
+
+      if (msg.type === 'import-error') {
+        appendLog(`ERROR: ${msg.message || 'Unknown plugin error.'}`);
+      }
+    };
+  </script>
+</body>
+</html>

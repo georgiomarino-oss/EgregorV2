@@ -30,7 +30,7 @@ type CinematicTone = 'circle' | 'hero' | 'liveEvent' | 'prayer' | 'profileTrust'
 interface CinematicSurfaceProps {
   accessibilityHint?: string;
   accessibilityLabel?: string;
-  artSource?: ImageSourcePropType;
+  artSource?: ImageSourcePropType | undefined;
   children: ReactNode;
   contentStyle?: StyleProp<ViewStyle>;
   fallbackIcon?: React.ComponentProps<typeof MaterialCommunityIcons>['name'];

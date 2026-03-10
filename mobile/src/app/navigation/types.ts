@@ -45,15 +45,11 @@ export type CommunityStackParamList = {
         inviteToken?: string;
       }
     | undefined;
-  EventsCircle: undefined;
-  PrayerCircle: undefined;
 };
 
 export type EventsStackParamList = {
   EventDetails:
     | {
-        eventId?: string;
-        eventTemplateId?: string;
         occurrenceId?: string;
         roomId?: string;
       }
@@ -62,9 +58,6 @@ export type EventsStackParamList = {
     | {
         allowAudioGeneration?: boolean;
         durationMinutes?: number;
-        eventId?: string;
-        eventSource?: 'news' | 'occurrence' | 'template';
-        eventTemplateId?: string;
         eventTitle?: string;
         occurrenceId?: string;
         occurrenceKey?: string;
@@ -78,6 +71,7 @@ export type EventsStackParamList = {
 
 export type ProfileStackParamList = {
   ProfileHome: undefined;
+  ProfileSettings: undefined;
 };
 
 export interface CaptureNavigationTarget {

@@ -5,6 +5,7 @@ import { PremiumHeroPanel } from '../../../components/CinematicPrimitives';
 import { LiveLogo } from '../../../components/LiveLogo';
 import { LoadingStateCard } from '../../../components/LoadingStateCard';
 import { Typography } from '../../../components/Typography';
+import { resolveCinematicArt } from '../../../lib/art/cinematicArt';
 import { motion, profileSurface, radii, spacing } from '../../../theme/tokens';
 import { useReducedMotion } from '../../rooms/hooks/useReducedMotion';
 
@@ -17,6 +18,9 @@ interface TrustHeroProps {
 }
 
 function formatImpact(value: number) {
+  if (Math.abs(value) < 0.5) {
+    return '0%';
+  }
   if (value > 0) {
     return `+${value}%`;
   }
@@ -73,6 +77,7 @@ export function TrustHero({
   return (
     <Animated.View style={settleStyle}>
       <PremiumHeroPanel
+        artSource={resolveCinematicArt('profile.hero.trust')}
         fallbackIcon="shield-check-outline"
         fallbackLabel="Trust ledger"
         section="profile"

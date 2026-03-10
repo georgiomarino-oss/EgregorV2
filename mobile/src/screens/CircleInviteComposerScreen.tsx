@@ -25,6 +25,7 @@ import {
   type CircleMembershipRole,
   type InvitableUser,
 } from '../lib/api/circles';
+import { resolveCinematicArt } from '../lib/art/cinematicArt';
 import { buildCircleInviteUrl } from '../lib/invite';
 import { sectionGap } from '../theme/layout';
 import { radii, sectionVisualThemes, spacing } from '../theme/tokens';
@@ -217,6 +218,7 @@ export function CircleInviteComposerScreen({ route }: Props) {
   return (
     <Screen ambientSource={ambientAnimation} contentContainerStyle={styles.content} variant="circles">
       <PremiumHeroPanel
+        artSource={resolveCinematicArt('circles.hero.governance')}
         fallbackIcon="email-fast-outline"
         fallbackLabel="Invite flow"
         section="circles"

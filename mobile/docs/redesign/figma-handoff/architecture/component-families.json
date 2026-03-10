@@ -1,0 +1,101 @@
+[
+  {
+    "family": "Navigation and shell",
+    "members": [
+      "RootNavigator",
+      "MainTabs",
+      "BottomTabs",
+      "Screen"
+    ],
+    "usedBy": [
+      "All active screens"
+    ]
+  },
+  {
+    "family": "Hero surfaces",
+    "members": [
+      "SoloHero",
+      "SoloSetupHero",
+      "CirclesHeroPanel",
+      "EventsHeader",
+      "EventDetailsHero",
+      "TrustHero"
+    ],
+    "usedBy": [
+      "Solo",
+      "Circles",
+      "Live",
+      "Profile"
+    ]
+  },
+  {
+    "family": "Card families",
+    "members": [
+      "PrayerCard",
+      "OccurrenceCard",
+      "CircleSummaryCard",
+      "CirclePendingInviteCard",
+      "CircleDetailMemberRow",
+      "CircleInviteRecordRow"
+    ],
+    "usedBy": [
+      "Solo",
+      "Circles",
+      "Live"
+    ]
+  },
+  {
+    "family": "State and feedback",
+    "members": [
+      "LoadingStateCard",
+      "InlineErrorCard",
+      "RetryPanel",
+      "EmptyStateCard",
+      "StatusChip",
+      "ToastCard",
+      "AlertBanner"
+    ],
+    "usedBy": [
+      "All active screens"
+    ]
+  },
+  {
+    "family": "Global Pulse surfaces",
+    "members": [
+      "EmbeddedGlobeCard",
+      "LegendChip",
+      "Fullscreen selection panel"
+    ],
+    "usedBy": [
+      "EventsHome"
+    ]
+  },
+  {
+    "family": "Room experience",
+    "members": [
+      "RoomAtmosphereBackdrop",
+      "SoloAuraField",
+      "CollectiveEnergyField",
+      "RoomScriptPanel",
+      "RoomTransportControls"
+    ],
+    "usedBy": [
+      "SoloLive",
+      "EventRoom"
+    ]
+  },
+  {
+    "family": "Settings surfaces",
+    "members": [
+      "NotificationSettingsPanel",
+      "PrivacyPresencePanel",
+      "SafetySupportPanel",
+      "JournalPanel",
+      "TrustMetricsPanel"
+    ],
+    "usedBy": [
+      "ProfileHome",
+      "ProfileSettings"
+    ]
+  }
+]

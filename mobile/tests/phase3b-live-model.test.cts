@@ -110,17 +110,20 @@ test('buildLiveFeedSections emits canonical section grouping', () => {
   assert.ok(names.includes('Saved / Reminded'));
 });
 
-test('parseInviteCaptureTarget prefers canonical room/occurrence params over legacy params', () => {
+test('parseInviteCaptureTarget rejects deprecated events/room links', () => {
   const parsed = parseInviteCaptureTarget(
     'egregorv2://events/room?eventId=legacy-123&eventTemplateId=template-abc&occurrenceId=occ-789&roomId=room-456',
   );
 
-  assert.ok(parsed);
-  assert.equal(parsed?.eventsRoute, 'EventRoom');
-  assert.equal(parsed?.eventRoomParams?.occurrenceId, 'occ-789');
-  assert.equal(parsed?.eventRoomParams?.roomId, 'room-456');
-  assert.equal(parsed?.eventRoomParams?.eventId, undefined);
-  assert.equal(parsed?.eventRoomParams?.eventTemplateId, undefined);
+  assert.equal(parsed, null);
+});
+
+test('parseInviteCaptureTarget rejects deprecated community compatibility links', () => {
+  const eventsCircle = parseInviteCaptureTarget('egregorv2://community/events-circle');
+  const prayerCircle = parseInviteCaptureTarget('egregorv2://community/prayer-circle');
+
+  assert.equal(eventsCircle, null);
+  assert.equal(prayerCircle, null);
 });
 
 test('buildEventInviteUrl prefers canonical room and occurrence links', () => {
@@ -133,12 +136,12 @@ test('buildEventInviteUrl prefers canonical room and occurrence links', () => {
     eventTitle: 'Global Heartbeat',
     occurrenceId: 'occ-789',
   });
-  const legacyInvite = buildEventInviteUrl({
-    eventId: 'legacy-123',
-    eventTitle: 'Legacy',
-  });
 
   assert.equal(roomInvite, 'egregorv2://room/room-456');
   assert.equal(occurrenceInvite, 'egregorv2://live/occurrence/occ-789');
-  assert.ok(legacyInvite.startsWith('egregorv2://events/room?'));
+  assert.throws(() =>
+    buildEventInviteUrl({
+      eventTitle: 'Legacy',
+    }),
+  );
 });

@@ -20,6 +20,7 @@ import {
   listPendingCircleInvites,
   type CircleInvitePreview,
 } from '../lib/api/circles';
+import { resolveCinematicArt } from '../lib/art/cinematicArt';
 import { submitModerationReport } from '../lib/api/safety';
 import { buildSupportRouteMetadata } from '../lib/support';
 import { sectionGap } from '../theme/layout';
@@ -190,6 +191,7 @@ export function InviteDecisionScreen({ navigation, route }: Props) {
   return (
     <Screen ambientSource={ambientAnimation} contentContainerStyle={styles.content} variant="circles">
       <PremiumHeroPanel
+        artSource={resolveCinematicArt('circles.hero.inviteDecision')}
         fallbackIcon="email-seal-outline"
         fallbackLabel="Invite decision"
         section="circles"

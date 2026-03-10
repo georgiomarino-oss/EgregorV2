@@ -1,0 +1,266 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-03-09T10:43:54.705Z",
+  "generator": {
+    "openAiModel": "gpt-image-1",
+    "script": "mobile/scripts/generate-cinematic-assets.mjs",
+    "usedApiKey": true
+  },
+  "assets": [
+    {
+      "bytes": 2135335,
+      "generatedAt": "2026-03-09T10:43:54.705Z",
+      "id": "solo_home_hero",
+      "output": "solo/solo-home-hero.png",
+      "prompt": "Cinematic celestial sanctuary, luminous indigo and plum atmosphere, soft sacred geometry and warm gold aura, premium spiritual editorial mood, no text, no logos, no people",
+      "provider": "openai",
+      "section": "solo",
+      "sha256": "c1ca9355a1cc1c83a577c37e1d74124e914552b157b39119101e60ee176e50e6",
+      "size": "1536x1024",
+      "usage": [
+        "Solo home hero",
+        "Solo setup hero"
+      ]
+    },
+    {
+      "bytes": 2627651,
+      "generatedAt": "2026-03-09T10:43:54.705Z",
+      "id": "solo_category_prayer_card",
+      "output": "solo/solo-category-prayer-card.png",
+      "prompt": "Refined spiritual card artwork, intimate prayer chamber glow, violet gradients, soft mist and sacred geometry rings, premium cinematic render, no text",
+      "provider": "openai",
+      "section": "solo",
+      "sha256": "917224f33c97e429dba85f27de552fdb394d38f4385019c32661ccc3a72f58f6",
+      "size": "1536x1024",
+      "usage": [
+        "Solo prayer cards"
+      ]
+    },
+    {
+      "bytes": 2367570,
+      "generatedAt": "2026-03-09T10:43:54.705Z",
+      "id": "solo_category_manifestation_card",
+      "output": "solo/solo-category-manifestation-card.png",
+      "prompt": "Manifestation-themed premium spiritual art, deep violet dusk with rose-gold highlights, subtle sacred geometry, cinematic depth, no text",
+      "provider": "openai",
+      "section": "solo",
+      "sha256": "b16b72905a6087dc88e4ec546793a0cdf1760c0230fac7dff1309f21624448c8",
+      "size": "1536x1024",
+      "usage": [
+        "Solo category alternates"
+      ]
+    },
+    {
+      "bytes": 1716890,
+      "generatedAt": "2026-03-09T10:43:54.705Z",
+      "id": "live_feed_global_pulse_hero",
+      "output": "live/live-feed-global-pulse-hero.png",
+      "prompt": "Global consciousness hero art, planetary horizon glow, deep navy and sky blue gradients, synchronized energy arcs, premium cinematic atmosphere, no text",
+      "provider": "openai",
+      "section": "live",
+      "sha256": "a9e5d49e8d048dac2ffb2ad499439ebba7a08e616206f11798ec8c842b237a7c",
+      "size": "1536x1024",
+      "usage": [
+        "Live feed hero"
+      ]
+    },
+    {
+      "bytes": 2166688,
+      "generatedAt": "2026-03-09T10:43:54.705Z",
+      "id": "live_flagship_1111_card",
+      "output": "live/live-flagship-1111-card.png",
+      "prompt": "Flagship 11:11 ritual artwork, celestial alignment lights, blue aurora with amber accents, refined spiritual cinematic style, no text",
+      "provider": "openai",
+      "section": "live",
+      "sha256": "b51c04e8ed4f1fe44cb923316e4962e625cb6edc8e1362a6a7b1d7d18447db39",
+      "size": "1536x1024",
+      "usage": [
+        "11:11 signature cards"
+      ]
+    },
+    {
+      "bytes": 2039784,
+      "generatedAt": "2026-03-09T10:43:54.705Z",
+      "id": "live_room_detail_hero",
+      "output": "live/live-room-detail-hero.png",
+      "prompt": "Live room detail hero, immersive celestial depth, volumetric blue beams, subtle warm edge light, premium and clean, no text",
+      "provider": "openai",
+      "section": "live",
+      "sha256": "e56fe1a6b7cfcf776d4d8d996e8e9b0735dc6319392d3ef6130b6cd895ca9409",
+      "size": "1536x1024",
+      "usage": [
+        "Event details hero"
+      ]
+    },
+    {
+      "bytes": 2006305,
+      "generatedAt": "2026-03-09T10:43:54.705Z",
+      "id": "circles_home_hero",
+      "output": "circles/circles-home-hero.png",
+      "prompt": "Community constellation hero, deep teal and cyan gradients, luminous trust network nodes, welcoming premium spiritual mood, no text",
+      "provider": "openai",
+      "section": "circles",
+      "sha256": "413572c10d5ea85526adad8a4d2c7ea23947868602d00b09f3034d1b6b4d299e",
+      "size": "1536x1024",
+      "usage": [
+        "Circles home hero"
+      ]
+    },
+    {
+      "bytes": 2196616,
+      "generatedAt": "2026-03-09T10:43:54.705Z",
+      "id": "circle_governance_hero",
+      "output": "circles/circle-governance-hero.png",
+      "prompt": "Circle governance premium artwork, constellation patterns and gentle aurora ribbons, teal and glacier palette, cinematic spiritual clarity, no text",
+      "provider": "openai",
+      "section": "circles",
+      "sha256": "8b60b13e832663fe2a2445b13047eb85ce7e3a7522bcad1a5552f857963ee743",
+      "size": "1536x1024",
+      "usage": [
+        "Circle details hero",
+        "Circle invite composer hero"
+      ]
+    },
+    {
+      "bytes": 1976702,
+      "generatedAt": "2026-03-09T10:43:54.705Z",
+      "id": "invite_decision_hero",
+      "output": "circles/invite-decision-hero.png",
+      "prompt": "Invite decision hero art, sacred threshold motif, luminous teal gateway, trustworthy premium cinematic style, no text",
+      "provider": "openai",
+      "section": "circles",
+      "sha256": "285c966dfcc0c5512c2f1ab4f0c35f47bbcd26aa14b97cf8a0f598cf1781dbbf",
+      "size": "1536x1024",
+      "usage": [
+        "Invite decision hero"
+      ]
+    },
+    {
+      "bytes": 2500576,
+      "generatedAt": "2026-03-09T10:43:54.705Z",
+      "id": "profile_trust_progress_hero",
+      "output": "profile/profile-trust-progress-hero.png",
+      "prompt": "Trust and progress hero, moonstone and steel-blue palette, calm archival glow, premium reflective spiritual atmosphere, no text",
+      "provider": "openai",
+      "section": "profile",
+      "sha256": "9e99db44a0d915d278fa4a01569ba5841823602666576c94c55dcc56264439b4",
+      "size": "1536x1024",
+      "usage": [
+        "Profile trust hero"
+      ]
+    },
+    {
+      "bytes": 2658335,
+      "generatedAt": "2026-03-09T10:43:54.705Z",
+      "id": "profile_progress_ledger_hero",
+      "output": "profile/profile-progress-ledger-hero.png",
+      "prompt": "Progress ledger premium artwork, elegant sacred geometry over reflective slate gradients, calm and trustworthy, no text",
+      "provider": "openai",
+      "section": "profile",
+      "sha256": "bbb98cd161eba9dde14eb4083fdd61ac1194a31264e78fc27be026f5993d1ff1",
+      "size": "1536x1024",
+      "usage": [
+        "Profile progress ledger surfaces"
+      ]
+    },
+    {
+      "bytes": 2076271,
+      "generatedAt": "2026-03-09T10:43:54.705Z",
+      "id": "profile_safety_privacy_settings_hero",
+      "output": "profile/profile-safety-privacy-settings-hero.png",
+      "prompt": "Safety and privacy settings hero, sanctuary steel-blue gradients with soft protective halo, premium cinematic style, no text",
+      "provider": "openai",
+      "section": "profile",
+      "sha256": "0e1492ca461e021dbf8bff3076dbfa0a15ea13d03fe4c4259cf980fe7c72e2dd",
+      "size": "1536x1024",
+      "usage": [
+        "Settings hero",
+        "Safety/privacy/settings cards"
+      ]
+    },
+    {
+      "bytes": 2612401,
+      "generatedAt": "2026-03-09T10:43:54.705Z",
+      "id": "profile_journal_companion_art",
+      "output": "profile/profile-journal-companion-art.png",
+      "prompt": "Journal companion artwork, contemplative moonlit paper texture with soft sacred light, elegant and premium, no text",
+      "provider": "openai",
+      "section": "profile",
+      "sha256": "e8e4a176e2488b4cd22a4df7dbfee22abccf575e136de3a28e834ca7ebdac438",
+      "size": "1536x1024",
+      "usage": [
+        "Journal companion card"
+      ]
+    },
+    {
+      "bytes": 2284719,
+      "generatedAt": "2026-03-09T10:43:54.705Z",
+      "id": "shared_sacred_geometry_overlay",
+      "output": "shared/backgrounds/shared-sacred-geometry-overlay.png",
+      "prompt": "Subtle sacred geometry overlay for premium mobile interfaces, translucent luminous lines on deep cinematic gradient, no text",
+      "provider": "openai",
+      "section": "shared",
+      "sha256": "a56da0286cc06a2804b4465613d939919b6942ab447519d5e25f7fe2dead7094",
+      "size": "1536x1024",
+      "usage": [
+        "Shared subtle overlays"
+      ]
+    },
+    {
+      "bytes": 2578927,
+      "generatedAt": "2026-03-09T10:43:54.705Z",
+      "id": "card_solo_prayer_neutral",
+      "output": "cards/solo-prayer-card-neutral.png",
+      "prompt": "Neutral premium solo prayer card art, violet sanctuary tones, soft light bloom, no text",
+      "provider": "openai",
+      "section": "cards",
+      "sha256": "066e33440db51d3f6dc2bde0ead74f55b2710a2d24748031b65cb53759551d42",
+      "size": "1536x1024",
+      "usage": [
+        "Fallback prayer card media"
+      ]
+    },
+    {
+      "bytes": 1956905,
+      "generatedAt": "2026-03-09T10:43:54.705Z",
+      "id": "card_live_occurrence_neutral",
+      "output": "cards/live-occurrence-card-neutral.png",
+      "prompt": "Neutral premium live occurrence card art, deep blue cinematic gradient and subtle global pulse motifs, no text",
+      "provider": "openai",
+      "section": "cards",
+      "sha256": "ce8f9f746ac05ee36a166d9ea4a7db33142fdda18de0df70516ff3e69a05004e",
+      "size": "1536x1024",
+      "usage": [
+        "Fallback live occurrence media"
+      ]
+    },
+    {
+      "bytes": 1911102,
+      "generatedAt": "2026-03-09T10:43:54.705Z",
+      "id": "room_solo_atmosphere_overlay",
+      "output": "rooms/solo-room-atmosphere-overlay.png",
+      "prompt": "Solo room atmosphere overlay, sacred violet aura field, soft mist and luminous particles, premium cinematic and calm, no text",
+      "provider": "openai",
+      "section": "rooms",
+      "sha256": "23d1f751a3c0a92330f44edd795018c83964d350c843eef0f7ffa0c4078ca634",
+      "size": "1536x1024",
+      "usage": [
+        "Solo live room backdrop overlay"
+      ]
+    },
+    {
+      "bytes": 1785881,
+      "generatedAt": "2026-03-09T10:43:54.705Z",
+      "id": "room_live_atmosphere_overlay",
+      "output": "rooms/live-room-atmosphere-overlay.png",
+      "prompt": "Live event room atmosphere overlay, global blue pulse, volumetric light and subtle sacred geometry, premium cinematic quality, no text",
+      "provider": "openai",
+      "section": "rooms",
+      "sha256": "2f9cf17fa554cf913724e5bcb0c243ebd973659956d625fc84fa38b627faceb3",
+      "size": "1536x1024",
+      "usage": [
+        "Event room atmosphere overlay"
+      ]
+    }
+  ]
+}

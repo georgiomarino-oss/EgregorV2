@@ -42,6 +42,7 @@ export interface GlobePoint {
   coordinate: Coordinate;
   id: string;
   kind: GlobePointKind;
+  properties?: Record<string, boolean | null | number | string>;
 }
 
 export interface MapFeatureCollection {
@@ -52,6 +53,7 @@ export interface MapFeatureCollection {
     };
     properties: {
       id: string;
+      [key: string]: unknown;
     };
     type: 'Feature';
   }>;
@@ -60,9 +62,7 @@ export interface MapFeatureCollection {
 
 export interface MapPressFeature {
   id?: unknown;
-  properties?: {
-    id?: unknown;
-  };
+  properties?: Record<string, unknown>;
 }
 
 export type MapboxComponent = ComponentType<Record<string, unknown>>;

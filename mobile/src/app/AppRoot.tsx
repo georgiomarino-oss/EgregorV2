@@ -48,8 +48,7 @@ const linking: LinkingOptions<RootStackParamList> = {
                 },
                 path: 'circles/:circleId/invite',
               },
-              CommunityHome: ['circles', 'community'],
-              EventsCircle: 'community/events-circle',
+              CommunityHome: 'circles',
               InviteDecision: {
                 parse: {
                   invitationId: (value: string) => value,
@@ -57,19 +56,16 @@ const linking: LinkingOptions<RootStackParamList> = {
                 },
                 path: 'invite/:inviteToken',
               },
-              PrayerCircle: 'community/prayer-circle',
             },
           },
           EventsTab: {
             screens: {
               EventDetails: {
                 parse: {
-                  eventId: (value: string) => value,
-                  eventTemplateId: (value: string) => value,
                   occurrenceId: (value: string) => value,
                   roomId: (value: string) => value,
                 },
-                path: ['events/details', 'live/occurrence/:occurrenceId'],
+                path: 'live/occurrence/:occurrenceId',
               },
               EventRoom: {
                 parse: {
@@ -78,12 +74,6 @@ const linking: LinkingOptions<RootStackParamList> = {
                     const parsed = Number(value);
                     return Number.isFinite(parsed) ? parsed : undefined;
                   },
-                  eventId: (value: string) => value,
-                  eventSource: (value: string) =>
-                    value === 'news' || value === 'template' || value === 'occurrence'
-                      ? value
-                      : undefined,
-                  eventTemplateId: (value: string) => value,
                   eventTitle: (value: string) => value,
                   occurrenceId: (value: string) => value,
                   occurrenceKey: (value: string) => value,
@@ -91,7 +81,7 @@ const linking: LinkingOptions<RootStackParamList> = {
                   scheduledStartAt: (value: string) => value,
                   scriptText: (value: string) => value,
                 },
-                path: ['events/room', 'room/:roomId'],
+                path: 'room/:roomId',
               },
               EventsHome: 'events',
             },
@@ -99,6 +89,7 @@ const linking: LinkingOptions<RootStackParamList> = {
           ProfileTab: {
             screens: {
               ProfileHome: 'profile',
+              ProfileSettings: 'profile/settings',
             },
           },
           SoloTab: {

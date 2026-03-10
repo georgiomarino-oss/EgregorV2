@@ -1,0 +1,243 @@
+{
+  "notificationPermissionStates": [
+    {
+      "state": "granted",
+      "action": null,
+      "actionLabel": null,
+      "badgeLabel": "Enabled",
+      "detail": "This device can receive reminder alerts when dispatch is available.",
+      "title": "Device notifications are enabled.",
+      "tone": "success"
+    },
+    {
+      "state": "undetermined",
+      "action": "request_permission",
+      "actionLabel": "Enable on this device",
+      "badgeLabel": "Not enabled",
+      "detail": "Reminder preferences still save to your account, but this device cannot alert yet.",
+      "title": "Turn on notifications when you are ready.",
+      "tone": "warning"
+    },
+    {
+      "state": "denied",
+      "action": "open_settings",
+      "actionLabel": "Open notification settings",
+      "badgeLabel": "Blocked",
+      "detail": "Reminder preferences can still be saved, but alerts are blocked in your device settings.",
+      "title": "Notifications are currently blocked on this device.",
+      "tone": "warning"
+    },
+    {
+      "state": "unsupported",
+      "action": null,
+      "actionLabel": null,
+      "badgeLabel": "Unavailable",
+      "detail": "This device does not support push notifications in the current app environment.",
+      "title": "Notifications are unavailable on this device.",
+      "tone": "neutral"
+    }
+  ],
+  "reminderStates": [
+    {
+      "permissionState": "granted",
+      "reminderEnabled": false,
+      "detail": "No reminder is saved for this live moment yet.",
+      "tone": "neutral"
+    },
+    {
+      "permissionState": "granted",
+      "reminderEnabled": true,
+      "detail": "Reminder preference saved. Delivery depends on device availability and notification dispatch.",
+      "tone": "success"
+    },
+    {
+      "permissionState": "undetermined",
+      "reminderEnabled": false,
+      "detail": "No reminder is saved for this live moment yet.",
+      "tone": "neutral"
+    },
+    {
+      "permissionState": "undetermined",
+      "reminderEnabled": true,
+      "detail": "Reminder preference saved. Enable notifications on this device to receive alerts here.",
+      "tone": "warning"
+    },
+    {
+      "permissionState": "denied",
+      "reminderEnabled": false,
+      "detail": "No reminder is saved for this live moment yet.",
+      "tone": "neutral"
+    },
+    {
+      "permissionState": "denied",
+      "reminderEnabled": true,
+      "detail": "Reminder preference saved, but this device will stay silent until notifications are re-enabled in settings.",
+      "tone": "warning"
+    },
+    {
+      "permissionState": "unsupported",
+      "reminderEnabled": false,
+      "detail": "No reminder is saved for this live moment yet.",
+      "tone": "neutral"
+    },
+    {
+      "permissionState": "unsupported",
+      "reminderEnabled": true,
+      "detail": "Reminder preference saved to your account. This device cannot receive push alerts in the current environment.",
+      "tone": "neutral"
+    }
+  ],
+  "deletionStatuses": [
+    {
+      "status": null,
+      "badgeLabel": "No request",
+      "badgeTone": "neutral",
+      "detail": "Submitting a request starts an auditable support-reviewed deletion workflow. It is not instant.",
+      "headline": "No account deletion request is active.",
+      "requestDisabled": false
+    },
+    {
+      "status": "requested",
+      "badgeLabel": "Requested",
+      "badgeTone": "warning",
+      "detail": "Your request was received and is waiting for support acknowledgement.",
+      "headline": "Deletion request submitted.",
+      "requestDisabled": true
+    },
+    {
+      "status": "acknowledged",
+      "badgeLabel": "Acknowledged",
+      "badgeTone": "warning",
+      "detail": "Support has acknowledged your request and will continue review.",
+      "headline": "Deletion request acknowledged.",
+      "requestDisabled": true
+    },
+    {
+      "status": "in_review",
+      "badgeLabel": "In review",
+      "badgeTone": "warning",
+      "detail": "Support is actively reviewing your account deletion request.",
+      "headline": "Deletion request in review.",
+      "requestDisabled": true
+    },
+    {
+      "status": "completed",
+      "badgeLabel": "Completed",
+      "badgeTone": "success",
+      "detail": "Your deletion request has been completed.",
+      "headline": "Account deletion completed.",
+      "requestDisabled": true
+    },
+    {
+      "status": "cancelled",
+      "badgeLabel": "Cancelled",
+      "badgeTone": "neutral",
+      "detail": "The deletion request was cancelled and no longer blocks a new request.",
+      "headline": "Deletion request cancelled.",
+      "requestDisabled": false
+    },
+    {
+      "status": "rejected",
+      "badgeLabel": "Rejected",
+      "badgeTone": "danger",
+      "detail": "The request was closed by support. Contact support for details.",
+      "headline": "Deletion request closed.",
+      "requestDisabled": false
+    }
+  ],
+  "inviteStatuses": [
+    {
+      "status": "pending",
+      "label": "Pending",
+      "tone": "warning",
+      "expiryExample": "Expires in 1392d"
+    },
+    {
+      "status": "accepted",
+      "label": "Accepted",
+      "tone": "success",
+      "expiryExample": "Expires in 1392d"
+    },
+    {
+      "status": "declined",
+      "label": "Declined",
+      "tone": "neutral",
+      "expiryExample": "Expires in 1392d"
+    },
+    {
+      "status": "revoked",
+      "label": "Revoked",
+      "tone": "danger",
+      "expiryExample": "Expires in 1392d"
+    },
+    {
+      "status": "expired",
+      "label": "Expired",
+      "tone": "danger",
+      "expiryExample": "Expires in 1392d"
+    },
+    {
+      "status": "invalid",
+      "label": "Invalid",
+      "tone": "danger",
+      "expiryExample": "Expires in 1392d"
+    }
+  ],
+  "roleLabels": [
+    {
+      "role": "owner",
+      "label": "Owner"
+    },
+    {
+      "role": "steward",
+      "label": "Steward"
+    },
+    {
+      "role": "member",
+      "label": "Member"
+    }
+  ],
+  "liveStatusLabels": [
+    {
+      "state": "live",
+      "label": "Live now"
+    },
+    {
+      "state": "waiting_room",
+      "label": "Waiting room"
+    },
+    {
+      "state": "upcoming",
+      "label": "Upcoming"
+    },
+    {
+      "state": "ended",
+      "label": "Ended"
+    }
+  ],
+  "privacySummaryExamples": [
+    {
+      "directInvites": "People outside your circles can send invite requests.",
+      "inviteRequests": "Circle invite requests are enabled.",
+      "livePresence": "Your live presence is visible to people in shared circles.",
+      "memberVisibility": "Your profile appears in member lists for shared circles."
+    },
+    {
+      "directInvites": "Only people who already share a circle with you can invite you.",
+      "inviteRequests": "New circle invite requests are paused.",
+      "livePresence": "Your live presence is hidden from other participants.",
+      "memberVisibility": "Your profile is hidden from member lists for other users."
+    },
+    {
+      "directInvites": "People outside your circles can send invite requests.",
+      "inviteRequests": "Circle invite requests are enabled.",
+      "livePresence": "Your live presence is visible to all signed-in users.",
+      "memberVisibility": "Your profile appears in member lists across the app."
+    }
+  ],
+  "safetyActionFeedback": [
+    "Jordan has been blocked.",
+    "Jordan has been unblocked.",
+    "Report submitted for Jordan."
+  ]
+}

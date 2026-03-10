@@ -13,10 +13,7 @@
       "backgroundColor": "#04060c"
     },
     "ios": {
-      "supportsTablet": true,
-      "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "Egregor uses your location to show nearby live and scheduled prayer events."
-      }
+      "supportsTablet": true
     },
     "android": {
       "adaptiveIcon": {
@@ -34,11 +31,7 @@
         "android.permission.READ_MEDIA_VISUAL_USER_SELECTED",
         "android.permission.FOREGROUND_SERVICE_MICROPHONE"
       ],
-      "permissions": [
-        "android.permission.ACCESS_COARSE_LOCATION",
-        "android.permission.ACCESS_FINE_LOCATION",
-        "android.permission.POST_NOTIFICATIONS"
-      ],
+      "permissions": ["android.permission.POST_NOTIFICATIONS"],
       "predictiveBackGestureEnabled": false,
       "package": "com.egregor.egregorv2"
     },
@@ -46,12 +39,6 @@
       "favicon": "./assets/brand/app-icon-still-48.png"
     },
     "plugins": [
-      [
-        "expo-location",
-        {
-          "locationWhenInUsePermission": "Allow Egregor to show nearby prayer events and presence on the map."
-        }
-      ],
       "expo-font",
       [
         "expo-audio",

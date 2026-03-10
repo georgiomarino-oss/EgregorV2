@@ -1,8 +1,12 @@
 import ambientAnimation from '../../assets/lottie/cosmic-ambient.json';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Animated, Linking, PanResponder, StyleSheet } from 'react-native';
+import { Alert, Animated, Linking, PanResponder, Pressable, StyleSheet, View } from 'react-native';
 import type { User } from '@supabase/supabase-js';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
+import type { ProfileStackParamList } from '../app/navigation/types';
 import { SecondaryButton } from '../components/AppButtons';
 import { Badge } from '../components/Badge';
 import { PremiumProfileTrustCardSurface } from '../components/CinematicPrimitives';
@@ -64,6 +68,7 @@ import {
 } from '../lib/support';
 import { supabase } from '../lib/supabase';
 import { MOBILE_ANALYTICS_EVENTS, trackMobileEvent } from '../lib/observability';
+import { resolveCinematicArt } from '../lib/art/cinematicArt';
 import { PROFILE_SECTION_GAP } from '../theme/figmaV2Layout';
 import { profileSurface, spacing } from '../theme/tokens';
 
@@ -156,7 +161,17 @@ function formatRelativeSaveTime(timestamp: string | null) {
   })}`;
 }
 
-export function ProfileScreen() {
+type ProfileScreenMode = 'profile' | 'settings';
+type ProfileNavigation = NativeStackNavigationProp<ProfileStackParamList>;
+
+interface ProfileScreenContentProps {
+  mode: ProfileScreenMode;
+}
+
+function ProfileScreenContent({ mode }: ProfileScreenContentProps) {
+  const navigation = useNavigation<ProfileNavigation>();
+  const profileMode = mode === 'profile';
+  const settingsMode = mode === 'settings';
   const [loadingSignOut, setLoadingSignOut] = useState(false);
   const [loadingProfile, setLoadingProfile] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -945,251 +960,379 @@ export function ProfileScreen() {
       contentContainerStyle={styles.content}
       variant="profile"
     >
-      <TrustHero
-        accountEmail={user?.email ?? null}
-        loading={loadingProfile}
-        sessionsThisWeek={summary?.sessionsThisWeek ?? 0}
-        soloStreakDays={summary?.soloStreakDays ?? 0}
-        weeklyImpactChangePercent={summary?.weeklyImpactChangePercent ?? 0}
-      />
-
-      <TrustMetricsPanel
-        circleMembers={summary?.circleMembers ?? 0}
-        eventsJoinedThisWeek={summary?.eventsJoinedThisWeek ?? 0}
-        loading={loadingProfile}
-        minutesPrayed={summary?.minutesPrayed ?? 0}
-        sessionsThisWeek={summary?.sessionsThisWeek ?? 0}
-        soloStreakDays={summary?.soloStreakDays ?? 0}
-      />
-
-      <JournalPanel
-        activeEntryLocalId={activeJournalPage?.localId ?? null}
-        canCreateNewEntry
-        canGoPreviousPage={currentJournalPageIndex > 0}
-        currentPageNumber={currentPageNumber}
-        entries={journalEntryPreviews}
-        isSavingCurrentPage={isSavingActivePage}
-        onCreateEntry={createAndFocusNewJournalEntry}
-        onChangeText={(nextText) => {
-          const activeLocalId = activeJournalPage?.localId;
-          if (!activeLocalId) {
-            return;
+      <View style={styles.topBar}>
+        <View style={styles.topBarTitleWrap}>
+          <Typography variant="H2" weight="bold">
+            {profileMode ? 'Profile' : 'Settings'}
+          </Typography>
+          <Typography color={profileSurface.utility.subtitle} variant="Caption">
+            {profileMode
+              ? 'Trust, reflection, and account overview.'
+              : 'Notifications, privacy, safety, and account controls.'}
+          </Typography>
+        </View>
+        <Pressable
+          accessibilityHint={
+            profileMode
+              ? 'Opens notifications, privacy, safety, and account settings.'
+              : 'Returns to your profile.'
           }
+          accessibilityLabel={profileMode ? 'Open settings' : 'Back to profile'}
+          accessibilityRole="button"
+          onPress={() => {
+            if (profileMode) {
+              navigation.navigate('ProfileSettings');
+              return;
+            }
+            if (navigation.canGoBack()) {
+              navigation.goBack();
+              return;
+            }
+            navigation.navigate('ProfileHome');
+          }}
+          style={({ pressed }) => [styles.topActionButton, pressed ? styles.topActionButtonPressed : null]}
+        >
+          <MaterialCommunityIcons
+            color={profileSurface.utility.title}
+            name={profileMode ? 'cog-outline' : 'arrow-left'}
+            size={22}
+          />
+        </Pressable>
+      </View>
 
-          setJournalPages((previous) =>
-            previous.map((page) =>
-              page.localId === activeLocalId
-                ? {
-                    ...page,
-                    content: nextText,
+      {profileMode ? (
+        <>
+          <TrustHero
+            accountEmail={user?.email ?? null}
+            loading={loadingProfile}
+            sessionsThisWeek={summary?.sessionsThisWeek ?? 0}
+            soloStreakDays={summary?.soloStreakDays ?? 0}
+            weeklyImpactChangePercent={summary?.weeklyImpactChangePercent ?? 0}
+          />
+
+          <TrustMetricsPanel
+            circleMembers={summary?.circleMembers ?? 0}
+            eventsJoinedThisWeek={summary?.eventsJoinedThisWeek ?? 0}
+            loading={loadingProfile}
+            minutesPrayed={summary?.minutesPrayed ?? 0}
+            sessionsThisWeek={summary?.sessionsThisWeek ?? 0}
+            soloStreakDays={summary?.soloStreakDays ?? 0}
+          />
+
+          <JournalPanel
+            activeEntryLocalId={activeJournalPage?.localId ?? null}
+            canCreateNewEntry
+            canGoPreviousPage={currentJournalPageIndex > 0}
+            currentPageNumber={currentPageNumber}
+            entries={journalEntryPreviews}
+            isSavingCurrentPage={isSavingActivePage}
+            onCreateEntry={createAndFocusNewJournalEntry}
+            onChangeText={(nextText) => {
+              const activeLocalId = activeJournalPage?.localId;
+              if (!activeLocalId) {
+                return;
+              }
+
+              setJournalPages((previous) =>
+                previous.map((page) =>
+                  page.localId === activeLocalId
+                    ? {
+                        ...page,
+                        content: nextText,
+                      }
+                    : page,
+                ),
+              );
+            }}
+            onNextPage={goToNextJournalPage}
+            onPreviousPage={goToPreviousJournalPage}
+            onSelectEntry={selectJournalEntry}
+            pageContent={activeJournalPage?.content ?? ''}
+            pagePanHandlers={pagePanResponder.panHandlers}
+            pageTurnOffset={pageTurnOffset}
+            saveStateLabel={saveStateLabel}
+            saveStateTone={saveStateTone}
+            totalPages={journalPages.length}
+          />
+
+          {!loadingProfile && !summary ? (
+            <EmptyStateCard
+              backgroundColor={profileSurface.utility.panelBackground}
+              body="Your trust snapshot is still syncing. You can continue journaling while metrics refresh."
+              bodyColor={profileSurface.utility.subtitle}
+              borderColor={profileSurface.utility.panelBorder}
+              iconBackgroundColor={profileSurface.utility.panelBackground}
+              iconBorderColor={profileSurface.utility.panelBorder}
+              iconName="shield-refresh-outline"
+              iconTint={profileSurface.utility.title}
+              title="Profile snapshot pending"
+              titleColor={profileSurface.utility.title}
+            />
+          ) : null}
+
+          <PremiumProfileTrustCardSurface
+            accessibilityHint="Opens notifications, privacy, safety, and account deletion controls."
+            accessibilityLabel="Settings overview"
+            artSource={resolveCinematicArt('profile.hero.ledger')}
+            fallbackIcon="shield-crown-outline"
+            fallbackLabel="Settings sanctuary"
+            section="profile"
+            style={styles.utilityPanel}
+          >
+            <SectionHeader
+              compact
+              subtitle="Move to Settings for notifications, privacy, safety, support, and account actions."
+              subtitleColor={profileSurface.utility.subtitle}
+              title="Settings and safeguards"
+              titleColor={profileSurface.utility.title}
+              trailing={
+                <Badge
+                  label={deletionStatusPresentation.badgeLabel}
+                  tone={
+                    deletionStatusPresentation.badgeTone === 'success'
+                      ? 'success'
+                      : deletionStatusPresentation.badgeTone === 'warning'
+                        ? 'warning'
+                        : deletionStatusPresentation.badgeTone === 'danger'
+                          ? 'error'
+                          : 'active'
                   }
-                : page,
-            ),
-          );
-        }}
-        onNextPage={goToNextJournalPage}
-        onPreviousPage={goToPreviousJournalPage}
-        onSelectEntry={selectJournalEntry}
-        pageContent={activeJournalPage?.content ?? ''}
-        pagePanHandlers={pagePanResponder.panHandlers}
-        pageTurnOffset={pageTurnOffset}
-        saveStateLabel={saveStateLabel}
-        saveStateTone={saveStateTone}
-        totalPages={journalPages.length}
-      />
-
-      {!loadingProfile && !summary ? (
-        <EmptyStateCard
-          backgroundColor={profileSurface.utility.panelBackground}
-          body="Your trust snapshot is still syncing. You can continue journaling while metrics refresh."
-          bodyColor={profileSurface.utility.subtitle}
-          borderColor={profileSurface.utility.panelBorder}
-          iconBackgroundColor={profileSurface.utility.panelBackground}
-          iconBorderColor={profileSurface.utility.panelBorder}
-          iconName="shield-refresh-outline"
-          iconTint={profileSurface.utility.title}
-          title="Profile snapshot pending"
-          titleColor={profileSurface.utility.title}
-        />
-      ) : null}
-
-      <NotificationSettingsPanel
-        errorMessage={notificationSettingsError}
-        loading={loadingNotificationSettings}
-        onOpenSettings={() => {
-          void handleNotificationPermissionAction();
-        }}
-        onRequestPermission={() => {
-          void handleNotificationPermissionAction();
-        }}
-        onToggleCategory={(category, enabled) => {
-          const settingKeyByCategory: Partial<Record<NotificationCategory, NotificationSettingKey>> = {
-            circle_social: 'circleSocial',
-            invite: 'invite',
-            occurrence_reminder: 'occurrenceReminder',
-          };
-          const key = settingKeyByCategory[category];
-          if (!key) {
-            return;
-          }
-          void updateNotificationCategorySetting(key, enabled);
-        }}
-        permission={notificationPermissionPresentation}
-        reminderState={reminderPreferencePresentation}
-        rows={[
-          {
-            category: 'occurrence_reminder',
-            description: 'Default reminder preference for upcoming live moments.',
-            enabled: notificationSettings.occurrenceReminder,
-            title: 'Live reminders',
-          },
-          {
-            category: 'invite',
-            description: 'Alerts for new circle invite requests.',
-            enabled: notificationSettings.invite,
-            title: 'Circle invites',
-          },
-          {
-            category: 'circle_social',
-            description: 'Circle activity and social updates.',
-            enabled: notificationSettings.circleSocial,
-            title: 'Circle activity',
-          },
-        ]}
-        syncingPermission={syncingNotificationPermission}
-        updatingCategory={updatingNotificationCategory}
-      />
-
-      <PrivacyPresencePanel
-        errorMessage={privacySettingsError}
-        loading={loadingPrivacySettings}
-        onToggleAllowCircleInvites={(value) => {
-          void updatePrivacyField('allowCircleInvites', {
-            allowCircleInvites: value,
-          });
-        }}
-        onToggleAllowDirectInvites={(value) => {
-          void updatePrivacyField('allowDirectInvites', {
-            allowDirectInvites: value,
-          });
-        }}
-        onUpdateLivePresenceVisibility={(value) => {
-          void updatePrivacyField('livePresenceVisibility', {
-            livePresenceVisibility: value,
-          });
-        }}
-        onUpdateMemberListVisibility={(value) => {
-          void updatePrivacyField('memberListVisibility', {
-            memberListVisibility: value,
-          });
-        }}
-        privacySettings={privacySettings}
-        summary={privacySummary}
-        updatingField={updatingPrivacyField}
-      />
-
-      <SafetySupportPanel
-        blockedUsers={blockedUsers}
-        errorMessage={safetyError}
-        infoMessage={safetyInfoMessage}
-        loading={loadingBlockedUsers}
-        onOpenPrivacy={() => {
-          void openExternalUrl(PRIVACY_WEB_URL, 'Could not open privacy policy.');
-        }}
-        onOpenSupport={() => {
-          void openExternalUrl(SUPPORT_WEB_URL, 'Could not open support page.');
-        }}
-        onUnblock={(userToUnblock) => {
-          void unblockUserFromSafetyPanel(userToUnblock);
-        }}
-        unblockingUserId={unblockingUserId}
-      />
-
-      <PremiumProfileTrustCardSurface
-        accessibilityHint="Contains account-level actions."
-        accessibilityLabel="Account actions"
-        fallbackIcon="shield-account-outline"
-        fallbackLabel="Secure controls"
-        section="profile"
-        style={styles.utilityPanel}
-      >
-        <SectionHeader
-          compact
-          subtitle="Sign out at any time while your journal and progress remain synced."
-          subtitleColor={profileSurface.utility.subtitle}
-          title="Account sanctuary"
-          titleColor={profileSurface.utility.title}
-          trailing={<Badge label="Secure account" tone="success" />}
-        />
-        <SecondaryButton loading={loadingSignOut} onPress={onSignOut} title="Sign out" />
-      </PremiumProfileTrustCardSurface>
-
-      <PremiumProfileTrustCardSurface
-        accessibilityHint="Contains account deletion and support actions."
-        accessibilityLabel="Deletion and support"
-        fallbackIcon="alert-decagram-outline"
-        fallbackLabel="Safety controls"
-        section="profile"
-        style={styles.utilityPanel}
-      >
-        <SectionHeader
-          compact
-          subtitle={
-            loadingDeletionStatus
-              ? 'Checking deletion workflow status...'
-              : deletionStatusPresentation.headline
-          }
-          subtitleColor={profileSurface.utility.subtitle}
-          title="Account deletion"
-          titleColor={profileSurface.utility.title}
-          trailing={
-            <Badge
-              label={deletionStatusPresentation.badgeLabel}
-              tone={
-                deletionStatusPresentation.badgeTone === 'success'
-                  ? 'success'
-                  : deletionStatusPresentation.badgeTone === 'warning'
-                    ? 'warning'
-                    : deletionStatusPresentation.badgeTone === 'danger'
-                      ? 'error'
-                      : 'active'
+                />
               }
             />
-          }
-        />
-        <Typography color={profileSurface.utility.subtitle} variant="Caption">
-          {deletionStatusPresentation.detail}
-        </Typography>
-        <SecondaryButton
-          disabled={deletionStatusPresentation.requestDisabled}
-          loading={submittingDeletionRequest}
-          onPress={requestAccountDeletion}
-          title={
-            deletionStatusPresentation.requestDisabled
-              ? 'Deletion request active'
-              : 'Request account deletion'
-          }
-        />
-        <SecondaryButton
-          onPress={() => {
-            void openExternalUrl(ACCOUNT_DELETION_WEB_URL, 'Could not open account deletion policy.');
-          }}
-          title="Open deletion policy"
-        />
-        <SecondaryButton
-          onPress={() => {
-            void openExternalUrl(SUPPORT_WEB_URL, 'Could not open support page.');
-          }}
-          title="Open support"
-        />
-        {deletionError ? (
-          <InlineErrorCard
-            message={deletionError}
-            title="Deletion request issue"
-            tone="warning"
+            <Typography color={profileSurface.utility.subtitle} variant="Caption">
+              {notificationPermissionPresentation.detail}
+            </Typography>
+            {privacySummary ? (
+              <Typography color={profileSurface.utility.subtitle} variant="Caption">
+                {privacySummary.inviteRequests}
+              </Typography>
+            ) : null}
+            <SecondaryButton
+              onPress={() => {
+                navigation.navigate('ProfileSettings');
+              }}
+              title="Open settings sanctuary"
+            />
+            <SecondaryButton
+              onPress={() => {
+                navigation.navigate('ProfileSettings');
+              }}
+              title="Account deletion and support"
+            />
+          </PremiumProfileTrustCardSurface>
+        </>
+      ) : null}
+
+      {settingsMode ? (
+        <>
+          <PremiumProfileTrustCardSurface
+            accessibilityHint="Introduces your settings surfaces."
+            accessibilityLabel="Settings sanctuary"
+            artSource={resolveCinematicArt('profile.hero.settings')}
+            fallbackIcon="cog-outline"
+            fallbackLabel="Settings sanctuary"
+            section="profile"
+            style={styles.utilityPanel}
+          >
+            <SectionHeader
+              compact
+              subtitle="All settings controls are grouped here to keep Profile focused and concise."
+              subtitleColor={profileSurface.utility.subtitle}
+              title="Settings sanctuary"
+              titleColor={profileSurface.utility.title}
+            />
+            <Typography color={profileSurface.utility.subtitle} variant="Caption">
+              {notificationPermissionPresentation.title}
+            </Typography>
+          </PremiumProfileTrustCardSurface>
+
+          <NotificationSettingsPanel
+            errorMessage={notificationSettingsError}
+            loading={loadingNotificationSettings}
+            onOpenSettings={() => {
+              void handleNotificationPermissionAction();
+            }}
+            onRequestPermission={() => {
+              void handleNotificationPermissionAction();
+            }}
+            onToggleCategory={(category, enabled) => {
+              const settingKeyByCategory: Partial<
+                Record<NotificationCategory, NotificationSettingKey>
+              > = {
+                circle_social: 'circleSocial',
+                invite: 'invite',
+                occurrence_reminder: 'occurrenceReminder',
+              };
+              const key = settingKeyByCategory[category];
+              if (!key) {
+                return;
+              }
+              void updateNotificationCategorySetting(key, enabled);
+            }}
+            permission={notificationPermissionPresentation}
+            reminderState={reminderPreferencePresentation}
+            rows={[
+              {
+                category: 'occurrence_reminder',
+                description: 'Default reminder preference for upcoming live moments.',
+                enabled: notificationSettings.occurrenceReminder,
+                title: 'Live reminders',
+              },
+              {
+                category: 'invite',
+                description: 'Alerts for new circle invite requests.',
+                enabled: notificationSettings.invite,
+                title: 'Circle invites',
+              },
+              {
+                category: 'circle_social',
+                description: 'Circle activity and social updates.',
+                enabled: notificationSettings.circleSocial,
+                title: 'Circle activity',
+              },
+            ]}
+            syncingPermission={syncingNotificationPermission}
+            updatingCategory={updatingNotificationCategory}
           />
-        ) : null}
-      </PremiumProfileTrustCardSurface>
+
+          <PrivacyPresencePanel
+            errorMessage={privacySettingsError}
+            loading={loadingPrivacySettings}
+            onToggleAllowCircleInvites={(value) => {
+              void updatePrivacyField('allowCircleInvites', {
+                allowCircleInvites: value,
+              });
+            }}
+            onToggleAllowDirectInvites={(value) => {
+              void updatePrivacyField('allowDirectInvites', {
+                allowDirectInvites: value,
+              });
+            }}
+            onUpdateLivePresenceVisibility={(value) => {
+              void updatePrivacyField('livePresenceVisibility', {
+                livePresenceVisibility: value,
+              });
+            }}
+            onUpdateMemberListVisibility={(value) => {
+              void updatePrivacyField('memberListVisibility', {
+                memberListVisibility: value,
+              });
+            }}
+            privacySettings={privacySettings}
+            summary={privacySummary}
+            updatingField={updatingPrivacyField}
+          />
+
+          <SafetySupportPanel
+            blockedUsers={blockedUsers}
+            errorMessage={safetyError}
+            infoMessage={safetyInfoMessage}
+            loading={loadingBlockedUsers}
+            onOpenPrivacy={() => {
+              void openExternalUrl(PRIVACY_WEB_URL, 'Could not open privacy policy.');
+            }}
+            onOpenSupport={() => {
+              void openExternalUrl(SUPPORT_WEB_URL, 'Could not open support page.');
+            }}
+            onUnblock={(userToUnblock) => {
+              void unblockUserFromSafetyPanel(userToUnblock);
+            }}
+            unblockingUserId={unblockingUserId}
+          />
+
+          <PremiumProfileTrustCardSurface
+            accessibilityHint="Contains account-level actions."
+            accessibilityLabel="Account actions"
+            artSource={resolveCinematicArt('profile.hero.ledger')}
+            fallbackIcon="shield-account-outline"
+            fallbackLabel="Secure controls"
+            section="profile"
+            style={styles.utilityPanel}
+          >
+            <SectionHeader
+              compact
+              subtitle="Sign out at any time while your journal and progress remain synced."
+              subtitleColor={profileSurface.utility.subtitle}
+              title="Account sanctuary"
+              titleColor={profileSurface.utility.title}
+              trailing={<Badge label="Secure account" tone="success" />}
+            />
+            <SecondaryButton loading={loadingSignOut} onPress={onSignOut} title="Sign out" />
+          </PremiumProfileTrustCardSurface>
+
+          <PremiumProfileTrustCardSurface
+            accessibilityHint="Contains account deletion and support actions."
+            accessibilityLabel="Deletion and support"
+            artSource={resolveCinematicArt('profile.hero.settings')}
+            fallbackIcon="alert-decagram-outline"
+            fallbackLabel="Safety controls"
+            section="profile"
+            style={styles.utilityPanel}
+          >
+            <SectionHeader
+              compact
+              subtitle={
+                loadingDeletionStatus
+                  ? 'Checking deletion workflow status...'
+                  : deletionStatusPresentation.headline
+              }
+              subtitleColor={profileSurface.utility.subtitle}
+              title="Account deletion"
+              titleColor={profileSurface.utility.title}
+              trailing={
+                <Badge
+                  label={deletionStatusPresentation.badgeLabel}
+                  tone={
+                    deletionStatusPresentation.badgeTone === 'success'
+                      ? 'success'
+                      : deletionStatusPresentation.badgeTone === 'warning'
+                        ? 'warning'
+                        : deletionStatusPresentation.badgeTone === 'danger'
+                          ? 'error'
+                          : 'active'
+                  }
+                />
+              }
+            />
+            <Typography color={profileSurface.utility.subtitle} variant="Caption">
+              {deletionStatusPresentation.detail}
+            </Typography>
+            <SecondaryButton
+              disabled={deletionStatusPresentation.requestDisabled}
+              loading={submittingDeletionRequest}
+              onPress={requestAccountDeletion}
+              title={
+                deletionStatusPresentation.requestDisabled
+                  ? 'Deletion request active'
+                  : 'Request account deletion'
+              }
+            />
+            <SecondaryButton
+              onPress={() => {
+                void openExternalUrl(
+                  ACCOUNT_DELETION_WEB_URL,
+                  'Could not open account deletion policy.',
+                );
+              }}
+              title="Open deletion policy"
+            />
+            <SecondaryButton
+              onPress={() => {
+                void openExternalUrl(SUPPORT_WEB_URL, 'Could not open support page.');
+              }}
+              title="Open support"
+            />
+            {deletionError ? (
+              <InlineErrorCard
+                message={deletionError}
+                title="Deletion request issue"
+                tone="warning"
+              />
+            ) : null}
+          </PremiumProfileTrustCardSurface>
+        </>
+      ) : null}
 
       {error ? (
         <RetryPanel
@@ -1201,7 +1344,7 @@ export function ProfileScreen() {
         />
       ) : null}
 
-      {journalError ? (
+      {profileMode && journalError ? (
         <InlineErrorCard
           message={journalError}
           style={styles.feedbackCard}
@@ -1213,6 +1356,14 @@ export function ProfileScreen() {
   );
 }
 
+export function ProfileScreen() {
+  return <ProfileScreenContent mode="profile" />;
+}
+
+export function ProfileSettingsScreen() {
+  return <ProfileScreenContent mode="settings" />;
+}
+
 const styles = StyleSheet.create({
   content: {
     gap: PROFILE_SECTION_GAP + spacing.xxs,
@@ -1220,6 +1371,30 @@ const styles = StyleSheet.create({
   },
   feedbackCard: {
     minHeight: 44,
+  },
+  topActionButton: {
+    alignItems: 'center',
+    backgroundColor: profileSurface.utility.panelBackground,
+    borderColor: profileSurface.utility.panelBorder,
+    borderRadius: 999,
+    borderWidth: 1,
+    height: 42,
+    justifyContent: 'center',
+    width: 42,
+  },
+  topActionButtonPressed: {
+    opacity: 0.84,
+    transform: [{ scale: 0.97 }],
+  },
+  topBar: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  topBarTitleWrap: {
+    flex: 1,
+    gap: spacing.xxs,
+    paddingRight: spacing.sm,
   },
   utilityPanel: {
     gap: spacing.xs,

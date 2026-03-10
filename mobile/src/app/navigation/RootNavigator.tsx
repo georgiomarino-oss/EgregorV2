@@ -9,12 +9,10 @@ import { CircleInviteComposerScreen } from '../../screens/CircleInviteComposerSc
 import { CommunityScreen } from '../../screens/CommunityScreen';
 import { EventDetailsScreen } from '../../screens/EventDetailsScreen';
 import { EventRoomScreen } from '../../screens/EventRoomScreen';
-import { EventsCircleScreen } from '../../screens/EventsCircleScreen';
 import { EventsScreen } from '../../screens/EventsScreen';
 import { InviteDecisionScreen } from '../../screens/InviteDecisionScreen';
-import { PrayerCircleScreen } from '../../screens/PrayerCircleScreen';
 import { PrayerLibraryScreen } from '../../screens/PrayerLibraryScreen';
-import { ProfileScreen } from '../../screens/ProfileScreen';
+import { ProfileScreen, ProfileSettingsScreen } from '../../screens/ProfileScreen';
 import { SoloLiveScreen } from '../../screens/SoloLiveScreen';
 import { SoloScreen } from '../../screens/SoloScreen';
 import { SoloSetupScreen } from '../../screens/SoloSetupScreen';
@@ -98,8 +96,6 @@ function CommunityStackNavigator({
         component={InviteDecisionScreen}
         {...inviteDecisionProps}
       />
-      <CommunityStack.Screen name="EventsCircle" component={EventsCircleScreen} />
-      <CommunityStack.Screen name="PrayerCircle" component={PrayerCircleScreen} />
     </CommunityStack.Navigator>
   );
 }
@@ -142,6 +138,7 @@ function ProfileStackNavigator({ initialRouteName }: ProfileStackNavigatorProps)
   return (
     <ProfileStack.Navigator {...navigatorProps} screenOptions={sharedStackOptions}>
       <ProfileStack.Screen name="ProfileHome" component={ProfileScreen} />
+      <ProfileStack.Screen name="ProfileSettings" component={ProfileSettingsScreen} />
     </ProfileStack.Navigator>
   );
 }

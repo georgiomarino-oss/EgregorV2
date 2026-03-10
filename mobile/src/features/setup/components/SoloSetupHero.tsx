@@ -4,6 +4,7 @@ import { Animated, Easing, StyleSheet, View } from 'react-native';
 import { PremiumHeroPanel } from '../../../components/CinematicPrimitives';
 import { LiveLogo } from '../../../components/LiveLogo';
 import { Typography } from '../../../components/Typography';
+import { resolveCinematicArt } from '../../../lib/art/cinematicArt';
 import { useReducedMotion } from '../../rooms/hooks/useReducedMotion';
 import { motion, radii, sectionVisualThemes, soloSurface, spacing } from '../../../theme/tokens';
 
@@ -57,6 +58,7 @@ export function SoloSetupHero({ intention, loading, sessionsToday }: SoloSetupHe
   return (
     <Animated.View style={settleStyle}>
       <PremiumHeroPanel
+        artSource={resolveCinematicArt('solo.hero.setup')}
         fallbackIcon="meditation"
         fallbackLabel="Solo setup"
         section="solo"

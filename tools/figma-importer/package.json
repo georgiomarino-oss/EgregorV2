@@ -1,0 +1,10 @@
+﻿{
+  "name": "egregorv2-figma-importer",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Figma plugin/importer for EgregorV2 canonical staging package",
+  "scripts": {
+    "validate": "node scripts/validate-staging.mjs",
+    "bundle": "node scripts/build-bundle.mjs"
+  }
+}

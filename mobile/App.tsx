@@ -64,12 +64,11 @@ function parseCaptureTargetFromHash(): CaptureNavigationTarget | undefined {
 
   const profileRouteMap: Record<string, CaptureNavigationTarget['profileRoute']> = {
     profilehome: 'ProfileHome',
+    profilesettings: 'ProfileSettings',
   };
 
   const communityRouteMap: Record<string, CaptureNavigationTarget['communityRoute']> = {
     communityhome: 'CommunityHome',
-    eventscircle: 'EventsCircle',
-    prayercircle: 'PrayerCircle',
   };
 
   const target: CaptureNavigationTarget = {};
@@ -78,9 +77,8 @@ function parseCaptureTargetFromHash(): CaptureNavigationTarget | undefined {
     auth: { root: 'auth' },
     communityhome: { root: 'main', tab: 'CommunityTab', communityRoute: 'CommunityHome' },
     entry: { root: 'entry' },
-    eventscircle: { root: 'main', tab: 'CommunityTab', communityRoute: 'EventsCircle' },
     eventdetails: {
-      eventDetailsParams: { eventId: '__capture__' },
+      eventDetailsParams: { occurrenceId: '00000000-0000-0000-0000-000000000000' },
       eventsRoute: 'EventDetails',
       root: 'main',
       tab: 'EventsTab',
@@ -89,6 +87,7 @@ function parseCaptureTargetFromHash(): CaptureNavigationTarget | undefined {
       eventRoomParams: {
         durationMinutes: 10,
         eventTitle: 'Global Harmonic Prayer',
+        occurrenceId: '00000000-0000-0000-0000-000000000000',
         scheduledStartAt: captureEventStartAt,
         scriptText:
           'Breathe together in one steady rhythm. Let gratitude rise and settle through the room. Hold one intention for healing and peace.',
@@ -99,8 +98,8 @@ function parseCaptureTargetFromHash(): CaptureNavigationTarget | undefined {
     },
     eventshome: { root: 'main', tab: 'EventsTab', eventsRoute: 'EventsHome' },
     missingenv: { root: 'missingEnv' },
-    prayercircle: { root: 'main', tab: 'CommunityTab', communityRoute: 'PrayerCircle' },
     profile: { root: 'main', tab: 'ProfileTab', profileRoute: 'ProfileHome' },
+    profilesettings: { root: 'main', tab: 'ProfileTab', profileRoute: 'ProfileSettings' },
     solohost: {
       root: 'main',
       soloParams: { captureSharedRole: 'host' },

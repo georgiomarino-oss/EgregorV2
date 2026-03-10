@@ -4,6 +4,7 @@ import { Animated, Easing, Pressable, StyleSheet, View } from 'react-native';
 import { PremiumHeroPanel } from '../../../components/CinematicPrimitives';
 import { LiveLogo } from '../../../components/LiveLogo';
 import { Typography } from '../../../components/Typography';
+import { resolveCinematicArt } from '../../../lib/art/cinematicArt';
 import {
   interaction,
   motion,
@@ -94,6 +95,7 @@ export function SoloHero({
   return (
     <Animated.View style={settleStyle}>
       <PremiumHeroPanel
+        artSource={resolveCinematicArt('solo.hero.home')}
         fallbackIcon="book-open-page-variant-outline"
         fallbackLabel="Solo aura"
         section="solo"

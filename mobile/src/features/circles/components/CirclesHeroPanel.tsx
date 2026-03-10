@@ -6,6 +6,7 @@ import { PremiumHeroPanel } from '../../../components/CinematicPrimitives';
 import { LiveLogo } from '../../../components/LiveLogo';
 import { StatusChip } from '../../../components/StatusChip';
 import { Typography } from '../../../components/Typography';
+import { resolveCinematicArt } from '../../../lib/art/cinematicArt';
 import { communitySurface, radii, sectionVisualThemes, spacing } from '../../../theme/tokens';
 
 interface CirclesHeroPanelProps {
@@ -17,6 +18,7 @@ interface CirclesHeroPanelProps {
 export function CirclesHeroPanel({ myCount, pendingCount, sharedCount }: CirclesHeroPanelProps) {
   return (
     <PremiumHeroPanel
+      artSource={resolveCinematicArt('circles.hero.home')}
       fallbackIcon="account-group-outline"
       fallbackLabel="Circle constellation"
       section="circles"

@@ -1,0 +1,32 @@
+﻿{
+  "sourceFiles": [
+    "mobile/docs/redesign/figma-handoff/staging/data/state-library.json",
+    "mobile/docs/redesign/figma-handoff/staging/data/copy-state-library.json"
+  ],
+  "bindings": [
+    {
+      "frame": "States/SharedBase",
+      "source": "state-library.sharedStates.base"
+    },
+    {
+      "frame": "States/InviteLifecycle",
+      "source": "state-library.sharedStates.inviteActions + copy-state.inviteStatuses"
+    },
+    {
+      "frame": "States/ReminderPermission",
+      "source": "state-library.sharedStates.reminder + copy-state.notificationPermissionStates + copy-state.reminderStates"
+    },
+    {
+      "frame": "States/CirclesSegments",
+      "source": "state-library.circles"
+    },
+    {
+      "frame": "States/LiveOccurrence",
+      "source": "state-library.live + copy-state.liveStatusLabels"
+    },
+    {
+      "frame": "States/ProfileSettings",
+      "source": "state-library.profile + copy-state.deletionStatuses + copy-state.privacySummaryExamples + copy-state.safetyActionFeedback"
+    }
+  ]
+}

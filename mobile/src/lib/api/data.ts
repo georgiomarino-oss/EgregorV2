@@ -1,15 +1,6 @@
 import { EVENT_LIBRARY_CATALOG, type EventLibrarySeedItem } from '../catalog/eventLibraryCatalog';
 import { supabase } from '../supabase';
 import {
-  addEventsCircleMemberLegacy,
-  addPrayerCircleMemberLegacy,
-  fetchEventsCircleMembersLegacy,
-  fetchPrayerCircleMembersLegacy,
-  removeEventsCircleMemberLegacy,
-  removePrayerCircleMemberLegacy,
-  searchUsersForPrayerCircleLegacy,
-} from './circles';
-import {
   listNotificationPreferences,
   registerDevicePushTarget,
   saveOccurrenceReminderPreference,
@@ -27,6 +18,7 @@ export type {
   CircleMemberRecord,
   CircleMembershipRole,
   CircleMembershipStatus,
+  InviteContextMember,
   InvitableUser,
 } from './circles';
 export {
@@ -40,6 +32,7 @@ export {
   removeCircleMember,
   revokeCircleInvite,
   searchInvitableUsers,
+  listInviteContextMembers,
   updateCircleMemberRole,
 } from './circles';
 export {
@@ -499,18 +492,6 @@ export interface ActiveEventUserPresence {
   userId: string;
 }
 
-export interface PrayerCircleMember {
-  displayName: string;
-  isOwner: boolean;
-  joinedAt: string;
-  userId: string;
-}
-
-export interface PrayerCircleUserSuggestion {
-  displayName: string;
-  userId: string;
-}
-
 export interface UserJournalEntry {
   content: string;
   createdAt: string;
@@ -528,7 +509,6 @@ const EVENT_LIBRARY_ITEM_CACHE_TTL_MS = 5 * 60_000;
 const NEWS_DRIVEN_EVENTS_CACHE_TTL_MS = 60_000;
 const ACTIVE_EVENT_USERS_CACHE_TTL_MS = 15_000;
 const EVENT_NOTIFICATION_STATE_CACHE_TTL_MS = 30_000;
-const CIRCLE_MEMBERS_CACHE_TTL_MS = 30_000;
 const USER_JOURNAL_ENTRIES_CACHE_TTL_MS = 45_000;
 const USER_PREFERENCES_CACHE_TTL_MS = 2 * 60_000;
 const PROFILE_SUMMARY_CACHE_TTL_MS = 45_000;
@@ -566,10 +546,6 @@ const activeEventUsersCache = new Map<string, TimedCacheEntry<ActiveEventUserPre
 const activeEventUsersRequestCache = new Map<string, Promise<ActiveEventUserPresence[]>>();
 const eventNotificationStateCache = new Map<string, TimedCacheEntry<EventNotificationState>>();
 const eventNotificationStateRequestCache = new Map<string, Promise<EventNotificationState>>();
-const prayerCircleMembersCache = new Map<string, TimedCacheEntry<PrayerCircleMember[]>>();
-const prayerCircleMembersRequestCache = new Map<string, Promise<PrayerCircleMember[]>>();
-const eventsCircleMembersCache = new Map<string, TimedCacheEntry<PrayerCircleMember[]>>();
-const eventsCircleMembersRequestCache = new Map<string, Promise<PrayerCircleMember[]>>();
 const userJournalEntriesCache = new Map<string, TimedCacheEntry<UserJournalEntry[]>>();
 const userJournalEntriesRequestCache = new Map<string, Promise<UserJournalEntry[]>>();
 const userPreferencesCache = new Map<string, TimedCacheEntry<UserPreferences>>();
@@ -758,20 +734,6 @@ export function getCachedEventNotificationState(userId: string) {
       normalizedUserId,
       EVENT_NOTIFICATION_STATE_CACHE_TTL_MS,
     )?.value ?? null
-  );
-}
-
-export function getCachedPrayerCircleMembers() {
-  return (
-    readFreshTimedCache(prayerCircleMembersCache, 'default', CIRCLE_MEMBERS_CACHE_TTL_MS)?.value ??
-    null
-  );
-}
-
-export function getCachedEventsCircleMembers() {
-  return (
-    readFreshTimedCache(eventsCircleMembersCache, 'default', CIRCLE_MEMBERS_CACHE_TTL_MS)?.value ??
-    null
   );
 }
 
@@ -2271,57 +2233,6 @@ export async function setEventNotificationSubscription(input: {
   eventNotificationStateCache.delete(normalizedUserId);
 }
 
-export async function fetchPrayerCircleMembers(): Promise<PrayerCircleMember[]> {
-  return loadWithTimedCache(
-    prayerCircleMembersCache,
-    prayerCircleMembersRequestCache,
-    'default',
-    CIRCLE_MEMBERS_CACHE_TTL_MS,
-    async () => fetchPrayerCircleMembersLegacy(),
-  );
-}
-
-export async function fetchEventsCircleMembers(): Promise<PrayerCircleMember[]> {
-  return loadWithTimedCache(
-    eventsCircleMembersCache,
-    eventsCircleMembersRequestCache,
-    'default',
-    CIRCLE_MEMBERS_CACHE_TTL_MS,
-    async () => fetchEventsCircleMembersLegacy(),
-  );
-}
-
-export async function searchUsersForPrayerCircle(
-  query: string,
-  limit = 20,
-): Promise<PrayerCircleUserSuggestion[]> {
-  return searchUsersForPrayerCircleLegacy(query, limit);
-}
-
-export async function addPrayerCircleMember(targetUserId: string) {
-  await addPrayerCircleMemberLegacy(targetUserId);
-
-  prayerCircleMembersCache.delete('default');
-}
-
-export async function addEventsCircleMember(targetUserId: string) {
-  await addEventsCircleMemberLegacy(targetUserId);
-
-  eventsCircleMembersCache.delete('default');
-}
-
-export async function removePrayerCircleMember(targetUserId: string) {
-  await removePrayerCircleMemberLegacy(targetUserId);
-
-  prayerCircleMembersCache.delete('default');
-}
-
-export async function removeEventsCircleMember(targetUserId: string) {
-  await removeEventsCircleMemberLegacy(targetUserId);
-
-  eventsCircleMembersCache.delete('default');
-}
-
 export async function fetchUserJournalEntries(userId: string): Promise<UserJournalEntry[]> {
   const normalizedUserId = userId.trim();
   if (!normalizedUserId) {
@@ -2972,8 +2883,6 @@ export function prefetchCoreAppData(userId: string) {
       fetchProfileSummary(normalizedUserId),
       fetchUserJournalEntries(normalizedUserId),
       fetchSoloStats(normalizedUserId),
-      fetchPrayerCircleMembers(),
-      fetchEventsCircleMembers(),
     ]);
   })().finally(() => {
     coreAppDataPrefetchRequests.delete(normalizedUserId);

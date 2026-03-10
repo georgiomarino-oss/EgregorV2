@@ -159,6 +159,7 @@ export function toFeatureCollection(points: GlobePoint[]): MapFeatureCollection 
       },
       properties: {
         id: point.id,
+        ...(point.properties ?? {}),
       },
       type: 'Feature' as const,
     })),

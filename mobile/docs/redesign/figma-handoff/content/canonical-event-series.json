@@ -1,0 +1,170 @@
+[
+  {
+    "contentId": "daily-1111-intention-reset",
+    "stableKey": "daily-1111-intention-reset",
+    "title": "11:11 Intention Reset",
+    "subtitle": "Daily Rhythm",
+    "description": "Midday recentering and intention realignment.",
+    "categoryTheme": "Daily Rhythm",
+    "durationMinutes": 11,
+    "stateMetadata": "schedule_type=local_time_daily, visibility=global, access=open, metadata.phase=3a",
+    "whereItAppears": [
+      "EventsHome sections",
+      "Global Pulse inline/fullscreen",
+      "EventDetails",
+      "EventRoom"
+    ],
+    "associatedImageSlot": "live.card.flagship1111",
+    "artDirectionNote": "Signature alignment motifs, precise luminous timing marks, sacred symmetry.",
+    "treatment": "11:11",
+    "appCtaLabelByState": {
+      "live": "Join now",
+      "waiting_room": "Enter waiting room",
+      "upcoming": "Open waiting room",
+      "ended": "Ended"
+    },
+    "scheduleType": "local_time_daily",
+    "visibilityScope": "global",
+    "accessMode": "open"
+  },
+  {
+    "contentId": "daily-sunrise-gratitude",
+    "stableKey": "daily-sunrise-gratitude",
+    "title": "Sunrise Gratitude",
+    "subtitle": "Daily Rhythm",
+    "description": "Begin day grounded in gratitude.",
+    "categoryTheme": "Daily Rhythm",
+    "durationMinutes": 12,
+    "stateMetadata": "schedule_type=local_time_daily, visibility=global, access=open, metadata.phase=3a",
+    "whereItAppears": [
+      "EventsHome sections",
+      "Global Pulse inline/fullscreen",
+      "EventDetails",
+      "EventRoom"
+    ],
+    "associatedImageSlot": "live.card.default",
+    "artDirectionNote": "Dawn-oriented collective ritual with warm horizon transitions.",
+    "treatment": "collective live moment",
+    "appCtaLabelByState": {
+      "live": "Join now",
+      "waiting_room": "Enter waiting room",
+      "upcoming": "Open waiting room",
+      "ended": "Ended"
+    },
+    "scheduleType": "local_time_daily",
+    "visibilityScope": "global",
+    "accessMode": "open"
+  },
+  {
+    "contentId": "daily-evening-release",
+    "stableKey": "daily-evening-release",
+    "title": "Evening Release",
+    "subtitle": "Daily Rhythm",
+    "description": "Let go, forgive, and close the day.",
+    "categoryTheme": "Daily Rhythm",
+    "durationMinutes": 15,
+    "stateMetadata": "schedule_type=local_time_daily, visibility=global, access=open, metadata.phase=3a",
+    "whereItAppears": [
+      "EventsHome sections",
+      "Global Pulse inline/fullscreen",
+      "EventDetails",
+      "EventRoom"
+    ],
+    "associatedImageSlot": "live.card.default",
+    "artDirectionNote": "Nightfall release palette with soft deceleration cues.",
+    "treatment": "collective live moment",
+    "appCtaLabelByState": {
+      "live": "Join now",
+      "waiting_room": "Enter waiting room",
+      "upcoming": "Open waiting room",
+      "ended": "Ended"
+    },
+    "scheduleType": "local_time_daily",
+    "visibilityScope": "global",
+    "accessMode": "open"
+  },
+  {
+    "contentId": "global-heartbeat",
+    "stableKey": "global-heartbeat",
+    "title": "Global Heartbeat",
+    "subtitle": "Global Moment",
+    "description": "Shared synchronized prayer across regions every six hours.",
+    "categoryTheme": "Global Moment",
+    "durationMinutes": 15,
+    "stateMetadata": "schedule_type=utc_interval, visibility=global, access=open, metadata.utc_slots=00:00/06:00/12:00/18:00",
+    "whereItAppears": [
+      "EventsHome sections",
+      "Global Pulse inline/fullscreen",
+      "EventDetails",
+      "EventRoom"
+    ],
+    "associatedImageSlot": "live.card.flagship1111",
+    "artDirectionNote": "Planetary/global cues, radiant rings, high-signal accents, collective magnitude.",
+    "treatment": "flagship",
+    "appCtaLabelByState": {
+      "live": "Join now",
+      "waiting_room": "Enter waiting room",
+      "upcoming": "Open waiting room",
+      "ended": "Ended"
+    },
+    "scheduleType": "utc_interval",
+    "visibilityScope": "global",
+    "accessMode": "open"
+  },
+  {
+    "contentId": "admin-curated-special-moment",
+    "stableKey": "admin-curated-special-moment",
+    "title": "Special Collective Moment",
+    "subtitle": "Admin Curated",
+    "description": "Admin-curated one-off event series for special collective moments.",
+    "categoryTheme": "Special Moment",
+    "durationMinutes": 20,
+    "stateMetadata": "schedule_type=admin_curated, visibility=global, access=open, metadata.curated=true",
+    "whereItAppears": [
+      "EventsHome sections",
+      "Global Pulse inline/fullscreen",
+      "EventDetails",
+      "EventRoom"
+    ],
+    "associatedImageSlot": "live.card.flagship1111",
+    "artDirectionNote": "Flagship treatment with elevated contrast and ceremonial framing.",
+    "treatment": "flagship",
+    "appCtaLabelByState": {
+      "live": "Join now",
+      "waiting_room": "Enter waiting room",
+      "upcoming": "Open waiting room",
+      "ended": "Ended"
+    },
+    "scheduleType": "admin_curated",
+    "visibilityScope": "global",
+    "accessMode": "open"
+  },
+  {
+    "contentId": "emergency-global-prayer",
+    "stableKey": "emergency-global-prayer",
+    "title": "Emergency Global Prayer",
+    "subtitle": "Alert",
+    "description": "Rapid coordinated response to collective crises.",
+    "categoryTheme": "Alert",
+    "durationMinutes": 20,
+    "stateMetadata": "schedule_type=manual_trigger, visibility=global, access=open, metadata.emergency=true",
+    "whereItAppears": [
+      "EventsHome sections",
+      "Global Pulse inline/fullscreen",
+      "EventDetails",
+      "EventRoom"
+    ],
+    "associatedImageSlot": "live.card.flagship1111",
+    "artDirectionNote": "High-urgency flagship framing with clear alert-state emphasis.",
+    "treatment": "flagship",
+    "appCtaLabelByState": {
+      "live": "Join now",
+      "waiting_room": "Enter waiting room",
+      "upcoming": "Open waiting room",
+      "ended": "Ended"
+    },
+    "scheduleType": "manual_trigger",
+    "visibilityScope": "global",
+    "accessMode": "open"
+  }
+]

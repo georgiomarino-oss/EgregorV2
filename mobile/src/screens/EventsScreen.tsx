@@ -10,12 +10,14 @@ import { AlertBanner } from '../components/AlertBanner';
 import { GhostButton } from '../components/AppButtons';
 import { Screen } from '../components/Screen';
 import { ToastCard } from '../components/ToastCard';
+import { EmbeddedGlobeCard } from '../features/events/components/EmbeddedGlobeCard';
 import { OccurrenceList } from '../features/events/components/OccurrenceList';
 import { EventsHeader } from '../features/events/components/EventsHeader';
 import { useEventNotifications } from '../features/events/hooks/useEventNotifications';
 import { useEventsData } from '../features/events/hooks/useEventsData';
 import { useOccurrenceFeed } from '../features/events/hooks/useOccurrenceFeed';
 import type { ScheduledEventOccurrence } from '../features/events/types';
+import type { AppEvent } from '../lib/api/data';
 import { getDeviceTimeZoneLabel } from '../lib/dateTime';
 import { spacing } from '../theme/tokens';
 
@@ -52,29 +54,32 @@ export function EventsScreen() {
     const uniqueUsers = new Set(activePresence.map((entry) => entry.userId));
     return uniqueUsers.size;
   }, [activePresence]);
+  const legacyGlobeEvents = useMemo<AppEvent[]>(() => [], []);
 
   const uiError = operationError ?? occurrencesError ?? activePresenceError;
 
-  const onOpenOccurrence = useCallback(
+  const onOpenOccurrenceRoom = useCallback(
     (occurrence: ScheduledEventOccurrence) => {
-      if (occurrence.status === 'live' || occurrence.status === 'waiting_room') {
-        const roomParams: EventsStackParamList['EventRoom'] = {
-          allowAudioGeneration: false,
-          durationMinutes: occurrence.durationMinutes,
-          eventTitle: occurrence.title,
-          occurrenceKey: occurrence.occurrenceKey,
-          scheduledStartAt: occurrence.startsAt,
-          scriptText: occurrence.script,
-          ...(occurrence.occurrenceId ? { occurrenceId: occurrence.occurrenceId } : {}),
-          ...(occurrence.roomId ? { roomId: occurrence.roomId } : {}),
-        };
+      const roomParams: EventsStackParamList['EventRoom'] = {
+        allowAudioGeneration: false,
+        durationMinutes: occurrence.durationMinutes,
+        eventTitle: occurrence.title,
+        occurrenceKey: occurrence.occurrenceKey,
+        scheduledStartAt: occurrence.startsAt,
+        scriptText: occurrence.script,
+        ...(occurrence.occurrenceId ? { occurrenceId: occurrence.occurrenceId } : {}),
+        ...(occurrence.roomId ? { roomId: occurrence.roomId } : {}),
+      };
 
-        navigation.navigate('EventRoom', {
-          ...roomParams,
-        });
-        return;
-      }
+      navigation.navigate('EventRoom', {
+        ...roomParams,
+      });
+    },
+    [navigation],
+  );
 
+  const onOpenOccurrenceDetails = useCallback(
+    (occurrence: ScheduledEventOccurrence) => {
       if (!occurrence.occurrenceId && !occurrence.roomId) {
         setOperationError('This live item has no valid occurrence target.');
         return;
@@ -92,6 +97,18 @@ export function EventsScreen() {
     [navigation],
   );
 
+  const onOpenOccurrence = useCallback(
+    (occurrence: ScheduledEventOccurrence) => {
+      if (occurrence.status === 'live' || occurrence.status === 'waiting_room') {
+        onOpenOccurrenceRoom(occurrence);
+        return;
+      }
+
+      onOpenOccurrenceDetails(occurrence);
+    },
+    [onOpenOccurrenceDetails, onOpenOccurrenceRoom],
+  );
+
   return (
     <Screen
       ambientSource={ambientAnimation}
@@ -103,6 +120,25 @@ export function EventsScreen() {
         liveCount={liveNowCount}
         participantCount={activeParticipantCount}
         upcomingCount={next24HoursCount}
+      />
+
+      <EmbeddedGlobeCard
+        activePresence={activePresence}
+        allScheduledEvents={allScheduledEvents}
+        error={null}
+        events={legacyGlobeEvents}
+        loading={loading}
+        newsSyncError={null}
+        nowTick={nowTick}
+        onOpenEventDetails={() => {
+          setOperationError('Legacy event targets are no longer supported in this flow.');
+        }}
+        onOpenEventRoom={() => {
+          setOperationError('Legacy event targets are no longer supported in this flow.');
+        }}
+        onOpenOccurrence={onOpenOccurrence}
+        onOpenOccurrenceDetails={onOpenOccurrenceDetails}
+        visibleEvents={legacyGlobeEvents}
       />
 
       {uiError ? (

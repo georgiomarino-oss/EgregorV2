@@ -2,6 +2,7 @@ import { useEffect, useMemo } from 'react';
 import {
   Animated,
   Easing,
+  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -15,6 +16,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 
 import { SectionHeader } from '../../../components/SectionHeader';
 import { Typography } from '../../../components/Typography';
+import { resolveCinematicArt } from '../../../lib/art/cinematicArt';
 import { interaction, motion, profileSurface, radii, spacing } from '../../../theme/tokens';
 import { useReducedMotion } from '../../rooms/hooks/useReducedMotion';
 
@@ -191,6 +193,12 @@ export function JournalPanel({
 
   return (
     <Animated.View style={[styles.shell, settleStyle]}>
+      <Image
+        accessibilityIgnoresInvertColors
+        resizeMode="cover"
+        source={resolveCinematicArt('profile.card.journal')}
+        style={styles.companionArt}
+      />
       <LinearGradient
         colors={[profileSurface.journal.shellGradientFrom, profileSurface.journal.shellGradientTo]}
         end={{ x: 1, y: 1 }}
@@ -429,6 +437,10 @@ export function JournalPanel({
 }
 
 const styles = StyleSheet.create({
+  companionArt: {
+    ...StyleSheet.absoluteFillObject,
+    opacity: 0.2,
+  },
   entryMetaRow: {
     alignItems: 'center',
     flexDirection: 'row',

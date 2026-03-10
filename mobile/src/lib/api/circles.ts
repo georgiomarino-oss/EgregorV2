@@ -205,15 +205,10 @@ export interface InvitableUser {
   userId: string;
 }
 
-export interface LegacyPrayerCircleMember {
+export interface InviteContextMember {
   displayName: string;
   isOwner: boolean;
   joinedAt: string;
-  userId: string;
-}
-
-export interface LegacyPrayerCircleUserSuggestion {
-  displayName: string;
   userId: string;
 }
 
@@ -566,6 +561,52 @@ export async function listCircleMembers(circleId: string): Promise<CircleMemberR
   }));
 }
 
+export async function listInviteContextMembers(input?: {
+  circleLimit?: number;
+  memberLimitPerCircle?: number;
+}): Promise<InviteContextMember[]> {
+  const circleLimit = normalizeLimit(input?.circleLimit, 2);
+  const memberLimitPerCircle = normalizeLimit(input?.memberLimitPerCircle, 12);
+  const circles = await listMyCircles();
+  const selectedCircles = circles
+    .filter((circle) => circle.membershipStatus === 'active')
+    .sort((left, right) => {
+      if (left.isOwner !== right.isOwner) {
+        return left.isOwner ? -1 : 1;
+      }
+      return right.joinedAt.localeCompare(left.joinedAt);
+    })
+    .slice(0, circleLimit);
+
+  const membersByUserId = new Map<string, InviteContextMember>();
+  await Promise.all(
+    selectedCircles.map(async (circle) => {
+      const members = await listCircleMembers(circle.circleId);
+      for (const member of members.slice(0, memberLimitPerCircle)) {
+        if (member.status !== 'active') {
+          continue;
+        }
+
+        if (!membersByUserId.has(member.userId)) {
+          membersByUserId.set(member.userId, {
+            displayName: member.displayName,
+            isOwner: member.isOwner,
+            joinedAt: member.joinedAt,
+            userId: member.userId,
+          });
+        }
+      }
+    }),
+  );
+
+  return Array.from(membersByUserId.values()).sort((left, right) => {
+    if (left.isOwner !== right.isOwner) {
+      return left.isOwner ? -1 : 1;
+    }
+    return left.displayName.localeCompare(right.displayName);
+  });
+}
+
 export async function updateCircleMemberRole(input: {
   circleId: string;
   role: CircleMembershipRole;
@@ -602,95 +643,5 @@ export async function removeCircleMember(input: { circleId: string; targetUserId
 
   if (error) {
     throw new Error(toSupabaseErrorMessage(error, 'Failed to remove circle member.'));
-  }
-}
-
-// Legacy compatibility adapters for existing Prayer/Events Circle screens.
-export async function fetchPrayerCircleMembersLegacy(): Promise<LegacyPrayerCircleMember[]> {
-  const { data, error } = await supabase.rpc('get_prayer_circle_members');
-
-  if (error) {
-    throw new Error(toSupabaseErrorMessage(error, 'Failed to load prayer circle members.'));
-  }
-
-  return ((data ?? []) as CircleMemberRow[]).map((row) => ({
-    displayName: row.display_name?.trim() || 'Member',
-    isOwner: Boolean(row.is_owner),
-    joinedAt: row.joined_at,
-    userId: row.user_id,
-  }));
-}
-
-export async function fetchEventsCircleMembersLegacy(): Promise<LegacyPrayerCircleMember[]> {
-  const { data, error } = await supabase.rpc('get_events_circle_members');
-
-  if (error) {
-    throw new Error(toSupabaseErrorMessage(error, 'Failed to load events circle members.'));
-  }
-
-  return ((data ?? []) as CircleMemberRow[]).map((row) => ({
-    displayName: row.display_name?.trim() || 'Member',
-    isOwner: Boolean(row.is_owner),
-    joinedAt: row.joined_at,
-    userId: row.user_id,
-  }));
-}
-
-export async function searchUsersForPrayerCircleLegacy(
-  query: string,
-  limit = 20,
-): Promise<LegacyPrayerCircleUserSuggestion[]> {
-  const { data, error } = await supabase.rpc('search_app_users_for_circle', {
-    p_limit: normalizeLimit(limit, 20),
-    p_query: query.trim() || null,
-  });
-
-  if (error) {
-    throw new Error(toSupabaseErrorMessage(error, 'Failed to search users.'));
-  }
-
-  return ((data ?? []) as InvitableUserRow[]).map((row) => ({
-    displayName: row.display_name?.trim() || 'Member',
-    userId: row.user_id,
-  }));
-}
-
-export async function addPrayerCircleMemberLegacy(targetUserId: string) {
-  const { error } = await supabase.rpc('add_user_to_prayer_circle', {
-    p_target_user_id: targetUserId,
-  });
-
-  if (error) {
-    throw new Error(toSupabaseErrorMessage(error, 'Failed to add user to prayer circle.'));
-  }
-}
-
-export async function addEventsCircleMemberLegacy(targetUserId: string) {
-  const { error } = await supabase.rpc('add_user_to_events_circle', {
-    p_target_user_id: targetUserId,
-  });
-
-  if (error) {
-    throw new Error(toSupabaseErrorMessage(error, 'Failed to add user to events circle.'));
-  }
-}
-
-export async function removePrayerCircleMemberLegacy(targetUserId: string) {
-  const { error } = await supabase.rpc('remove_user_from_prayer_circle', {
-    p_target_user_id: targetUserId,
-  });
-
-  if (error) {
-    throw new Error(toSupabaseErrorMessage(error, 'Failed to remove user from prayer circle.'));
-  }
-}
-
-export async function removeEventsCircleMemberLegacy(targetUserId: string) {
-  const { error } = await supabase.rpc('remove_user_from_events_circle', {
-    p_target_user_id: targetUserId,
-  });
-
-  if (error) {
-    throw new Error(toSupabaseErrorMessage(error, 'Failed to remove user from events circle.'));
   }
 }

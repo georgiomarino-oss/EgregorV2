@@ -1,0 +1,508 @@
+[
+  {
+    "path": "mobile/assets/generated/circles/circle-governance-hero.png",
+    "slot": "circles.card.default",
+    "whereUsed": [
+      "CommunityHome circle cards",
+      "Circle summary rows"
+    ],
+    "primaryOrFallback": "primary",
+    "replaceableArtOrStructuralUI": "replaceable_art",
+    "supportsContentTypes": [
+      "governance/belonging"
+    ],
+    "prompt": "Circle governance premium artwork, constellation patterns and gentle aurora ribbons, teal and glacier palette, cinematic spiritual clarity, no text",
+    "generatedSection": "circles",
+    "generatedUsage": [
+      "Circle details hero",
+      "Circle invite composer hero"
+    ],
+    "generatedSize": "1536x1024",
+    "generatedAt": "2026-03-09T10:43:54.705Z",
+    "sha256": "8b60b13e832663fe2a2445b13047eb85ce7e3a7522bcad1a5552f857963ee743"
+  },
+  {
+    "path": "mobile/assets/generated/circles/circle-governance-hero.png",
+    "slot": "circles.hero.governance",
+    "whereUsed": [
+      "CircleDetails hero",
+      "CircleInviteComposer hero"
+    ],
+    "primaryOrFallback": "primary",
+    "replaceableArtOrStructuralUI": "replaceable_art",
+    "supportsContentTypes": [
+      "governance/belonging"
+    ],
+    "prompt": "Circle governance premium artwork, constellation patterns and gentle aurora ribbons, teal and glacier palette, cinematic spiritual clarity, no text",
+    "generatedSection": "circles",
+    "generatedUsage": [
+      "Circle details hero",
+      "Circle invite composer hero"
+    ],
+    "generatedSize": "1536x1024",
+    "generatedAt": "2026-03-09T10:43:54.705Z",
+    "sha256": "8b60b13e832663fe2a2445b13047eb85ce7e3a7522bcad1a5552f857963ee743"
+  },
+  {
+    "path": "mobile/assets/generated/circles/circles-home-hero.png",
+    "slot": "circles.hero.home",
+    "whereUsed": [
+      "CommunityHome hero"
+    ],
+    "primaryOrFallback": "primary",
+    "replaceableArtOrStructuralUI": "replaceable_art",
+    "supportsContentTypes": [
+      "governance/belonging"
+    ],
+    "prompt": "Community constellation hero, deep teal and cyan gradients, luminous trust network nodes, welcoming premium spiritual mood, no text",
+    "generatedSection": "circles",
+    "generatedUsage": [
+      "Circles home hero"
+    ],
+    "generatedSize": "1536x1024",
+    "generatedAt": "2026-03-09T10:43:54.705Z",
+    "sha256": "413572c10d5ea85526adad8a4d2c7ea23947868602d00b09f3034d1b6b4d299e"
+  },
+  {
+    "path": "mobile/assets/generated/circles/invite-decision-hero.png",
+    "slot": "circles.hero.inviteDecision",
+    "whereUsed": [
+      "InviteDecision hero"
+    ],
+    "primaryOrFallback": "primary",
+    "replaceableArtOrStructuralUI": "replaceable_art",
+    "supportsContentTypes": [
+      "governance/belonging"
+    ],
+    "prompt": "Invite decision hero art, sacred threshold motif, luminous teal gateway, trustworthy premium cinematic style, no text",
+    "generatedSection": "circles",
+    "generatedUsage": [
+      "Invite decision hero"
+    ],
+    "generatedSize": "1536x1024",
+    "generatedAt": "2026-03-09T10:43:54.705Z",
+    "sha256": "285c966dfcc0c5512c2f1ab4f0c35f47bbcd26aa14b97cf8a0f598cf1781dbbf"
+  },
+  {
+    "path": "mobile/assets/generated/cards/live-occurrence-card-neutral.png",
+    "slot": "live.card.default",
+    "whereUsed": [
+      "OccurrenceCard default",
+      "EventDetails action card"
+    ],
+    "primaryOrFallback": "primary",
+    "replaceableArtOrStructuralUI": "replaceable_art",
+    "supportsContentTypes": [
+      "collective live moment"
+    ],
+    "prompt": "Neutral premium live occurrence card art, deep blue cinematic gradient and subtle global pulse motifs, no text",
+    "generatedSection": "cards",
+    "generatedUsage": [
+      "Fallback live occurrence media"
+    ],
+    "generatedSize": "1536x1024",
+    "generatedAt": "2026-03-09T10:43:54.705Z",
+    "sha256": "ce8f9f746ac05ee36a166d9ea4a7db33142fdda18de0df70516ff3e69a05004e"
+  },
+  {
+    "path": "mobile/assets/generated/live/live-flagship-1111-card.png",
+    "slot": "live.card.flagship1111",
+    "whereUsed": [
+      "OccurrenceCard 11:11/flagship emphasis"
+    ],
+    "primaryOrFallback": "primary",
+    "replaceableArtOrStructuralUI": "replaceable_art",
+    "supportsContentTypes": [
+      "11:11",
+      "flagship"
+    ],
+    "prompt": "Flagship 11:11 ritual artwork, celestial alignment lights, blue aurora with amber accents, refined spiritual cinematic style, no text",
+    "generatedSection": "live",
+    "generatedUsage": [
+      "11:11 signature cards"
+    ],
+    "generatedSize": "1536x1024",
+    "generatedAt": "2026-03-09T10:43:54.705Z",
+    "sha256": "b51c04e8ed4f1fe44cb923316e4962e625cb6edc8e1362a6a7b1d7d18447db39"
+  },
+  {
+    "path": "mobile/assets/generated/live/live-room-detail-hero.png",
+    "slot": "live.hero.details",
+    "whereUsed": [
+      "EventDetails hero"
+    ],
+    "primaryOrFallback": "primary",
+    "replaceableArtOrStructuralUI": "replaceable_art",
+    "supportsContentTypes": [
+      "collective live moment",
+      "11:11",
+      "flagship"
+    ],
+    "prompt": "Live room detail hero, immersive celestial depth, volumetric blue beams, subtle warm edge light, premium and clean, no text",
+    "generatedSection": "live",
+    "generatedUsage": [
+      "Event details hero"
+    ],
+    "generatedSize": "1536x1024",
+    "generatedAt": "2026-03-09T10:43:54.705Z",
+    "sha256": "e56fe1a6b7cfcf776d4d8d996e8e9b0735dc6319392d3ef6130b6cd895ca9409"
+  },
+  {
+    "path": "mobile/assets/generated/live/live-feed-global-pulse-hero.png",
+    "slot": "live.hero.feed",
+    "whereUsed": [
+      "EventsHome hero"
+    ],
+    "primaryOrFallback": "primary",
+    "replaceableArtOrStructuralUI": "replaceable_art",
+    "supportsContentTypes": [
+      "collective live moment",
+      "11:11",
+      "flagship"
+    ],
+    "prompt": "Global consciousness hero art, planetary horizon glow, deep navy and sky blue gradients, synchronized energy arcs, premium cinematic atmosphere, no text",
+    "generatedSection": "live",
+    "generatedUsage": [
+      "Live feed hero"
+    ],
+    "generatedSize": "1536x1024",
+    "generatedAt": "2026-03-09T10:43:54.705Z",
+    "sha256": "a9e5d49e8d048dac2ffb2ad499439ebba7a08e616206f11798ec8c842b237a7c"
+  },
+  {
+    "path": "mobile/assets/generated/profile/profile-journal-companion-art.png",
+    "slot": "profile.card.journal",
+    "whereUsed": [
+      "JournalPanel companion art"
+    ],
+    "primaryOrFallback": "primary",
+    "replaceableArtOrStructuralUI": "replaceable_art",
+    "supportsContentTypes": [
+      "trust/progress"
+    ],
+    "prompt": "Journal companion artwork, contemplative moonlit paper texture with soft sacred light, elegant and premium, no text",
+    "generatedSection": "profile",
+    "generatedUsage": [
+      "Journal companion card"
+    ],
+    "generatedSize": "1536x1024",
+    "generatedAt": "2026-03-09T10:43:54.705Z",
+    "sha256": "e8e4a176e2488b4cd22a4df7dbfee22abccf575e136de3a28e834ca7ebdac438"
+  },
+  {
+    "path": "mobile/assets/generated/profile/profile-progress-ledger-hero.png",
+    "slot": "profile.hero.ledger",
+    "whereUsed": [
+      "Profile settings summary",
+      "Account sanctuary"
+    ],
+    "primaryOrFallback": "primary",
+    "replaceableArtOrStructuralUI": "replaceable_art",
+    "supportsContentTypes": [
+      "trust/progress",
+      "support/account/etc."
+    ],
+    "prompt": "Progress ledger premium artwork, elegant sacred geometry over reflective slate gradients, calm and trustworthy, no text",
+    "generatedSection": "profile",
+    "generatedUsage": [
+      "Profile progress ledger surfaces"
+    ],
+    "generatedSize": "1536x1024",
+    "generatedAt": "2026-03-09T10:43:54.705Z",
+    "sha256": "bbb98cd161eba9dde14eb4083fdd61ac1194a31264e78fc27be026f5993d1ff1"
+  },
+  {
+    "path": "mobile/assets/generated/profile/profile-safety-privacy-settings-hero.png",
+    "slot": "profile.hero.settings",
+    "whereUsed": [
+      "Settings sanctuary hero",
+      "Account deletion panel"
+    ],
+    "primaryOrFallback": "primary",
+    "replaceableArtOrStructuralUI": "replaceable_art",
+    "supportsContentTypes": [
+      "support/account/etc."
+    ],
+    "prompt": "Safety and privacy settings hero, sanctuary steel-blue gradients with soft protective halo, premium cinematic style, no text",
+    "generatedSection": "profile",
+    "generatedUsage": [
+      "Settings hero",
+      "Safety/privacy/settings cards"
+    ],
+    "generatedSize": "1536x1024",
+    "generatedAt": "2026-03-09T10:43:54.705Z",
+    "sha256": "0e1492ca461e021dbf8bff3076dbfa0a15ea13d03fe4c4259cf980fe7c72e2dd"
+  },
+  {
+    "path": "mobile/assets/generated/profile/profile-trust-progress-hero.png",
+    "slot": "profile.hero.trust",
+    "whereUsed": [
+      "TrustHero"
+    ],
+    "primaryOrFallback": "primary",
+    "replaceableArtOrStructuralUI": "replaceable_art",
+    "supportsContentTypes": [
+      "trust/progress"
+    ],
+    "prompt": "Trust and progress hero, moonstone and steel-blue palette, calm archival glow, premium reflective spiritual atmosphere, no text",
+    "generatedSection": "profile",
+    "generatedUsage": [
+      "Profile trust hero"
+    ],
+    "generatedSize": "1536x1024",
+    "generatedAt": "2026-03-09T10:43:54.705Z",
+    "sha256": "9e99db44a0d915d278fa4a01569ba5841823602666576c94c55dcc56264439b4"
+  },
+  {
+    "path": "mobile/assets/generated/rooms/live-room-atmosphere-overlay.png",
+    "slot": "room.live.overlay",
+    "whereUsed": [
+      "EventRoom atmosphere backdrop"
+    ],
+    "primaryOrFallback": "primary",
+    "replaceableArtOrStructuralUI": "replaceable_art",
+    "supportsContentTypes": [
+      "collective live moment",
+      "11:11",
+      "flagship"
+    ],
+    "prompt": "Live event room atmosphere overlay, global blue pulse, volumetric light and subtle sacred geometry, premium cinematic quality, no text",
+    "generatedSection": "rooms",
+    "generatedUsage": [
+      "Event room atmosphere overlay"
+    ],
+    "generatedSize": "1536x1024",
+    "generatedAt": "2026-03-09T10:43:54.705Z",
+    "sha256": "2f9cf17fa554cf913724e5bcb0c243ebd973659956d625fc84fa38b627faceb3"
+  },
+  {
+    "path": "mobile/assets/generated/rooms/solo-room-atmosphere-overlay.png",
+    "slot": "room.solo.overlay",
+    "whereUsed": [
+      "SoloLive atmosphere backdrop"
+    ],
+    "primaryOrFallback": "primary",
+    "replaceableArtOrStructuralUI": "replaceable_art",
+    "supportsContentTypes": [
+      "personal ritual"
+    ],
+    "prompt": "Solo room atmosphere overlay, sacred violet aura field, soft mist and luminous particles, premium cinematic and calm, no text",
+    "generatedSection": "rooms",
+    "generatedUsage": [
+      "Solo live room backdrop overlay"
+    ],
+    "generatedSize": "1536x1024",
+    "generatedAt": "2026-03-09T10:43:54.705Z",
+    "sha256": "23d1f751a3c0a92330f44edd795018c83964d350c843eef0f7ffa0c4078ca634"
+  },
+  {
+    "path": "mobile/assets/generated/shared/backgrounds/shared-sacred-geometry-overlay.png",
+    "slot": "shared.overlay.geometry",
+    "whereUsed": [
+      "Shared subtle overlays"
+    ],
+    "primaryOrFallback": "primary",
+    "replaceableArtOrStructuralUI": "replaceable_art",
+    "supportsContentTypes": [
+      "cross-section atmosphere"
+    ],
+    "prompt": "Subtle sacred geometry overlay for premium mobile interfaces, translucent luminous lines on deep cinematic gradient, no text",
+    "generatedSection": "shared",
+    "generatedUsage": [
+      "Shared subtle overlays"
+    ],
+    "generatedSize": "1536x1024",
+    "generatedAt": "2026-03-09T10:43:54.705Z",
+    "sha256": "a56da0286cc06a2804b4465613d939919b6942ab447519d5e25f7fe2dead7094"
+  },
+  {
+    "path": "mobile/assets/generated/cards/solo-prayer-card-neutral.png",
+    "slot": "solo.card.default",
+    "whereUsed": [
+      "PrayerCard default"
+    ],
+    "primaryOrFallback": "primary",
+    "replaceableArtOrStructuralUI": "replaceable_art",
+    "supportsContentTypes": [
+      "personal ritual"
+    ],
+    "prompt": "Neutral premium solo prayer card art, violet sanctuary tones, soft light bloom, no text",
+    "generatedSection": "cards",
+    "generatedUsage": [
+      "Fallback prayer card media"
+    ],
+    "generatedSize": "1536x1024",
+    "generatedAt": "2026-03-09T10:43:54.705Z",
+    "sha256": "066e33440db51d3f6dc2bde0ead74f55b2710a2d24748031b65cb53759551d42"
+  },
+  {
+    "path": "mobile/assets/generated/solo/solo-category-manifestation-card.png",
+    "slot": "solo.card.manifestation",
+    "whereUsed": [
+      "PrayerCard manifestation categories"
+    ],
+    "primaryOrFallback": "primary",
+    "replaceableArtOrStructuralUI": "replaceable_art",
+    "supportsContentTypes": [
+      "personal ritual"
+    ],
+    "prompt": "Manifestation-themed premium spiritual art, deep violet dusk with rose-gold highlights, subtle sacred geometry, cinematic depth, no text",
+    "generatedSection": "solo",
+    "generatedUsage": [
+      "Solo category alternates"
+    ],
+    "generatedSize": "1536x1024",
+    "generatedAt": "2026-03-09T10:43:54.705Z",
+    "sha256": "b16b72905a6087dc88e4ec546793a0cdf1760c0230fac7dff1309f21624448c8"
+  },
+  {
+    "path": "mobile/assets/generated/solo/solo-home-hero.png",
+    "slot": "solo.hero.home",
+    "whereUsed": [
+      "SoloHome hero"
+    ],
+    "primaryOrFallback": "primary",
+    "replaceableArtOrStructuralUI": "replaceable_art",
+    "supportsContentTypes": [
+      "personal ritual"
+    ],
+    "prompt": "Cinematic celestial sanctuary, luminous indigo and plum atmosphere, soft sacred geometry and warm gold aura, premium spiritual editorial mood, no text, no logos, no people",
+    "generatedSection": "solo",
+    "generatedUsage": [
+      "Solo home hero",
+      "Solo setup hero"
+    ],
+    "generatedSize": "1536x1024",
+    "generatedAt": "2026-03-09T10:43:54.705Z",
+    "sha256": "c1ca9355a1cc1c83a577c37e1d74124e914552b157b39119101e60ee176e50e6"
+  },
+  {
+    "path": "mobile/assets/generated/solo/solo-home-hero.png",
+    "slot": "solo.hero.setup",
+    "whereUsed": [
+      "SoloSetup hero"
+    ],
+    "primaryOrFallback": "primary",
+    "replaceableArtOrStructuralUI": "replaceable_art",
+    "supportsContentTypes": [
+      "personal ritual"
+    ],
+    "prompt": "Cinematic celestial sanctuary, luminous indigo and plum atmosphere, soft sacred geometry and warm gold aura, premium spiritual editorial mood, no text, no logos, no people",
+    "generatedSection": "solo",
+    "generatedUsage": [
+      "Solo home hero",
+      "Solo setup hero"
+    ],
+    "generatedSize": "1536x1024",
+    "generatedAt": "2026-03-09T10:43:54.705Z",
+    "sha256": "c1ca9355a1cc1c83a577c37e1d74124e914552b157b39119101e60ee176e50e6"
+  },
+  {
+    "path": "mobile/assets/lottie/cosmic-ambient.json",
+    "slot": "ambient.lottie.cosmic",
+    "whereUsed": [
+      "Auth",
+      "MissingEnv",
+      "Solo",
+      "Circles",
+      "Live",
+      "Profile screens"
+    ],
+    "primaryOrFallback": "primary",
+    "replaceableArtOrStructuralUI": "structural_ui",
+    "supportsContentTypes": [
+      "cross-section ambient"
+    ],
+    "prompt": null,
+    "generatedSection": null,
+    "generatedUsage": [
+      "Ambient animation source"
+    ],
+    "generatedSize": null,
+    "generatedAt": null,
+    "sha256": null
+  },
+  {
+    "path": "mobile/assets/lottie/globe-fallback.json",
+    "slot": "live.globe.fallback",
+    "whereUsed": [
+      "EmbeddedGlobeCard fallback mode"
+    ],
+    "primaryOrFallback": "fallback",
+    "replaceableArtOrStructuralUI": "structural_ui",
+    "supportsContentTypes": [
+      "collective live moment",
+      "11:11",
+      "flagship"
+    ],
+    "prompt": null,
+    "generatedSection": null,
+    "generatedUsage": [
+      "Fallback globe animation"
+    ],
+    "generatedSize": null,
+    "generatedAt": null,
+    "sha256": null
+  },
+  {
+    "path": "mobile/assets/brand/app-icon-still-1024.png",
+    "slot": "brand.appIcon",
+    "whereUsed": [
+      "app.json icon",
+      "android adaptive icon"
+    ],
+    "primaryOrFallback": "primary",
+    "replaceableArtOrStructuralUI": "structural_ui",
+    "supportsContentTypes": [
+      "brand"
+    ],
+    "prompt": null,
+    "generatedSection": null,
+    "generatedUsage": [
+      "Product icon"
+    ],
+    "generatedSize": null,
+    "generatedAt": null,
+    "sha256": null
+  },
+  {
+    "path": "mobile/assets/brand/app-icon-still-48.png",
+    "slot": "brand.favicon",
+    "whereUsed": [
+      "app.json web favicon"
+    ],
+    "primaryOrFallback": "primary",
+    "replaceableArtOrStructuralUI": "structural_ui",
+    "supportsContentTypes": [
+      "brand"
+    ],
+    "prompt": null,
+    "generatedSection": null,
+    "generatedUsage": [
+      "Web favicon"
+    ],
+    "generatedSize": null,
+    "generatedAt": null,
+    "sha256": null
+  },
+  {
+    "path": "mobile/assets/splash-icon.png",
+    "slot": "brand.splash",
+    "whereUsed": [
+      "app.json splash"
+    ],
+    "primaryOrFallback": "primary",
+    "replaceableArtOrStructuralUI": "structural_ui",
+    "supportsContentTypes": [
+      "brand"
+    ],
+    "prompt": null,
+    "generatedSection": null,
+    "generatedUsage": [
+      "Splash artwork"
+    ],
+    "generatedSize": null,
+    "generatedAt": null,
+    "sha256": null
+  }
+]
