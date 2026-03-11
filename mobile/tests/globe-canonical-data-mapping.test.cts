@@ -20,13 +20,13 @@ function makeOccurrence(
     occurrenceId: '11111111-1111-1111-1111-111111111111',
     occurrenceKey: 'occurrence-key',
     script: 'Shared script',
-    seriesKey: 'global-heartbeat',
+    seriesKey: 'global-peace-circle',
     source: 'occurrence',
     startsAt: '2026-03-09T12:00:00.000Z',
     startsCount: 0,
     status: 'upcoming',
     subscriptionKey: 'occurrence:11111111-1111-1111-1111-111111111111',
-    title: 'Global Heartbeat',
+    title: 'Global Peace Circle',
     ...overrides,
   };
 }
@@ -72,7 +72,7 @@ test('resolveGlobePulseState differentiates live, waiting, flagship, ritual, and
   });
   const flagship = makeOccurrence({
     occurrenceKey: 'flagship',
-    seriesKey: 'global-heartbeat',
+    seriesKey: 'global-peace-circle',
     status: 'upcoming',
   });
   const ritual = makeOccurrence({
@@ -116,7 +116,7 @@ test('buildCanonicalGlobePointMaps maps canonical 24h pulses, accents, and insig
     makeOccurrence({
       occurrenceId: 'dddddddd-dddd-dddd-dddd-dddddddddddd',
       occurrenceKey: 'upcoming-1',
-      seriesKey: 'global-heartbeat',
+      seriesKey: 'global-peace-circle',
       startsAt: '2026-03-09T18:00:00.000Z',
       status: 'upcoming',
       title: 'Flagship room',

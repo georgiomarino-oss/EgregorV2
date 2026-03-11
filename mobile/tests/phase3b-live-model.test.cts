@@ -25,9 +25,9 @@ function makeOccurrence(overrides: Partial<CanonicalEventOccurrence>): Canonical
     roomId: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
     seriesDescription: 'Shared room',
     seriesId: 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
-    seriesKey: 'global-heartbeat',
+    seriesKey: 'global-peace-circle',
     seriesMetadata: {},
-    seriesName: 'Global Heartbeat',
+    seriesName: 'Global Peace Circle',
     seriesPurpose: 'Pulse',
     sourceEventId: null,
     startsAtUtc: '2026-03-08T12:00:00.000Z',
@@ -69,7 +69,7 @@ test('buildLiveFeedSections emits canonical section grouping', () => {
     makeOccurrence({
       activeParticipantCount: 12,
       occurrenceId: '11111111-1111-1111-1111-111111111111',
-      seriesKey: 'global-heartbeat',
+      seriesKey: 'global-peace-circle',
       startsAtUtc: '2026-03-08T12:00:00.000Z',
       status: 'live',
       visibilityScope: 'global',
@@ -128,12 +128,12 @@ test('parseInviteCaptureTarget rejects deprecated community compatibility links'
 
 test('buildEventInviteUrl prefers canonical room and occurrence links', () => {
   const roomInvite = buildEventInviteUrl({
-    eventTitle: 'Global Heartbeat',
+    eventTitle: 'Global Peace Circle',
     occurrenceId: 'occ-789',
     roomId: 'room-456',
   });
   const occurrenceInvite = buildEventInviteUrl({
-    eventTitle: 'Global Heartbeat',
+    eventTitle: 'Global Peace Circle',
     occurrenceId: 'occ-789',
   });
 

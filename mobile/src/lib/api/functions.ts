@@ -14,6 +14,7 @@ export interface GeneratePrayerScriptOutput {
 export interface GeneratePrayerAudioInput {
   allowGeneration?: boolean;
   durationMinutes?: number;
+  eventOccurrenceContentId?: string;
   language?: string;
   prayerLibraryItemId?: string;
   prayerLibraryScriptId?: string;

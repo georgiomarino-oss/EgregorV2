@@ -1,8 +1,7 @@
 import {
-  fetchEventLibraryItems,
-  fetchEvents,
-  fetchNewsDrivenEvents,
+  fetchEventOccurrenceContent,
   fetchPrayerLibraryItems,
+  listEventFeed,
 } from './api/data';
 import { prefetchPrayerAudio } from './api/functions';
 
@@ -29,6 +28,7 @@ function addScriptPrefetchTarget(
     {
       allowGeneration: boolean;
       durationMinutes?: number;
+      voiceId?: string;
       title?: string;
     }
   >,
@@ -36,6 +36,7 @@ function addScriptPrefetchTarget(
     allowGeneration: boolean;
     durationMinutes?: number;
     script: string | null | undefined;
+    voiceId?: string;
     title?: string;
   },
   limit = AUDIO_ARTIFACT_PREFETCH_LIMIT,
@@ -62,8 +63,26 @@ function addScriptPrefetchTarget(
     ...(typeof input.durationMinutes === 'number'
       ? { durationMinutes: input.durationMinutes }
       : {}),
+    ...(input.voiceId?.trim() ? { voiceId: input.voiceId.trim() } : {}),
     ...(input.title?.trim() ? { title: input.title.trim() } : {}),
   });
+}
+
+function resolveSeriesVoiceId(seriesMetadata: Record<string, unknown> | null | undefined) {
+  if (!seriesMetadata || typeof seriesMetadata !== 'object') {
+    return null;
+  }
+
+  const voiceRecommendation = seriesMetadata.voice_recommendation;
+  if (!voiceRecommendation || typeof voiceRecommendation !== 'object') {
+    return null;
+  }
+
+  const voiceId =
+    'voice_id' in voiceRecommendation && typeof voiceRecommendation.voice_id === 'string'
+      ? voiceRecommendation.voice_id.trim()
+      : '';
+  return voiceId || null;
 }
 
 export function prefetchEventAndPrayerAudioArtifacts(userId: string) {
@@ -77,19 +96,17 @@ export function prefetchEventAndPrayerAudioArtifacts(userId: string) {
   }
 
   const request = (async () => {
-    const [prayerLibraryResult, eventLibraryResult, newsEventsResult, eventsResult] =
-      await Promise.allSettled([
-        fetchPrayerLibraryItems(),
-        fetchEventLibraryItems(80),
-        fetchNewsDrivenEvents(80),
-        fetchEvents(40),
-      ]);
+    const [prayerLibraryResult, eventFeedResult] = await Promise.allSettled([
+      fetchPrayerLibraryItems(),
+      listEventFeed({ horizonHours: 72 }),
+    ]);
 
     const prefetchTargets = new Map<
       string,
       {
         allowGeneration: boolean;
         durationMinutes?: number;
+        voiceId?: string;
         title?: string;
       }
     >();
@@ -107,38 +124,63 @@ export function prefetchEventAndPrayerAudioArtifacts(userId: string) {
       }
     }
 
-    if (eventLibraryResult.status === 'fulfilled') {
-      for (const item of eventLibraryResult.value.slice(0, 4)) {
-        addScriptPrefetchTarget(prefetchTargets, {
-          allowGeneration: false,
-          durationMinutes: item.durationMinutes,
-          script: item.script || item.body,
-          title: item.title,
-        });
-      }
-    }
+    if (eventFeedResult.status === 'fulfilled') {
+      const prioritizedOccurrences = eventFeedResult.value
+        .slice()
+        .sort((left, right) => {
+          if (left.status === right.status) {
+            return new Date(left.startsAtUtc).getTime() - new Date(right.startsAtUtc).getTime();
+          }
 
-    if (newsEventsResult.status === 'fulfilled') {
-      for (const item of newsEventsResult.value.slice(0, 3)) {
-        addScriptPrefetchTarget(prefetchTargets, {
-          allowGeneration: false,
-          durationMinutes: item.durationMinutes,
-          script: item.script,
-          title: item.title,
-        });
-      }
-    }
+          if (left.status === 'live') {
+            return -1;
+          }
+          if (right.status === 'live') {
+            return 1;
+          }
+          if (left.status === 'scheduled') {
+            return -1;
+          }
+          if (right.status === 'scheduled') {
+            return 1;
+          }
+          return 0;
+        })
+        .slice(0, AUDIO_ARTIFACT_PREFETCH_LIMIT);
 
-    if (eventsResult.status === 'fulfilled') {
-      for (const event of eventsResult.value.slice(0, 3)) {
+      const occurrenceContentRows = await Promise.allSettled(
+        prioritizedOccurrences.map(async (occurrence) => {
+          const content = await fetchEventOccurrenceContent(occurrence.occurrenceId);
+          return {
+            content,
+            occurrence,
+          };
+        }),
+      );
+
+      for (const row of occurrenceContentRows) {
+        if (row.status !== 'fulfilled') {
+          continue;
+        }
+
+        const content = row.value.content;
+        const occurrence = row.value.occurrence;
+        const fallbackVoiceId = resolveSeriesVoiceId(occurrence.seriesMetadata);
+        const script =
+          content?.scriptText ||
+          buildFallbackEventScript({
+            description: occurrence.seriesDescription,
+            hostNote: occurrence.seriesPurpose,
+          });
+
         addScriptPrefetchTarget(prefetchTargets, {
           allowGeneration: false,
-          durationMinutes: event.durationMinutes,
-          script: buildFallbackEventScript({
-            description: event.description,
-            hostNote: event.hostNote,
-          }),
-          title: event.title,
+          durationMinutes: content?.durationMinutes ?? occurrence.durationMinutes,
+          script,
+          title: occurrence.seriesName,
+          ...(content?.voiceId || fallbackVoiceId
+            ? { voiceId: content?.voiceId ?? fallbackVoiceId ?? '' }
+            : {}),
         });
       }
     }
@@ -151,6 +193,7 @@ export function prefetchEventAndPrayerAudioArtifacts(userId: string) {
           : {}),
         language: 'en',
         script,
+        ...(target.voiceId ? { voiceId: target.voiceId } : {}),
         ...(target.title ? { title: target.title } : {}),
       });
     }

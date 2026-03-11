@@ -9,9 +9,12 @@ import type {
 const NEXT_24_HOURS_MS = 24 * 60 * 60 * 1000;
 const WAITING_ROOM_WINDOW_MS = 20 * 60 * 1000;
 const FLAGSHIP_SERIES_KEYS = new Set([
-  'admin-curated-special-moment',
+  'special-collective-moment',
+  'global-peace-circle',
+  'global-awakening-meditation',
+  'heart-coherence-circle',
+  'full-moon-gathering',
   'emergency-global-prayer',
-  'global-heartbeat',
 ]);
 
 function safeStartMillis(value: string) {

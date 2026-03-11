@@ -6,5 +6,8 @@ verify_jwt = true
 [functions.generate-prayer-audio]
 verify_jwt = true
 
+[functions.generate-event-occurrence-script]
+verify_jwt = true
+
 [functions.dispatch-notification-queue]
 verify_jwt = false

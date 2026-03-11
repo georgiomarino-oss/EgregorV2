@@ -66,7 +66,6 @@ export function EventsScreen() {
         eventTitle: occurrence.title,
         occurrenceKey: occurrence.occurrenceKey,
         scheduledStartAt: occurrence.startsAt,
-        scriptText: occurrence.script,
         ...(occurrence.occurrenceId ? { occurrenceId: occurrence.occurrenceId } : {}),
         ...(occurrence.roomId ? { roomId: occurrence.roomId } : {}),
       };

@@ -1,0 +1,1052 @@
+[
+  {
+    "phaseType": "full_moon",
+    "acceptedName": "Wolf Moon",
+    "occursAtUtc": "2026-01-03T10:03:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2026,
+    "sourcePayload": {
+      "day": 3,
+      "month": 1,
+      "phase": "Full Moon",
+      "time": "10:03",
+      "year": 2026
+    }
+  },
+  {
+    "phaseType": "new_moon",
+    "acceptedName": "New Moon",
+    "occursAtUtc": "2026-01-18T19:52:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2026,
+    "sourcePayload": {
+      "day": 18,
+      "month": 1,
+      "phase": "New Moon",
+      "time": "19:52",
+      "year": 2026
+    }
+  },
+  {
+    "phaseType": "full_moon",
+    "acceptedName": "Snow Moon",
+    "occursAtUtc": "2026-02-01T22:09:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2026,
+    "sourcePayload": {
+      "day": 1,
+      "month": 2,
+      "phase": "Full Moon",
+      "time": "22:09",
+      "year": 2026
+    }
+  },
+  {
+    "phaseType": "new_moon",
+    "acceptedName": "New Moon",
+    "occursAtUtc": "2026-02-17T12:01:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2026,
+    "sourcePayload": {
+      "day": 17,
+      "month": 2,
+      "phase": "New Moon",
+      "time": "12:01",
+      "year": 2026
+    }
+  },
+  {
+    "phaseType": "full_moon",
+    "acceptedName": "Worm Moon",
+    "occursAtUtc": "2026-03-03T11:38:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2026,
+    "sourcePayload": {
+      "day": 3,
+      "month": 3,
+      "phase": "Full Moon",
+      "time": "11:38",
+      "year": 2026
+    }
+  },
+  {
+    "phaseType": "new_moon",
+    "acceptedName": "New Moon",
+    "occursAtUtc": "2026-03-19T01:23:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2026,
+    "sourcePayload": {
+      "day": 19,
+      "month": 3,
+      "phase": "New Moon",
+      "time": "01:23",
+      "year": 2026
+    }
+  },
+  {
+    "phaseType": "full_moon",
+    "acceptedName": "Pink Moon",
+    "occursAtUtc": "2026-04-02T02:12:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2026,
+    "sourcePayload": {
+      "day": 2,
+      "month": 4,
+      "phase": "Full Moon",
+      "time": "02:12",
+      "year": 2026
+    }
+  },
+  {
+    "phaseType": "new_moon",
+    "acceptedName": "New Moon",
+    "occursAtUtc": "2026-04-17T11:52:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2026,
+    "sourcePayload": {
+      "day": 17,
+      "month": 4,
+      "phase": "New Moon",
+      "time": "11:52",
+      "year": 2026
+    }
+  },
+  {
+    "phaseType": "full_moon",
+    "acceptedName": "Flower Moon",
+    "occursAtUtc": "2026-05-01T17:23:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2026,
+    "sourcePayload": {
+      "day": 1,
+      "month": 5,
+      "phase": "Full Moon",
+      "time": "17:23",
+      "year": 2026
+    }
+  },
+  {
+    "phaseType": "new_moon",
+    "acceptedName": "New Moon",
+    "occursAtUtc": "2026-05-16T20:01:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2026,
+    "sourcePayload": {
+      "day": 16,
+      "month": 5,
+      "phase": "New Moon",
+      "time": "20:01",
+      "year": 2026
+    }
+  },
+  {
+    "phaseType": "full_moon",
+    "acceptedName": "Flower Moon",
+    "occursAtUtc": "2026-05-31T08:45:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2026,
+    "sourcePayload": {
+      "day": 31,
+      "month": 5,
+      "phase": "Full Moon",
+      "time": "08:45",
+      "year": 2026
+    }
+  },
+  {
+    "phaseType": "new_moon",
+    "acceptedName": "New Moon",
+    "occursAtUtc": "2026-06-15T02:54:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2026,
+    "sourcePayload": {
+      "day": 15,
+      "month": 6,
+      "phase": "New Moon",
+      "time": "02:54",
+      "year": 2026
+    }
+  },
+  {
+    "phaseType": "full_moon",
+    "acceptedName": "Strawberry Moon",
+    "occursAtUtc": "2026-06-29T23:56:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2026,
+    "sourcePayload": {
+      "day": 29,
+      "month": 6,
+      "phase": "Full Moon",
+      "time": "23:56",
+      "year": 2026
+    }
+  },
+  {
+    "phaseType": "new_moon",
+    "acceptedName": "New Moon",
+    "occursAtUtc": "2026-07-14T09:43:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2026,
+    "sourcePayload": {
+      "day": 14,
+      "month": 7,
+      "phase": "New Moon",
+      "time": "09:43",
+      "year": 2026
+    }
+  },
+  {
+    "phaseType": "full_moon",
+    "acceptedName": "Buck Moon",
+    "occursAtUtc": "2026-07-29T14:36:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2026,
+    "sourcePayload": {
+      "day": 29,
+      "month": 7,
+      "phase": "Full Moon",
+      "time": "14:36",
+      "year": 2026
+    }
+  },
+  {
+    "phaseType": "new_moon",
+    "acceptedName": "New Moon",
+    "occursAtUtc": "2026-08-12T17:37:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2026,
+    "sourcePayload": {
+      "day": 12,
+      "month": 8,
+      "phase": "New Moon",
+      "time": "17:37",
+      "year": 2026
+    }
+  },
+  {
+    "phaseType": "full_moon",
+    "acceptedName": "Sturgeon Moon",
+    "occursAtUtc": "2026-08-28T04:18:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2026,
+    "sourcePayload": {
+      "day": 28,
+      "month": 8,
+      "phase": "Full Moon",
+      "time": "04:18",
+      "year": 2026
+    }
+  },
+  {
+    "phaseType": "new_moon",
+    "acceptedName": "New Moon",
+    "occursAtUtc": "2026-09-11T03:27:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2026,
+    "sourcePayload": {
+      "day": 11,
+      "month": 9,
+      "phase": "New Moon",
+      "time": "03:27",
+      "year": 2026
+    }
+  },
+  {
+    "phaseType": "full_moon",
+    "acceptedName": "Harvest Moon",
+    "occursAtUtc": "2026-09-26T16:49:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2026,
+    "sourcePayload": {
+      "day": 26,
+      "month": 9,
+      "phase": "Full Moon",
+      "time": "16:49",
+      "year": 2026
+    }
+  },
+  {
+    "phaseType": "new_moon",
+    "acceptedName": "New Moon",
+    "occursAtUtc": "2026-10-10T15:50:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2026,
+    "sourcePayload": {
+      "day": 10,
+      "month": 10,
+      "phase": "New Moon",
+      "time": "15:50",
+      "year": 2026
+    }
+  },
+  {
+    "phaseType": "full_moon",
+    "acceptedName": "Hunter's Moon",
+    "occursAtUtc": "2026-10-26T04:12:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2026,
+    "sourcePayload": {
+      "day": 26,
+      "month": 10,
+      "phase": "Full Moon",
+      "time": "04:12",
+      "year": 2026
+    }
+  },
+  {
+    "phaseType": "new_moon",
+    "acceptedName": "New Moon",
+    "occursAtUtc": "2026-11-09T07:02:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2026,
+    "sourcePayload": {
+      "day": 9,
+      "month": 11,
+      "phase": "New Moon",
+      "time": "07:02",
+      "year": 2026
+    }
+  },
+  {
+    "phaseType": "full_moon",
+    "acceptedName": "Beaver Moon",
+    "occursAtUtc": "2026-11-24T14:53:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2026,
+    "sourcePayload": {
+      "day": 24,
+      "month": 11,
+      "phase": "Full Moon",
+      "time": "14:53",
+      "year": 2026
+    }
+  },
+  {
+    "phaseType": "new_moon",
+    "acceptedName": "New Moon",
+    "occursAtUtc": "2026-12-09T00:52:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2026,
+    "sourcePayload": {
+      "day": 9,
+      "month": 12,
+      "phase": "New Moon",
+      "time": "00:52",
+      "year": 2026
+    }
+  },
+  {
+    "phaseType": "full_moon",
+    "acceptedName": "Cold Moon",
+    "occursAtUtc": "2026-12-24T01:28:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2026,
+    "sourcePayload": {
+      "day": 24,
+      "month": 12,
+      "phase": "Full Moon",
+      "time": "01:28",
+      "year": 2026
+    }
+  },
+  {
+    "phaseType": "new_moon",
+    "acceptedName": "New Moon",
+    "occursAtUtc": "2027-01-07T20:24:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2027,
+    "sourcePayload": {
+      "day": 7,
+      "month": 1,
+      "phase": "New Moon",
+      "time": "20:24",
+      "year": 2027
+    }
+  },
+  {
+    "phaseType": "full_moon",
+    "acceptedName": "Wolf Moon",
+    "occursAtUtc": "2027-01-22T12:17:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2027,
+    "sourcePayload": {
+      "day": 22,
+      "month": 1,
+      "phase": "Full Moon",
+      "time": "12:17",
+      "year": 2027
+    }
+  },
+  {
+    "phaseType": "new_moon",
+    "acceptedName": "New Moon",
+    "occursAtUtc": "2027-02-06T15:56:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2027,
+    "sourcePayload": {
+      "day": 6,
+      "month": 2,
+      "phase": "New Moon",
+      "time": "15:56",
+      "year": 2027
+    }
+  },
+  {
+    "phaseType": "full_moon",
+    "acceptedName": "Snow Moon",
+    "occursAtUtc": "2027-02-20T23:23:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2027,
+    "sourcePayload": {
+      "day": 20,
+      "month": 2,
+      "phase": "Full Moon",
+      "time": "23:23",
+      "year": 2027
+    }
+  },
+  {
+    "phaseType": "new_moon",
+    "acceptedName": "New Moon",
+    "occursAtUtc": "2027-03-08T09:29:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2027,
+    "sourcePayload": {
+      "day": 8,
+      "month": 3,
+      "phase": "New Moon",
+      "time": "09:29",
+      "year": 2027
+    }
+  },
+  {
+    "phaseType": "full_moon",
+    "acceptedName": "Worm Moon",
+    "occursAtUtc": "2027-03-22T10:44:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2027,
+    "sourcePayload": {
+      "day": 22,
+      "month": 3,
+      "phase": "Full Moon",
+      "time": "10:44",
+      "year": 2027
+    }
+  },
+  {
+    "phaseType": "new_moon",
+    "acceptedName": "New Moon",
+    "occursAtUtc": "2027-04-06T23:51:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2027,
+    "sourcePayload": {
+      "day": 6,
+      "month": 4,
+      "phase": "New Moon",
+      "time": "23:51",
+      "year": 2027
+    }
+  },
+  {
+    "phaseType": "full_moon",
+    "acceptedName": "Pink Moon",
+    "occursAtUtc": "2027-04-20T22:27:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2027,
+    "sourcePayload": {
+      "day": 20,
+      "month": 4,
+      "phase": "Full Moon",
+      "time": "22:27",
+      "year": 2027
+    }
+  },
+  {
+    "phaseType": "new_moon",
+    "acceptedName": "New Moon",
+    "occursAtUtc": "2027-05-06T10:58:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2027,
+    "sourcePayload": {
+      "day": 6,
+      "month": 5,
+      "phase": "New Moon",
+      "time": "10:58",
+      "year": 2027
+    }
+  },
+  {
+    "phaseType": "full_moon",
+    "acceptedName": "Flower Moon",
+    "occursAtUtc": "2027-05-20T10:59:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2027,
+    "sourcePayload": {
+      "day": 20,
+      "month": 5,
+      "phase": "Full Moon",
+      "time": "10:59",
+      "year": 2027
+    }
+  },
+  {
+    "phaseType": "new_moon",
+    "acceptedName": "New Moon",
+    "occursAtUtc": "2027-06-04T19:40:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2027,
+    "sourcePayload": {
+      "day": 4,
+      "month": 6,
+      "phase": "New Moon",
+      "time": "19:40",
+      "year": 2027
+    }
+  },
+  {
+    "phaseType": "full_moon",
+    "acceptedName": "Strawberry Moon",
+    "occursAtUtc": "2027-06-19T00:44:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2027,
+    "sourcePayload": {
+      "day": 19,
+      "month": 6,
+      "phase": "Full Moon",
+      "time": "00:44",
+      "year": 2027
+    }
+  },
+  {
+    "phaseType": "new_moon",
+    "acceptedName": "New Moon",
+    "occursAtUtc": "2027-07-04T03:02:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2027,
+    "sourcePayload": {
+      "day": 4,
+      "month": 7,
+      "phase": "New Moon",
+      "time": "03:02",
+      "year": 2027
+    }
+  },
+  {
+    "phaseType": "full_moon",
+    "acceptedName": "Buck Moon",
+    "occursAtUtc": "2027-07-18T15:45:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2027,
+    "sourcePayload": {
+      "day": 18,
+      "month": 7,
+      "phase": "Full Moon",
+      "time": "15:45",
+      "year": 2027
+    }
+  },
+  {
+    "phaseType": "new_moon",
+    "acceptedName": "New Moon",
+    "occursAtUtc": "2027-08-02T10:05:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2027,
+    "sourcePayload": {
+      "day": 2,
+      "month": 8,
+      "phase": "New Moon",
+      "time": "10:05",
+      "year": 2027
+    }
+  },
+  {
+    "phaseType": "full_moon",
+    "acceptedName": "Sturgeon Moon",
+    "occursAtUtc": "2027-08-17T07:29:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2027,
+    "sourcePayload": {
+      "day": 17,
+      "month": 8,
+      "phase": "Full Moon",
+      "time": "07:29",
+      "year": 2027
+    }
+  },
+  {
+    "phaseType": "new_moon",
+    "acceptedName": "New Moon",
+    "occursAtUtc": "2027-08-31T17:41:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2027,
+    "sourcePayload": {
+      "day": 31,
+      "month": 8,
+      "phase": "New Moon",
+      "time": "17:41",
+      "year": 2027
+    }
+  },
+  {
+    "phaseType": "full_moon",
+    "acceptedName": "Harvest Moon",
+    "occursAtUtc": "2027-09-15T23:03:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2027,
+    "sourcePayload": {
+      "day": 15,
+      "month": 9,
+      "phase": "Full Moon",
+      "time": "23:03",
+      "year": 2027
+    }
+  },
+  {
+    "phaseType": "new_moon",
+    "acceptedName": "New Moon",
+    "occursAtUtc": "2027-09-30T02:36:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2027,
+    "sourcePayload": {
+      "day": 30,
+      "month": 9,
+      "phase": "New Moon",
+      "time": "02:36",
+      "year": 2027
+    }
+  },
+  {
+    "phaseType": "full_moon",
+    "acceptedName": "Hunter's Moon",
+    "occursAtUtc": "2027-10-15T13:47:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2027,
+    "sourcePayload": {
+      "day": 15,
+      "month": 10,
+      "phase": "Full Moon",
+      "time": "13:47",
+      "year": 2027
+    }
+  },
+  {
+    "phaseType": "new_moon",
+    "acceptedName": "New Moon",
+    "occursAtUtc": "2027-10-29T13:36:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2027,
+    "sourcePayload": {
+      "day": 29,
+      "month": 10,
+      "phase": "New Moon",
+      "time": "13:36",
+      "year": 2027
+    }
+  },
+  {
+    "phaseType": "full_moon",
+    "acceptedName": "Beaver Moon",
+    "occursAtUtc": "2027-11-14T03:26:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2027,
+    "sourcePayload": {
+      "day": 14,
+      "month": 11,
+      "phase": "Full Moon",
+      "time": "03:26",
+      "year": 2027
+    }
+  },
+  {
+    "phaseType": "new_moon",
+    "acceptedName": "New Moon",
+    "occursAtUtc": "2027-11-28T03:24:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2027,
+    "sourcePayload": {
+      "day": 28,
+      "month": 11,
+      "phase": "New Moon",
+      "time": "03:24",
+      "year": 2027
+    }
+  },
+  {
+    "phaseType": "full_moon",
+    "acceptedName": "Cold Moon",
+    "occursAtUtc": "2027-12-13T16:09:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2027,
+    "sourcePayload": {
+      "day": 13,
+      "month": 12,
+      "phase": "Full Moon",
+      "time": "16:09",
+      "year": 2027
+    }
+  },
+  {
+    "phaseType": "new_moon",
+    "acceptedName": "New Moon",
+    "occursAtUtc": "2027-12-27T20:12:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2027,
+    "sourcePayload": {
+      "day": 27,
+      "month": 12,
+      "phase": "New Moon",
+      "time": "20:12",
+      "year": 2027
+    }
+  },
+  {
+    "phaseType": "full_moon",
+    "acceptedName": "Wolf Moon",
+    "occursAtUtc": "2028-01-12T04:03:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2028,
+    "sourcePayload": {
+      "day": 12,
+      "month": 1,
+      "phase": "Full Moon",
+      "time": "04:03",
+      "year": 2028
+    }
+  },
+  {
+    "phaseType": "new_moon",
+    "acceptedName": "New Moon",
+    "occursAtUtc": "2028-01-26T15:12:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2028,
+    "sourcePayload": {
+      "day": 26,
+      "month": 1,
+      "phase": "New Moon",
+      "time": "15:12",
+      "year": 2028
+    }
+  },
+  {
+    "phaseType": "full_moon",
+    "acceptedName": "Snow Moon",
+    "occursAtUtc": "2028-02-10T15:04:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2028,
+    "sourcePayload": {
+      "day": 10,
+      "month": 2,
+      "phase": "Full Moon",
+      "time": "15:04",
+      "year": 2028
+    }
+  },
+  {
+    "phaseType": "new_moon",
+    "acceptedName": "New Moon",
+    "occursAtUtc": "2028-02-25T10:37:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2028,
+    "sourcePayload": {
+      "day": 25,
+      "month": 2,
+      "phase": "New Moon",
+      "time": "10:37",
+      "year": 2028
+    }
+  },
+  {
+    "phaseType": "full_moon",
+    "acceptedName": "Worm Moon",
+    "occursAtUtc": "2028-03-11T01:06:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2028,
+    "sourcePayload": {
+      "day": 11,
+      "month": 3,
+      "phase": "Full Moon",
+      "time": "01:06",
+      "year": 2028
+    }
+  },
+  {
+    "phaseType": "new_moon",
+    "acceptedName": "New Moon",
+    "occursAtUtc": "2028-03-26T04:31:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2028,
+    "sourcePayload": {
+      "day": 26,
+      "month": 3,
+      "phase": "New Moon",
+      "time": "04:31",
+      "year": 2028
+    }
+  },
+  {
+    "phaseType": "full_moon",
+    "acceptedName": "Pink Moon",
+    "occursAtUtc": "2028-04-09T10:26:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2028,
+    "sourcePayload": {
+      "day": 9,
+      "month": 4,
+      "phase": "Full Moon",
+      "time": "10:26",
+      "year": 2028
+    }
+  },
+  {
+    "phaseType": "new_moon",
+    "acceptedName": "New Moon",
+    "occursAtUtc": "2028-04-24T19:47:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2028,
+    "sourcePayload": {
+      "day": 24,
+      "month": 4,
+      "phase": "New Moon",
+      "time": "19:47",
+      "year": 2028
+    }
+  },
+  {
+    "phaseType": "full_moon",
+    "acceptedName": "Flower Moon",
+    "occursAtUtc": "2028-05-08T19:49:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2028,
+    "sourcePayload": {
+      "day": 8,
+      "month": 5,
+      "phase": "Full Moon",
+      "time": "19:49",
+      "year": 2028
+    }
+  },
+  {
+    "phaseType": "new_moon",
+    "acceptedName": "New Moon",
+    "occursAtUtc": "2028-05-24T08:16:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2028,
+    "sourcePayload": {
+      "day": 24,
+      "month": 5,
+      "phase": "New Moon",
+      "time": "08:16",
+      "year": 2028
+    }
+  },
+  {
+    "phaseType": "full_moon",
+    "acceptedName": "Strawberry Moon",
+    "occursAtUtc": "2028-06-07T06:09:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2028,
+    "sourcePayload": {
+      "day": 7,
+      "month": 6,
+      "phase": "Full Moon",
+      "time": "06:09",
+      "year": 2028
+    }
+  },
+  {
+    "phaseType": "new_moon",
+    "acceptedName": "New Moon",
+    "occursAtUtc": "2028-06-22T18:27:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2028,
+    "sourcePayload": {
+      "day": 22,
+      "month": 6,
+      "phase": "New Moon",
+      "time": "18:27",
+      "year": 2028
+    }
+  },
+  {
+    "phaseType": "full_moon",
+    "acceptedName": "Buck Moon",
+    "occursAtUtc": "2028-07-06T18:11:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2028,
+    "sourcePayload": {
+      "day": 6,
+      "month": 7,
+      "phase": "Full Moon",
+      "time": "18:11",
+      "year": 2028
+    }
+  },
+  {
+    "phaseType": "new_moon",
+    "acceptedName": "New Moon",
+    "occursAtUtc": "2028-07-22T03:02:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2028,
+    "sourcePayload": {
+      "day": 22,
+      "month": 7,
+      "phase": "New Moon",
+      "time": "03:02",
+      "year": 2028
+    }
+  },
+  {
+    "phaseType": "full_moon",
+    "acceptedName": "Sturgeon Moon",
+    "occursAtUtc": "2028-08-05T08:10:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2028,
+    "sourcePayload": {
+      "day": 5,
+      "month": 8,
+      "phase": "Full Moon",
+      "time": "08:10",
+      "year": 2028
+    }
+  },
+  {
+    "phaseType": "new_moon",
+    "acceptedName": "New Moon",
+    "occursAtUtc": "2028-08-20T10:44:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2028,
+    "sourcePayload": {
+      "day": 20,
+      "month": 8,
+      "phase": "New Moon",
+      "time": "10:44",
+      "year": 2028
+    }
+  },
+  {
+    "phaseType": "full_moon",
+    "acceptedName": "Harvest Moon",
+    "occursAtUtc": "2028-09-03T23:47:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2028,
+    "sourcePayload": {
+      "day": 3,
+      "month": 9,
+      "phase": "Full Moon",
+      "time": "23:47",
+      "year": 2028
+    }
+  },
+  {
+    "phaseType": "new_moon",
+    "acceptedName": "New Moon",
+    "occursAtUtc": "2028-09-18T18:24:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2028,
+    "sourcePayload": {
+      "day": 18,
+      "month": 9,
+      "phase": "New Moon",
+      "time": "18:24",
+      "year": 2028
+    }
+  },
+  {
+    "phaseType": "full_moon",
+    "acceptedName": "Hunter's Moon",
+    "occursAtUtc": "2028-10-03T16:25:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2028,
+    "sourcePayload": {
+      "day": 3,
+      "month": 10,
+      "phase": "Full Moon",
+      "time": "16:25",
+      "year": 2028
+    }
+  },
+  {
+    "phaseType": "new_moon",
+    "acceptedName": "New Moon",
+    "occursAtUtc": "2028-10-18T02:57:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2028,
+    "sourcePayload": {
+      "day": 18,
+      "month": 10,
+      "phase": "New Moon",
+      "time": "02:57",
+      "year": 2028
+    }
+  },
+  {
+    "phaseType": "full_moon",
+    "acceptedName": "Beaver Moon",
+    "occursAtUtc": "2028-11-02T09:17:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2028,
+    "sourcePayload": {
+      "day": 2,
+      "month": 11,
+      "phase": "Full Moon",
+      "time": "09:17",
+      "year": 2028
+    }
+  },
+  {
+    "phaseType": "new_moon",
+    "acceptedName": "New Moon",
+    "occursAtUtc": "2028-11-16T13:18:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2028,
+    "sourcePayload": {
+      "day": 16,
+      "month": 11,
+      "phase": "New Moon",
+      "time": "13:18",
+      "year": 2028
+    }
+  },
+  {
+    "phaseType": "full_moon",
+    "acceptedName": "Cold Moon",
+    "occursAtUtc": "2028-12-02T01:40:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2028,
+    "sourcePayload": {
+      "day": 2,
+      "month": 12,
+      "phase": "Full Moon",
+      "time": "01:40",
+      "year": 2028
+    }
+  },
+  {
+    "phaseType": "new_moon",
+    "acceptedName": "New Moon",
+    "occursAtUtc": "2028-12-16T02:06:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2028,
+    "sourcePayload": {
+      "day": 16,
+      "month": 12,
+      "phase": "New Moon",
+      "time": "02:06",
+      "year": 2028
+    }
+  },
+  {
+    "phaseType": "full_moon",
+    "acceptedName": "Cold Moon",
+    "occursAtUtc": "2028-12-31T16:48:00Z",
+    "sourceLabel": "USNO Moon Phases API",
+    "sourceYear": 2028,
+    "sourcePayload": {
+      "day": 31,
+      "month": 12,
+      "phase": "Full Moon",
+      "time": "16:48",
+      "year": 2028
+    }
+  }
+]

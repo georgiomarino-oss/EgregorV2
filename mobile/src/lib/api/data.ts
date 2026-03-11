@@ -1,4 +1,3 @@
-import { EVENT_LIBRARY_CATALOG, type EventLibrarySeedItem } from '../catalog/eventLibraryCatalog';
 import { supabase } from '../supabase';
 import {
   listNotificationPreferences,
@@ -46,29 +45,6 @@ export {
 export type EventStatus = 'live' | 'scheduled' | 'completed' | 'cancelled';
 export type EventVisibility = 'public' | 'private';
 
-interface EventRow {
-  country_code: string | null;
-  created_at: string;
-  description: string | null;
-  duration_minutes: number | null;
-  host_note: string | null;
-  id: string;
-  region: string | null;
-  starts_at: string;
-  status: EventStatus;
-  subtitle: string | null;
-  title: string;
-  visibility: EventVisibility;
-}
-
-interface EventParticipantRow {
-  event_id: string;
-  is_active: boolean;
-  joined_at: string;
-  last_seen_at: string;
-  user_id: string;
-}
-
 interface SharedSoloSessionRow {
   created_at: string;
   duration_minutes: number;
@@ -109,31 +85,6 @@ interface PrayerLibraryScriptRow {
   id: string;
   language: string;
   script_text: string;
-}
-
-interface EventLibraryRow {
-  body: string;
-  category: string | null;
-  duration_minutes: number | null;
-  id: string;
-  script_text: string;
-  starts_count: number | null;
-  title: string;
-}
-
-interface NewsDrivenEventRow {
-  category: string;
-  country_code: string | null;
-  duration_minutes: number;
-  event_day: string;
-  headline: string;
-  id: string;
-  location_hint: string | null;
-  script_text: string;
-  source_title: string | null;
-  source_url: string;
-  starts_at: string;
-  summary: string;
 }
 
 interface ProfileRow {
@@ -218,37 +169,13 @@ export interface PrayerLibraryItem {
   title: string;
 }
 
-export interface EventLibraryItem {
-  body: string;
-  category: string | null;
-  durationMinutes: number;
-  id: string;
-  script: string;
-  startsCount: number;
-  subtitle: string;
-  title: string;
-}
-
-export interface NewsDrivenEventItem {
-  category: string;
-  countryCode: string | null;
-  durationMinutes: number;
-  id: string;
-  locationHint: string | null;
-  script: string;
-  sourceTitle: string | null;
-  sourceUrl: string;
-  startsAt: string;
-  summary: string;
-  title: string;
-}
-
 export type EventAccessMode = 'open' | 'circle_members' | 'invite_only';
 export type EventVisibilityScope = 'global' | 'circle' | 'private';
 export type EventOccurrenceStatus = 'cancelled' | 'ended' | 'live' | 'scheduled';
 export type CanonicalEventRoomStatus = 'ended' | 'locked' | 'open';
 export type CanonicalEventScheduleType =
   | 'admin_curated'
+  | 'lunar_phase'
   | 'local_time_daily'
   | 'manual_trigger'
   | 'utc_interval';
@@ -341,6 +268,30 @@ interface ReminderPreferenceOccurrenceSubscriptionRow {
   target_type: 'occurrence' | 'room' | 'series';
 }
 
+interface EventOccurrenceContentRow {
+  audio_artifact_id: string | null;
+  audio_status: 'failed' | 'missing' | 'pending' | 'ready';
+  created_at: string;
+  duration_minutes: number;
+  has_word_timings: boolean;
+  id: string;
+  language: string;
+  metadata: Record<string, unknown> | null;
+  occurrence_id: string;
+  script_checksum: string;
+  script_hash: string;
+  script_model: string | null;
+  script_prompt_version: string;
+  script_text: string;
+  script_tone: string | null;
+  script_word_count: number;
+  series_id: string;
+  source: string;
+  updated_at: string;
+  voice_id: string | null;
+  voice_label: string | null;
+}
+
 export interface CanonicalEventSeries {
   accessMode: EventAccessMode;
   category: string;
@@ -409,6 +360,30 @@ export interface EventNotificationState {
   subscriptionKeys: string[];
 }
 
+export interface EventOccurrenceContent {
+  audioArtifactId: string | null;
+  audioStatus: 'failed' | 'missing' | 'pending' | 'ready';
+  createdAt: string;
+  durationMinutes: number;
+  hasWordTimings: boolean;
+  id: string;
+  language: string;
+  metadata: Record<string, unknown>;
+  occurrenceId: string;
+  scriptChecksum: string;
+  scriptHash: string;
+  scriptModel: string | null;
+  scriptPromptVersion: string;
+  scriptText: string;
+  scriptTone: string | null;
+  scriptWordCount: number;
+  seriesId: string;
+  source: string;
+  updatedAt: string;
+  voiceId: string | null;
+  voiceLabel: string | null;
+}
+
 export interface UserPreferences {
   highContrastMode: boolean;
   preferredAmbient: string;
@@ -436,6 +411,7 @@ export interface SoloStats {
 
 export interface EventRoomSnapshot {
   event: AppEvent;
+  eventContent: EventOccurrenceContent | null;
   isJoined: boolean;
   joinedCount: number;
   occurrenceId: string | null;
@@ -443,7 +419,6 @@ export interface EventRoomSnapshot {
 }
 
 export interface EventJoinTarget {
-  legacyEventId?: string;
   occurrenceId?: string;
   occurrenceKey?: string;
   roomId?: string;
@@ -504,9 +479,7 @@ const EVENTS_CACHE_TTL_MS = 30_000;
 const EVENT_BY_ID_CACHE_TTL_MS = 30_000;
 const COMMUNITY_SNAPSHOT_CACHE_TTL_MS = 20_000;
 const EVENT_FEED_CACHE_TTL_MS = 20_000;
-const EVENT_LIBRARY_CACHE_TTL_MS = 5 * 60_000;
-const EVENT_LIBRARY_ITEM_CACHE_TTL_MS = 5 * 60_000;
-const NEWS_DRIVEN_EVENTS_CACHE_TTL_MS = 60_000;
+const EVENT_OCCURRENCE_CONTENT_CACHE_TTL_MS = 20_000;
 const ACTIVE_EVENT_USERS_CACHE_TTL_MS = 15_000;
 const EVENT_NOTIFICATION_STATE_CACHE_TTL_MS = 30_000;
 const USER_JOURNAL_ENTRIES_CACHE_TTL_MS = 45_000;
@@ -534,14 +507,13 @@ const eventByIdCache = new Map<string, TimedCacheEntry<AppEvent | null>>();
 const eventByIdRequestCache = new Map<string, Promise<AppEvent | null>>();
 const eventFeedCache = new Map<string, TimedCacheEntry<CanonicalEventOccurrence[]>>();
 const eventFeedRequestCache = new Map<string, Promise<CanonicalEventOccurrence[]>>();
+const eventOccurrenceContentCache = new Map<string, TimedCacheEntry<EventOccurrenceContent | null>>();
+const eventOccurrenceContentRequestCache = new Map<
+  string,
+  Promise<EventOccurrenceContent | null>
+>();
 const communitySnapshotCache = new Map<string, TimedCacheEntry<CommunitySnapshot>>();
 const communitySnapshotRequestCache = new Map<string, Promise<CommunitySnapshot>>();
-const eventLibraryItemsCache = new Map<string, TimedCacheEntry<EventLibraryItem[]>>();
-const eventLibraryItemsRequestCache = new Map<string, Promise<EventLibraryItem[]>>();
-const eventLibraryItemByIdCache = new Map<string, TimedCacheEntry<EventLibraryItem | null>>();
-const eventLibraryItemByIdRequestCache = new Map<string, Promise<EventLibraryItem | null>>();
-const newsDrivenEventsCache = new Map<string, TimedCacheEntry<NewsDrivenEventItem[]>>();
-const newsDrivenEventsRequestCache = new Map<string, Promise<NewsDrivenEventItem[]>>();
 const activeEventUsersCache = new Map<string, TimedCacheEntry<ActiveEventUserPresence[]>>();
 const activeEventUsersRequestCache = new Map<string, Promise<ActiveEventUserPresence[]>>();
 const eventNotificationStateCache = new Map<string, TimedCacheEntry<EventNotificationState>>();
@@ -638,9 +610,11 @@ function invalidateEventRuntimeCaches(eventId?: string) {
   activeEventUsersCache.clear();
   communitySnapshotCache.clear();
   eventFeedCache.clear();
+  eventOccurrenceContentCache.clear();
   eventsCache.clear();
   if (eventId?.trim()) {
     eventByIdCache.delete(eventId.trim());
+    eventOccurrenceContentCache.delete(eventId.trim());
   }
 }
 
@@ -681,33 +655,6 @@ export function getCachedEventById(eventId: string) {
 export function getCachedCommunitySnapshot() {
   return (
     readFreshTimedCache(communitySnapshotCache, 'default', COMMUNITY_SNAPSHOT_CACHE_TTL_MS)
-      ?.value ?? null
-  );
-}
-
-export function getCachedEventLibraryItems(limit = 80) {
-  return (
-    readFreshTimedCache(eventLibraryItemsCache, `${limit}`, EVENT_LIBRARY_CACHE_TTL_MS)?.value ??
-    null
-  );
-}
-
-export function getCachedEventLibraryItemById(eventTemplateId: string) {
-  const normalizedId = eventTemplateId.trim();
-  if (!normalizedId) {
-    return undefined;
-  }
-
-  return readFreshTimedCache(
-    eventLibraryItemByIdCache,
-    normalizedId,
-    EVENT_LIBRARY_ITEM_CACHE_TTL_MS,
-  )?.value;
-}
-
-export function getCachedNewsDrivenEvents(limit = 80) {
-  return (
-    readFreshTimedCache(newsDrivenEventsCache, `${limit}`, NEWS_DRIVEN_EVENTS_CACHE_TTL_MS)
       ?.value ?? null
   );
 }
@@ -810,61 +757,6 @@ function formatDurationMinutes(minutes: number) {
     return '1 min';
   }
   return `${minutes} min`;
-}
-
-function toSlug(value: string) {
-  return value
-    .normalize('NFKD')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-}
-
-function mapSeedEventLibraryItem(item: EventLibrarySeedItem): EventLibraryItem {
-  const duration = item.durationMinutes;
-  return {
-    body: item.body,
-    category: item.category,
-    durationMinutes: duration,
-    id: item.id?.trim() || `seed-${toSlug(item.title)}`,
-    script: item.script,
-    startsCount: 0,
-    subtitle: `${item.category} - ${formatDurationMinutes(duration)} - Manifestation room`,
-    title: item.title,
-  };
-}
-
-function mapEventLibraryRow(row: EventLibraryRow): EventLibraryItem {
-  const duration = row.duration_minutes ?? 10;
-  const starts = row.starts_count ?? 0;
-  const category = row.category?.trim() || null;
-
-  return {
-    body: row.body,
-    category,
-    durationMinutes: duration,
-    id: row.id,
-    script: row.script_text,
-    startsCount: starts,
-    subtitle: `${category ?? 'Manifestation'} - ${formatDurationMinutes(duration)} - ${starts} starts`,
-    title: row.title,
-  };
-}
-
-function mapNewsDrivenEventRow(row: NewsDrivenEventRow): NewsDrivenEventItem {
-  return {
-    category: row.category?.trim() || 'Humanitarian',
-    countryCode: row.country_code?.trim().toUpperCase() || null,
-    durationMinutes: row.duration_minutes ?? 10,
-    id: row.id,
-    locationHint: row.location_hint?.trim() || null,
-    script: row.script_text,
-    sourceTitle: row.source_title?.trim() || null,
-    sourceUrl: row.source_url,
-    startsAt: row.starts_at,
-    summary: row.summary,
-    title: row.headline,
-  };
 }
 
 function minutesFromSeconds(totalSeconds: number) {
@@ -1025,17 +917,16 @@ function extractOccurrenceIdFromSubscriptionKey(subscriptionKey: string) {
 function normalizeEventJoinTarget(
   input: EventJoinTarget | string,
 ): {
-  legacyEventId: string;
   occurrenceId: string;
   occurrenceKey: string;
   roomId: string;
 } {
   if (typeof input === 'string') {
     const normalized = input.trim();
+    const isLikelyOccurrenceKey = normalized.includes('|');
     return {
-      legacyEventId: normalized,
-      occurrenceId: '',
-      occurrenceKey: '',
+      occurrenceId: isLikelyOccurrenceKey ? '' : normalized,
+      occurrenceKey: isLikelyOccurrenceKey ? normalized : '',
       roomId: '',
     };
   }
@@ -1046,7 +937,6 @@ function normalizeEventJoinTarget(
   const hasCanonicalTarget = Boolean(occurrenceId || occurrenceKey || roomId);
 
   return {
-    legacyEventId: hasCanonicalTarget ? '' : (input.legacyEventId?.trim() || ''),
     occurrenceId,
     occurrenceKey,
     roomId,
@@ -1068,6 +958,44 @@ function toDisplayEventStatus(occurrence: CanonicalEventOccurrence): EventStatus
 }
 
 function mapCanonicalOccurrenceRow(row: EventFeedRow): CanonicalEventOccurrence {
+  const occurrenceMetadata = row.occurrence_metadata ?? {};
+  const seriesMetadata = row.series_metadata ?? {};
+  const lunarName =
+    typeof occurrenceMetadata.lunar_name === 'string'
+      ? occurrenceMetadata.lunar_name.trim()
+      : '';
+  const lunarPhase =
+    typeof occurrenceMetadata.lunar_phase === 'string'
+      ? occurrenceMetadata.lunar_phase.trim().toLowerCase()
+      : '';
+  const startsAtMillis = new Date(row.starts_at_utc).getTime();
+  const lunarMonthLabel = Number.isFinite(startsAtMillis)
+    ? new Date(startsAtMillis).toLocaleString('en-US', {
+        month: 'long',
+        timeZone: 'UTC',
+      })
+    : '';
+
+  let seriesName = row.series_name;
+  let seriesDescription = row.series_description;
+  let seriesPurpose = row.series_purpose;
+
+  if (row.series_key === 'full-moon-gathering' && lunarName) {
+    seriesName = `${lunarName} Full Moon Gathering`;
+    if (!seriesDescription?.trim()) {
+      seriesDescription = `A lunar-synced gathering aligned to the ${lunarName} full moon.`;
+    }
+    if (!seriesPurpose?.trim()) {
+      seriesPurpose = `Reflect, release, and renew together under the ${lunarName}.`;
+    }
+  } else if (row.series_key === 'new-moon-intention-setting' && lunarPhase === 'new_moon') {
+    const monthPrefix = lunarMonthLabel ? `${lunarMonthLabel} ` : '';
+    seriesName = `${monthPrefix}New Moon Intention Setting`.trim();
+    if (!seriesDescription?.trim()) {
+      seriesDescription = 'A lunar-synced gathering for clear intentions and grounded commitments.';
+    }
+  }
+
   return {
     accessMode: row.access_mode,
     activeParticipantCount: row.active_participant_count ?? row.participant_count ?? 0,
@@ -1078,19 +1006,45 @@ function mapCanonicalOccurrenceRow(row: EventFeedRow): CanonicalEventOccurrence 
     endsAtUtc: row.ends_at_utc,
     occurrenceId: row.occurrence_id,
     occurrenceKey: row.occurrence_key,
-    occurrenceMetadata: row.occurrence_metadata ?? {},
+    occurrenceMetadata,
     participantCount: row.participant_count ?? 0,
     roomId: row.room_id,
-    seriesDescription: row.series_description,
+    seriesDescription,
     seriesId: row.series_id,
     seriesKey: row.series_key,
-    seriesMetadata: row.series_metadata ?? {},
-    seriesName: row.series_name,
-    seriesPurpose: row.series_purpose,
+    seriesMetadata,
+    seriesName,
+    seriesPurpose,
     sourceEventId: row.source_event_id,
     startsAtUtc: row.starts_at_utc,
     status: row.status,
     visibilityScope: row.visibility_scope,
+  };
+}
+
+function mapEventOccurrenceContentRow(row: EventOccurrenceContentRow): EventOccurrenceContent {
+  return {
+    audioArtifactId: row.audio_artifact_id,
+    audioStatus: row.audio_status,
+    createdAt: row.created_at,
+    durationMinutes: Math.max(1, row.duration_minutes ?? 1),
+    hasWordTimings: Boolean(row.has_word_timings),
+    id: row.id,
+    language: row.language?.trim() || 'en',
+    metadata: row.metadata ?? {},
+    occurrenceId: row.occurrence_id,
+    scriptChecksum: row.script_checksum,
+    scriptHash: row.script_hash,
+    scriptModel: row.script_model,
+    scriptPromptVersion: row.script_prompt_version,
+    scriptText: row.script_text,
+    scriptTone: row.script_tone,
+    scriptWordCount: Math.max(0, row.script_word_count ?? 0),
+    seriesId: row.series_id,
+    source: row.source,
+    updatedAt: row.updated_at,
+    voiceId: row.voice_id,
+    voiceLabel: row.voice_label,
   };
 }
 
@@ -1132,23 +1086,6 @@ function mapEventSeriesRow(row: EventSeriesRow): CanonicalEventSeries {
     scheduleType: row.schedule_type,
     subtitle: row.subtitle,
     visibilityScope: row.visibility_scope,
-  };
-}
-
-function mapEventRow(row: EventRow, participants: number): AppEvent {
-  return {
-    countryCode: row.country_code,
-    description: row.description,
-    durationMinutes: row.duration_minutes ?? 20,
-    hostNote: row.host_note,
-    id: row.id,
-    participants,
-    region: row.region,
-    startsAt: row.starts_at,
-    status: row.status,
-    subtitle: row.subtitle,
-    title: row.title,
-    visibility: row.visibility,
   };
 }
 
@@ -1196,36 +1133,6 @@ function rankEventTimingState(status: EventTimingState) {
   return 2;
 }
 
-async function fetchParticipantCountsByEvent(
-  eventIds: string[],
-  activeWindowMinutes = 90,
-): Promise<Map<string, number>> {
-  const counts = new Map<string, number>();
-
-  if (eventIds.length === 0) {
-    return counts;
-  }
-
-  const cutoff = new Date(Date.now() - activeWindowMinutes * 60 * 1000);
-  const { data, error } = await supabase
-    .from('event_participants')
-    .select('event_id,user_id,last_seen_at,is_active')
-    .in('event_id', eventIds)
-    .eq('is_active', true)
-    .gte('last_seen_at', toIso(cutoff));
-
-  if (error) {
-    throw new Error(toSupabaseErrorMessage(error, 'Failed to load event participants.'));
-  }
-
-  const rows = (data ?? []) as EventParticipantRow[];
-  for (const row of rows) {
-    counts.set(row.event_id, (counts.get(row.event_id) ?? 0) + 1);
-  }
-
-  return counts;
-}
-
 export async function fetchActiveEventUsers(
   activeWindowMinutes = 15,
 ): Promise<ActiveEventUserPresence[]> {
@@ -1241,31 +1148,7 @@ export async function fetchActiveEventUsers(
       });
 
       if (error) {
-        const message = toSupabaseErrorMessage(error, 'Failed to load active user presence.');
-        if (isMissingTableMessage(message, 'room_participants')) {
-          const cutoff = new Date(Date.now() - activeWindowMinutes * 60 * 1000);
-          const fallback = await supabase
-            .from('event_participants')
-            .select('event_id,user_id,last_seen_at,is_active')
-            .eq('is_active', true)
-            .gte('last_seen_at', toIso(cutoff))
-            .order('last_seen_at', { ascending: false })
-            .limit(500);
-
-          if (fallback.error) {
-            throw new Error(
-              toSupabaseErrorMessage(fallback.error, 'Failed to load active user presence.'),
-            );
-          }
-
-          return ((fallback.data ?? []) as EventParticipantRow[]).map((row) => ({
-            eventId: row.event_id,
-            lastSeenAt: row.last_seen_at,
-            userId: row.user_id,
-          }));
-        }
-
-        throw new Error(message);
+        throw new Error(toSupabaseErrorMessage(error, 'Failed to load active user presence.'));
       }
 
       return ((data ?? []) as ActiveOccurrencePresenceRow[]).map((row) => ({
@@ -1275,75 +1158,6 @@ export async function fetchActiveEventUsers(
       }));
     },
   );
-}
-
-async function listEventFeedFromLegacyTables(input?: {
-  horizonHours?: number;
-}): Promise<CanonicalEventOccurrence[]> {
-  const horizonHours = Math.max(1, Math.min(Math.round(input?.horizonHours ?? 72), 336));
-  const windowStartIso = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
-  const windowEndIso = new Date(Date.now() + horizonHours * 60 * 60 * 1000).toISOString();
-
-  const { data, error } = await supabase
-    .from('events')
-    .select(
-      'id,title,subtitle,description,host_note,region,country_code,starts_at,status,duration_minutes,visibility,created_at',
-    )
-    .in('status', ['live', 'scheduled'])
-    .gte('starts_at', windowStartIso)
-    .lte('starts_at', windowEndIso)
-    .order('starts_at', { ascending: true })
-    .limit(250);
-
-  if (error) {
-    throw new Error(toSupabaseErrorMessage(error, 'Failed to load legacy event feed.'));
-  }
-
-  const rows = (data ?? []) as EventRow[];
-  const participantCounts = await fetchParticipantCountsByEvent(rows.map((row) => row.id));
-
-  return rows.map((row) => {
-    const durationMinutes = Math.max(1, row.duration_minutes ?? 10);
-    const startsAt = row.starts_at;
-    const endsAt = new Date(new Date(startsAt).getTime() + durationMinutes * 60 * 1000).toISOString();
-
-    return {
-      accessMode: row.visibility === 'private' ? 'invite_only' : 'open',
-      activeParticipantCount: participantCounts.get(row.id) ?? 0,
-      category: row.region?.trim() || 'Legacy Event',
-      circleId: null,
-      displayTimezone: 'UTC',
-      durationMinutes,
-      endsAtUtc: endsAt,
-      occurrenceId: row.id,
-      occurrenceKey: `legacy:${row.id}:${startsAt}`,
-      occurrenceMetadata: {
-        legacy: true,
-      },
-      participantCount: participantCounts.get(row.id) ?? 0,
-      roomId: null,
-      seriesDescription: row.description,
-      seriesId: row.id,
-      seriesKey: `legacy-event-${row.id}`,
-      seriesMetadata: {
-        legacy_event_id: row.id,
-        legacy_host_note: row.host_note,
-      },
-      seriesName: row.title,
-      seriesPurpose: row.subtitle,
-      sourceEventId: row.id,
-      startsAtUtc: startsAt,
-      status:
-        row.status === 'live'
-          ? 'live'
-          : row.status === 'cancelled'
-            ? 'cancelled'
-            : row.status === 'completed'
-              ? 'ended'
-              : 'scheduled',
-      visibilityScope: row.visibility === 'private' ? 'private' : 'global',
-    };
-  });
 }
 
 export async function listEventFeed(input?: {
@@ -1366,14 +1180,7 @@ export async function listEventFeed(input?: {
       });
 
       if (error) {
-        const message = toSupabaseErrorMessage(error, 'Failed to load canonical event feed.');
-        if (
-          isMissingTableMessage(message, 'event_occurrences') ||
-          message.toLowerCase().includes('list_event_feed')
-        ) {
-          return listEventFeedFromLegacyTables({ horizonHours });
-        }
-        throw new Error(message);
+        throw new Error(toSupabaseErrorMessage(error, 'Failed to load canonical event feed.'));
       }
 
       const occurrences = ((data ?? []) as EventFeedRow[]).map(mapCanonicalOccurrenceRow);
@@ -1465,14 +1272,60 @@ export async function getEventOccurrence(occurrenceId: string): Promise<Canonica
   return row ? mapCanonicalOccurrenceRow(row) : null;
 }
 
+export async function fetchEventOccurrenceContent(
+  occurrenceId: string,
+  language = 'en',
+): Promise<EventOccurrenceContent | null> {
+  const normalizedOccurrenceId = occurrenceId.trim();
+  if (!normalizedOccurrenceId) {
+    return null;
+  }
+
+  const normalizedLanguage = language.trim().toLowerCase() || 'en';
+  const cacheKey = `${normalizedOccurrenceId}|${normalizedLanguage}`;
+
+  return loadWithTimedCache(
+    eventOccurrenceContentCache,
+    eventOccurrenceContentRequestCache,
+    cacheKey,
+    EVENT_OCCURRENCE_CONTENT_CACHE_TTL_MS,
+    async () => {
+      const { data, error } = await supabase
+        .from('event_occurrence_content')
+        .select(
+          'id,occurrence_id,series_id,language,duration_minutes,script_text,script_hash,script_checksum,script_word_count,script_model,script_tone,script_prompt_version,source,voice_id,voice_label,audio_artifact_id,audio_status,audio_error,audio_generated_at,has_word_timings,metadata,created_at,updated_at',
+        )
+        .eq('occurrence_id', normalizedOccurrenceId)
+        .eq('language', normalizedLanguage)
+        .maybeSingle();
+
+      if (error) {
+        const message = toSupabaseErrorMessage(
+          error,
+          'Failed to load canonical event room content.',
+        );
+        if (isMissingTableMessage(message, 'event_occurrence_content')) {
+          return null;
+        }
+        throw new Error(message);
+      }
+
+      if (!data) {
+        return null;
+      }
+
+      return mapEventOccurrenceContentRow(data as EventOccurrenceContentRow);
+    },
+  );
+}
+
 export async function getEventOccurrenceByJoinTarget(input: {
-  legacyEventId?: string;
   occurrenceId?: string;
   occurrenceKey?: string;
   roomId?: string;
 }): Promise<CanonicalEventOccurrence | null> {
   const { data, error } = await supabase.rpc('get_event_occurrence_by_join_target', {
-    p_legacy_event_id: input.legacyEventId?.trim() || null,
+    p_legacy_event_id: null,
     p_occurrence_id: input.occurrenceId?.trim() || null,
     p_occurrence_key: input.occurrenceKey?.trim() || null,
     p_room_id: input.roomId?.trim() || null,
@@ -1487,7 +1340,6 @@ export async function getEventOccurrenceByJoinTarget(input: {
 }
 
 export async function ensureJoinableOccurrenceRoom(input: {
-  legacyEventId?: string;
   occurrenceId?: string;
   occurrenceKey?: string;
   roomId?: string;
@@ -1498,7 +1350,7 @@ export async function ensureJoinableOccurrenceRoom(input: {
   roomId: string;
 }> {
   const { data, error } = await supabase.rpc('ensure_joinable_occurrence_room', {
-    p_legacy_event_id: input.legacyEventId?.trim() || null,
+    p_legacy_event_id: null,
     p_occurrence_id: input.occurrenceId?.trim() || null,
     p_occurrence_key: input.occurrenceKey?.trim() || null,
     p_room_id: input.roomId?.trim() || null,
@@ -1662,7 +1514,6 @@ export async function fetchEventById(eventId: string): Promise<AppEvent | null> 
     EVENT_BY_ID_CACHE_TTL_MS,
     async () => {
       let occurrence = await getEventOccurrenceByJoinTarget({
-        legacyEventId: normalizedEventId,
         occurrenceId: normalizedEventId,
         ...(normalizedEventId.includes('|') ? { occurrenceKey: normalizedEventId } : {}),
       });
@@ -1810,151 +1661,6 @@ export async function fetchPrayerLibraryItems(): Promise<PrayerLibraryItem[]> {
   });
 
   return prayerLibraryRequestPromise;
-}
-
-function getSeedEventLibraryItems(): EventLibraryItem[] {
-  return EVENT_LIBRARY_CATALOG.map(mapSeedEventLibraryItem);
-}
-
-export async function fetchEventLibraryItems(limit = 80): Promise<EventLibraryItem[]> {
-  const cacheKey = `${limit}`;
-  return loadWithTimedCache(
-    eventLibraryItemsCache,
-    eventLibraryItemsRequestCache,
-    cacheKey,
-    EVENT_LIBRARY_CACHE_TTL_MS,
-    async () => {
-      const { data, error } = await supabase
-        .from('event_library_items')
-        .select('id,title,body,script_text,category,duration_minutes,starts_count')
-        .eq('is_public', true)
-        .order('created_at', { ascending: false })
-        .limit(limit);
-
-      if (error) {
-        const message = toSupabaseErrorMessage(error, 'Failed to load event library.');
-        if (message.toLowerCase().includes('event_library_items')) {
-          return getSeedEventLibraryItems();
-        }
-        throw new Error(message);
-      }
-
-      const rows = (data ?? []) as EventLibraryRow[];
-      if (rows.length === 0) {
-        return getSeedEventLibraryItems();
-      }
-
-      const items = rows.map(mapEventLibraryRow);
-      const cachedAt = Date.now();
-      for (const item of items) {
-        eventLibraryItemByIdCache.set(item.id, {
-          cachedAt,
-          value: item,
-        });
-      }
-
-      return items;
-    },
-  );
-}
-
-export async function fetchEventLibraryItemById(
-  eventTemplateId: string,
-): Promise<EventLibraryItem | null> {
-  const normalizedId = eventTemplateId.trim();
-  if (!normalizedId) {
-    return null;
-  }
-
-  return loadWithTimedCache(
-    eventLibraryItemByIdCache,
-    eventLibraryItemByIdRequestCache,
-    normalizedId,
-    EVENT_LIBRARY_ITEM_CACHE_TTL_MS,
-    async () => {
-      const seedItem = getSeedEventLibraryItems().find((item) => item.id === normalizedId);
-
-      const { data, error } = await supabase
-        .from('event_library_items')
-        .select('id,title,body,script_text,category,duration_minutes,starts_count')
-        .eq('id', normalizedId)
-        .maybeSingle();
-
-      if (error) {
-        const message = toSupabaseErrorMessage(error, 'Failed to load event template.');
-        if (message.toLowerCase().includes('event_library_items')) {
-          return seedItem ?? null;
-        }
-        throw new Error(message);
-      }
-
-      if (!data) {
-        return seedItem ?? null;
-      }
-
-      return mapEventLibraryRow(data as EventLibraryRow);
-    },
-  );
-}
-
-export async function incrementEventLibraryStart(itemId: string) {
-  if (itemId.startsWith('seed-') || EVENT_LIBRARY_CATALOG.some((item) => item.id === itemId)) {
-    return;
-  }
-
-  const { data, error } = await supabase
-    .from('event_library_items')
-    .select('starts_count')
-    .eq('id', itemId)
-    .maybeSingle();
-
-  if (error) {
-    throw new Error(toSupabaseErrorMessage(error, 'Failed to update event usage.'));
-  }
-
-  const nextStarts = ((data as { starts_count?: number } | null)?.starts_count ?? 0) + 1;
-  const { error: updateError } = await supabase
-    .from('event_library_items')
-    .update({ starts_count: nextStarts })
-    .eq('id', itemId);
-
-  if (updateError) {
-    throw new Error(toSupabaseErrorMessage(updateError, 'Failed to update event usage.'));
-  }
-}
-
-export async function fetchNewsDrivenEvents(limit = 80): Promise<NewsDrivenEventItem[]> {
-  const cacheKey = `${limit}`;
-  return loadWithTimedCache(
-    newsDrivenEventsCache,
-    newsDrivenEventsRequestCache,
-    cacheKey,
-    NEWS_DRIVEN_EVENTS_CACHE_TTL_MS,
-    async () => {
-      const nowIso = new Date().toISOString();
-      const endIso = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
-
-      const { data, error } = await supabase
-        .from('news_driven_events')
-        .select(
-          'id,headline,summary,script_text,category,country_code,location_hint,duration_minutes,starts_at,source_title,source_url,event_day',
-        )
-        .gte('starts_at', nowIso)
-        .lte('starts_at', endIso)
-        .order('starts_at', { ascending: true })
-        .limit(limit);
-
-      if (error) {
-        const message = toSupabaseErrorMessage(error, 'Failed to load news driven events.');
-        if (isMissingTableMessage(message, 'news_driven_events')) {
-          return [];
-        }
-        throw new Error(message);
-      }
-
-      return ((data ?? []) as NewsDrivenEventRow[]).map(mapNewsDrivenEventRow);
-    },
-  );
 }
 
 export async function fetchEventNotificationState(userId: string): Promise<EventNotificationState> {
@@ -2666,7 +2372,7 @@ export async function fetchProfileSummary(userId: string): Promise<ProfileSummar
       const previousWeekStart = new Date(weekStart);
       previousWeekStart.setDate(previousWeekStart.getDate() - 7);
 
-      const [preferences, membershipRes, eventParticipantRes, soloSessionsRes] = await Promise.all([
+      const [preferences, membershipRes, roomParticipantRes, soloSessionsRes] = await Promise.all([
         fetchUserPreferences(normalizedUserId),
         supabase
           .from('circle_members')
@@ -2674,9 +2380,10 @@ export async function fetchProfileSummary(userId: string): Promise<ProfileSummar
           .eq('user_id', normalizedUserId)
           .eq('status', 'active'),
         supabase
-          .from('event_participants')
-          .select('event_id,joined_at')
+          .from('room_participants')
+          .select('room_id,joined_at,rooms!inner(room_kind,occurrence_id)')
           .eq('user_id', normalizedUserId)
+          .eq('rooms.room_kind', 'event_occurrence')
           .order('joined_at', { ascending: false }),
         supabase
           .from('solo_sessions')
@@ -2690,9 +2397,9 @@ export async function fetchProfileSummary(userId: string): Promise<ProfileSummar
           toSupabaseErrorMessage(membershipRes.error, 'Failed to load circle stats.'),
         );
       }
-      if (eventParticipantRes.error) {
+      if (roomParticipantRes.error) {
         throw new Error(
-          toSupabaseErrorMessage(eventParticipantRes.error, 'Failed to load event participation.'),
+          toSupabaseErrorMessage(roomParticipantRes.error, 'Failed to load live room participation.'),
         );
       }
       if (soloSessionsRes.error) {
@@ -2726,14 +2433,32 @@ export async function fetchProfileSummary(userId: string): Promise<ProfileSummar
         ).size;
       }
 
-      const eventRows = (eventParticipantRes.data ?? []) as {
-        event_id: string;
+      const eventRows = (roomParticipantRes.data ?? []) as {
         joined_at: string;
+        room_id: string;
+        rooms:
+          | {
+              occurrence_id?: string | null;
+              room_kind?: string | null;
+            }
+          | Array<{
+              occurrence_id?: string | null;
+              room_kind?: string | null;
+            }>
+          | null;
       }[];
       const eventsJoinedThisWeek = new Set(
         eventRows
           .filter((row) => new Date(row.joined_at).getTime() >= weekStart.getTime())
-          .map((row) => row.event_id),
+          .map((row) => {
+            const roomRelation = Array.isArray(row.rooms) ? row.rooms[0] : row.rooms;
+            const occurrenceId = roomRelation?.occurrence_id?.trim();
+            if (occurrenceId) {
+              return occurrenceId;
+            }
+
+            return row.room_id;
+          }),
       ).size;
 
       const sessionRows = (soloSessionsRes.data ?? []) as SoloSessionRow[];
@@ -2874,8 +2599,6 @@ export function prefetchCoreAppData(userId: string) {
     await Promise.allSettled([
       fetchPrayerLibraryItems(),
       fetchEvents(120),
-      fetchEventLibraryItems(80),
-      fetchNewsDrivenEvents(80),
       fetchActiveEventUsers(15),
       fetchCommunitySnapshot(),
       fetchEventNotificationState(normalizedUserId),
@@ -2920,109 +2643,9 @@ export async function recordSoloSession(input: {
   }
 }
 
-async function fetchLegacyEventRoomSnapshot(
-  eventId: string,
-  userId: string,
-): Promise<EventRoomSnapshot> {
-  const [event, participantCounts, participationState] = await Promise.all([
-    fetchEventById(eventId),
-    fetchParticipantCountsByEvent([eventId]),
-    supabase
-      .from('event_participants')
-      .select('event_id,user_id,is_active,last_seen_at,joined_at')
-      .eq('event_id', eventId)
-      .eq('user_id', userId)
-      .maybeSingle(),
-  ]);
-
-  if (!event) {
-    throw new Error('Event not found.');
-  }
-
-  if (participationState.error) {
-    throw new Error(
-      toSupabaseErrorMessage(participationState.error, 'Failed to load event room state.'),
-    );
-  }
-
-  const participantState = participationState.data as EventParticipantRow | null;
-
-  return {
-    event: {
-      ...event,
-      participants: participantCounts.get(eventId) ?? 0,
-    },
-    isJoined: Boolean(participantState?.is_active),
-    joinedCount: participantCounts.get(eventId) ?? 0,
-    occurrenceId: event.id,
-    roomId: null,
-  };
-}
-
-async function joinLegacyEventRoom(eventId: string, userId: string) {
-  const nowIso = new Date().toISOString();
-  const { error } = await supabase.from('event_participants').upsert(
-    {
-      event_id: eventId,
-      is_active: true,
-      joined_at: nowIso,
-      last_seen_at: nowIso,
-      user_id: userId,
-    },
-    {
-      onConflict: 'event_id,user_id',
-    },
-  );
-
-  if (error) {
-    throw new Error(toSupabaseErrorMessage(error, 'Failed to join room.'));
-  }
-
-  invalidateEventRuntimeCaches(eventId);
-}
-
-async function leaveLegacyEventRoom(eventId: string, userId: string) {
-  const { error } = await supabase
-    .from('event_participants')
-    .update({
-      is_active: false,
-      last_seen_at: new Date().toISOString(),
-    })
-    .eq('event_id', eventId)
-    .eq('user_id', userId);
-
-  if (error) {
-    throw new Error(toSupabaseErrorMessage(error, 'Failed to leave room.'));
-  }
-
-  invalidateEventRuntimeCaches(eventId);
-}
-
-async function refreshLegacyEventPresence(eventId: string, userId: string) {
-  const { error } = await supabase
-    .from('event_participants')
-    .update({
-      is_active: true,
-      last_seen_at: new Date().toISOString(),
-    })
-    .eq('event_id', eventId)
-    .eq('user_id', userId)
-    .eq('is_active', true);
-
-  if (error) {
-    throw new Error(toSupabaseErrorMessage(error, 'Failed to refresh room presence.'));
-  }
-
-  activeEventUsersCache.clear();
-  if (eventId.trim()) {
-    eventByIdCache.delete(eventId.trim());
-  }
-}
-
 async function resolveEventOccurrenceForJoinTarget(input: EventJoinTarget | string) {
   const joinTarget = normalizeEventJoinTarget(input);
   const occurrence = await getEventOccurrenceByJoinTarget({
-    ...(joinTarget.legacyEventId ? { legacyEventId: joinTarget.legacyEventId } : {}),
     ...(joinTarget.occurrenceId ? { occurrenceId: joinTarget.occurrenceId } : {}),
     ...(joinTarget.occurrenceKey ? { occurrenceKey: joinTarget.occurrenceKey } : {}),
     ...(joinTarget.roomId ? { roomId: joinTarget.roomId } : {}),
@@ -3034,193 +2657,137 @@ async function resolveEventOccurrenceForJoinTarget(input: EventJoinTarget | stri
   };
 }
 
-function shouldFallbackToLegacyEventRoom(message: string) {
-  return (
-    isMissingTableMessage(message, 'event_occurrences') ||
-    isMissingTableMessage(message, 'room_participants') ||
-    isMissingTableMessage(message, 'rooms') ||
-    message.toLowerCase().includes('get_event_occurrence_by_join_target') ||
-    message.toLowerCase().includes('ensure_joinable_occurrence_room') ||
-    message.toLowerCase().includes('join_event_room') ||
-    message.toLowerCase().includes('leave_event_room') ||
-    message.toLowerCase().includes('refresh_event_room_presence')
-  );
-}
-
 export async function fetchEventRoomSnapshot(
   input: EventJoinTarget | string,
   userId: string,
 ): Promise<EventRoomSnapshot> {
   const normalizedUserId = userId.trim();
-  const fallbackEventId =
-    typeof input === 'string' ? input.trim() : input.legacyEventId?.trim() || '';
-
-  try {
-    const { joinTarget, occurrence } = await resolveEventOccurrenceForJoinTarget(input);
-    if (!occurrence) {
-      if (fallbackEventId) {
-        return fetchLegacyEventRoomSnapshot(fallbackEventId, normalizedUserId);
-      }
-      throw new Error('Event occurrence not found.');
-    }
-
-    let roomId = occurrence.roomId?.trim() || null;
-    if (!roomId && occurrence.status === 'scheduled') {
-      try {
-        const ensured = await ensureJoinableOccurrenceRoom({
-          ...(joinTarget.legacyEventId ? { legacyEventId: joinTarget.legacyEventId } : {}),
-          occurrenceId: occurrence.occurrenceId,
-          ...(joinTarget.occurrenceKey ? { occurrenceKey: joinTarget.occurrenceKey } : {}),
-          ...(joinTarget.roomId ? { roomId: joinTarget.roomId } : {}),
-        });
-        roomId = ensured.roomId;
-      } catch {
-        // Joinability can fail outside the window; keep the canonical occurrence snapshot.
-      }
-    }
-
-    let participantCount = occurrence.activeParticipantCount;
-    let isJoined = false;
-
-    if (roomId) {
-      const summary = await getRoomPresenceSummary(roomId);
-      participantCount = summary.activeParticipantCount;
-
-      if (normalizedUserId) {
-        const participants = await listRoomParticipants(roomId, false);
-        isJoined = participants.some(
-          (participant) =>
-            participant.userId === normalizedUserId && participant.presenceState !== 'left',
-        );
-      }
-    }
-
-    const event = mapCanonicalOccurrenceToAppEvent(occurrence);
-    return {
-      event: {
-        ...event,
-        participants: participantCount,
-      },
-      isJoined,
-      joinedCount: participantCount,
-      occurrenceId: occurrence.occurrenceId,
-      roomId,
-    };
-  } catch (error) {
-    const message = toSupabaseErrorMessage(error, 'Failed to load event room state.');
-    if (fallbackEventId && shouldFallbackToLegacyEventRoom(message)) {
-      return fetchLegacyEventRoomSnapshot(fallbackEventId, normalizedUserId);
-    }
-    throw new Error(message);
+  const { joinTarget, occurrence } = await resolveEventOccurrenceForJoinTarget(input);
+  if (!occurrence) {
+    throw new Error('Event occurrence not found.');
   }
+
+  let roomId = occurrence.roomId?.trim() || null;
+  if (!roomId && occurrence.status === 'scheduled') {
+    try {
+      const ensured = await ensureJoinableOccurrenceRoom({
+        occurrenceId: occurrence.occurrenceId,
+        ...(joinTarget.occurrenceKey ? { occurrenceKey: joinTarget.occurrenceKey } : {}),
+        ...(joinTarget.roomId ? { roomId: joinTarget.roomId } : {}),
+      });
+      roomId = ensured.roomId;
+    } catch {
+      // Joinability can fail outside the window; keep the canonical occurrence snapshot.
+    }
+  }
+
+  let participantCount = occurrence.activeParticipantCount;
+  let isJoined = false;
+
+  if (roomId) {
+    const summary = await getRoomPresenceSummary(roomId);
+    participantCount = summary.activeParticipantCount;
+
+    if (normalizedUserId) {
+      const participants = await listRoomParticipants(roomId, false);
+      isJoined = participants.some(
+        (participant) => participant.userId === normalizedUserId && participant.presenceState !== 'left',
+      );
+    }
+  }
+
+  const [event, eventContent] = await Promise.all([
+    Promise.resolve(mapCanonicalOccurrenceToAppEvent(occurrence)),
+    fetchEventOccurrenceContent(occurrence.occurrenceId),
+  ]);
+
+  return {
+    event: {
+      ...event,
+      participants: participantCount,
+    },
+    eventContent,
+    isJoined,
+    joinedCount: participantCount,
+    occurrenceId: occurrence.occurrenceId,
+    roomId,
+  };
 }
 
 export async function joinEventRoom(input: EventJoinTarget | string, userId: string) {
-  const fallbackEventId =
-    typeof input === 'string' ? input.trim() : input.legacyEventId?.trim() || '';
-
-  try {
-    const { joinTarget, occurrence } = await resolveEventOccurrenceForJoinTarget(input);
-    if (!occurrence) {
-      if (fallbackEventId) {
-        await joinLegacyEventRoom(fallbackEventId, userId);
-        return;
-      }
-      throw new Error('Event occurrence not found.');
-    }
-
-    const { error } = await supabase.rpc('join_event_room', {
-      p_legacy_event_id: joinTarget.legacyEventId || occurrence.sourceEventId || null,
-      p_occurrence_id: occurrence.occurrenceId,
-      p_occurrence_key: joinTarget.occurrenceKey || occurrence.occurrenceKey || null,
-      p_room_id: joinTarget.roomId || occurrence.roomId || null,
-    });
-
-    if (error) {
-      throw new Error(toSupabaseErrorMessage(error, 'Failed to join room.'));
-    }
-
-    invalidateEventRuntimeCaches(occurrence.occurrenceId);
-  } catch (error) {
-    const message = toSupabaseErrorMessage(error, 'Failed to join room.');
-    if (fallbackEventId && shouldFallbackToLegacyEventRoom(message)) {
-      await joinLegacyEventRoom(fallbackEventId, userId);
-      return;
-    }
-    throw new Error(message);
+  const normalizedUserId = userId.trim();
+  if (!normalizedUserId) {
+    throw new Error('User id is required to join a room.');
   }
+
+  const { joinTarget, occurrence } = await resolveEventOccurrenceForJoinTarget(input);
+  if (!occurrence) {
+    throw new Error('Event occurrence not found.');
+  }
+
+  const { error } = await supabase.rpc('join_event_room', {
+    p_legacy_event_id: null,
+    p_occurrence_id: occurrence.occurrenceId,
+    p_occurrence_key: joinTarget.occurrenceKey || occurrence.occurrenceKey || null,
+    p_room_id: joinTarget.roomId || occurrence.roomId || null,
+  });
+
+  if (error) {
+    throw new Error(toSupabaseErrorMessage(error, 'Failed to join room.'));
+  }
+
+  invalidateEventRuntimeCaches(occurrence.occurrenceId);
 }
 
 export async function leaveEventRoom(input: EventJoinTarget | string, userId: string) {
-  const fallbackEventId =
-    typeof input === 'string' ? input.trim() : input.legacyEventId?.trim() || '';
-
-  try {
-    const { joinTarget, occurrence } = await resolveEventOccurrenceForJoinTarget(input);
-    if (!occurrence) {
-      if (fallbackEventId) {
-        await leaveLegacyEventRoom(fallbackEventId, userId);
-        return;
-      }
-      return;
-    }
-
-    const { error } = await supabase.rpc('leave_event_room', {
-      p_legacy_event_id: joinTarget.legacyEventId || occurrence.sourceEventId || null,
-      p_occurrence_id: occurrence.occurrenceId,
-      p_occurrence_key: joinTarget.occurrenceKey || occurrence.occurrenceKey || null,
-      p_room_id: joinTarget.roomId || occurrence.roomId || null,
-    });
-
-    if (error) {
-      throw new Error(toSupabaseErrorMessage(error, 'Failed to leave room.'));
-    }
-
-    invalidateEventRuntimeCaches(occurrence.occurrenceId);
-  } catch (error) {
-    const message = toSupabaseErrorMessage(error, 'Failed to leave room.');
-    if (fallbackEventId && shouldFallbackToLegacyEventRoom(message)) {
-      await leaveLegacyEventRoom(fallbackEventId, userId);
-      return;
-    }
-    throw new Error(message);
+  const normalizedUserId = userId.trim();
+  if (!normalizedUserId) {
+    return;
   }
+
+  const { joinTarget, occurrence } = await resolveEventOccurrenceForJoinTarget(input);
+  if (!occurrence) {
+    return;
+  }
+
+  const { error } = await supabase.rpc('leave_event_room', {
+    p_legacy_event_id: null,
+    p_occurrence_id: occurrence.occurrenceId,
+    p_occurrence_key: joinTarget.occurrenceKey || occurrence.occurrenceKey || null,
+    p_room_id: joinTarget.roomId || occurrence.roomId || null,
+  });
+
+  if (error) {
+    throw new Error(toSupabaseErrorMessage(error, 'Failed to leave room.'));
+  }
+
+  invalidateEventRuntimeCaches(occurrence.occurrenceId);
 }
 
 export async function refreshEventPresence(input: EventJoinTarget | string, userId: string) {
-  const fallbackEventId =
-    typeof input === 'string' ? input.trim() : input.legacyEventId?.trim() || '';
-
-  try {
-    const { joinTarget, occurrence } = await resolveEventOccurrenceForJoinTarget(input);
-    if (!occurrence) {
-      if (fallbackEventId) {
-        await refreshLegacyEventPresence(fallbackEventId, userId);
-      }
-      return;
-    }
-
-    const { error } = await supabase.rpc('refresh_event_room_presence', {
-      p_legacy_event_id: joinTarget.legacyEventId || occurrence.sourceEventId || null,
-      p_occurrence_id: occurrence.occurrenceId,
-      p_occurrence_key: joinTarget.occurrenceKey || occurrence.occurrenceKey || null,
-      p_room_id: joinTarget.roomId || occurrence.roomId || null,
-    });
-
-    if (error) {
-      throw new Error(toSupabaseErrorMessage(error, 'Failed to refresh room presence.'));
-    }
-
-    activeEventUsersCache.clear();
-    eventByIdCache.delete(occurrence.occurrenceId);
-  } catch (error) {
-    const message = toSupabaseErrorMessage(error, 'Failed to refresh room presence.');
-    if (fallbackEventId && shouldFallbackToLegacyEventRoom(message)) {
-      await refreshLegacyEventPresence(fallbackEventId, userId);
-      return;
-    }
-    throw new Error(message);
+  const normalizedUserId = userId.trim();
+  if (!normalizedUserId) {
+    return;
   }
+
+  const { joinTarget, occurrence } = await resolveEventOccurrenceForJoinTarget(input);
+  if (!occurrence) {
+    return;
+  }
+
+  const { error } = await supabase.rpc('refresh_event_room_presence', {
+    p_legacy_event_id: null,
+    p_occurrence_id: occurrence.occurrenceId,
+    p_occurrence_key: joinTarget.occurrenceKey || occurrence.occurrenceKey || null,
+    p_room_id: joinTarget.roomId || occurrence.roomId || null,
+  });
+
+  if (error) {
+    throw new Error(toSupabaseErrorMessage(error, 'Failed to refresh room presence.'));
+  }
+
+  activeEventUsersCache.clear();
+  eventByIdCache.delete(occurrence.occurrenceId);
 }
 
 export async function createSharedSoloSession(input: {

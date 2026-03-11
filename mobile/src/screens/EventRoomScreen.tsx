@@ -85,6 +85,17 @@ const ELEVENLABS_VOICE_ID_BY_LABEL: Partial<Record<(typeof VOICE_OPTIONS)[number
   Rainbird: 'bgU7lBMo69PNEOWHFqxM',
   Dominic: 'V904i8ujLitGpMyoTznT',
 };
+const VOICE_LABEL_BY_ELEVENLABS_ID = Object.entries(ELEVENLABS_VOICE_ID_BY_LABEL).reduce(
+  (accumulator, [label, voiceId]) => {
+    if (!voiceId) {
+      return accumulator;
+    }
+
+    accumulator[voiceId] = label as (typeof VOICE_OPTIONS)[number];
+    return accumulator;
+  },
+  {} as Record<string, (typeof VOICE_OPTIONS)[number]>,
+);
 
 function formatClock(totalSeconds: number) {
   const clamped = Math.max(0, Math.floor(totalSeconds));
@@ -123,6 +134,15 @@ function buildFallbackEventScript(description?: string | null, hostNote?: string
     .filter((value): value is string => Boolean(value && value.length > 0))
     .join('\n\n')
     .trim();
+}
+
+function toVoiceOptionFromVoiceId(voiceId?: string | null) {
+  const normalized = voiceId?.trim() || '';
+  if (!normalized) {
+    return null;
+  }
+
+  return VOICE_LABEL_BY_ELEVENLABS_ID[normalized] ?? null;
 }
 
 function toEventRoomSafeErrorMessage(error: unknown, fallback: string) {
@@ -212,6 +232,8 @@ export function EventRoomScreen() {
   const [reportingRoom, setReportingRoom] = useState(false);
   const [resolvedOccurrenceId, setResolvedOccurrenceId] = useState(routeOccurrenceId);
   const [resolvedRoomId, setResolvedRoomId] = useState(routeRoomId);
+  const [eventOccurrenceContentId, setEventOccurrenceContentId] = useState<string | null>(null);
+  const [preferredVoiceIdOverride, setPreferredVoiceIdOverride] = useState<string | null>(null);
 
   const [eventTitle, setEventTitle] = useState(initialEventTitle);
   const [, setEventBody] = useState(initialEventBody);
@@ -256,9 +278,10 @@ export function EventRoomScreen() {
     : 0;
 
   const activeVoiceId = ELEVENLABS_VOICE_ID_BY_LABEL[selectedVoice] ?? DEFAULT_ELEVENLABS_VOICE_ID;
+  const resolvedVoiceId = preferredVoiceIdOverride ?? activeVoiceId;
   const activeAudioKey = useMemo(
-    () => `${activeVoiceId}|${eventScript.trim()}`,
-    [activeVoiceId, eventScript],
+    () => `${resolvedVoiceId}|${eventScript.trim()}`,
+    [eventScript, resolvedVoiceId],
   );
 
   const {
@@ -277,9 +300,10 @@ export function EventRoomScreen() {
     activeAudioKey,
     allowAudioGeneration,
     durationMinutes: eventDurationMinutes,
+    ...(eventOccurrenceContentId ? { eventOccurrenceContentId } : {}),
     scriptText: eventScript,
     title: eventTitle,
-    voiceId: activeVoiceId,
+    voiceId: resolvedVoiceId,
   });
 
   const activeElapsedMillis = hasStarted ? elapsedFromScheduleMillis : playerPositionMillis;
@@ -339,6 +363,8 @@ export function EventRoomScreen() {
     presenceLeftRef.current = false;
     setResolvedOccurrenceId(routeOccurrenceId);
     setResolvedRoomId(routeRoomId);
+    setEventOccurrenceContentId(null);
+    setPreferredVoiceIdOverride(null);
   }, [joinTargetKey]);
 
   const leavePresence = useCallback(async () => {
@@ -443,9 +469,15 @@ export function EventRoomScreen() {
         }
 
         const snapshotEvent = snapshot.event;
+        const snapshotContent = snapshot.eventContent;
+        const recommendedVoiceId = snapshotContent?.voiceId?.trim() || null;
+        const recommendedVoiceLabel = toVoiceOptionFromVoiceId(recommendedVoiceId);
         setEventTitle(route.params?.eventTitle?.trim() || snapshotEvent.title);
         setEventDurationMinutes(
-          route.params?.durationMinutes ?? snapshotEvent.durationMinutes ?? 10,
+          route.params?.durationMinutes ??
+            snapshotContent?.durationMinutes ??
+            snapshotEvent.durationMinutes ??
+            10,
         );
         setParticipantCount(snapshot.joinedCount);
         setEventStartAt(
@@ -453,6 +485,11 @@ export function EventRoomScreen() {
             snapshotEvent.startsAt ||
             new Date().toISOString(),
         );
+        setEventOccurrenceContentId(snapshotContent?.id ?? null);
+        setPreferredVoiceIdOverride(recommendedVoiceId);
+        if (recommendedVoiceLabel) {
+          setSelectedVoice(recommendedVoiceLabel);
+        }
         if (snapshot.occurrenceId) {
           setResolvedOccurrenceId(snapshot.occurrenceId);
         }
@@ -532,26 +569,39 @@ export function EventRoomScreen() {
         }
 
         const snapshotEvent = snapshot.event;
+        const snapshotContent = snapshot.eventContent;
+        const recommendedVoiceId = snapshotContent?.voiceId?.trim() || null;
+        const recommendedVoiceLabel = toVoiceOptionFromVoiceId(recommendedVoiceId);
         const fallbackScript = buildFallbackEventScript(
           snapshotEvent.description,
           snapshotEvent.hostNote,
         );
+        const contentScript = snapshotContent?.scriptText?.trim() || '';
 
         setEventTitle(route.params?.eventTitle?.trim() || snapshotEvent.title);
         setEventBody(snapshotEvent.description?.trim() || 'Hold intention for this live room.');
         setEventScript(
-          route.params?.scriptText?.trim() ||
+          contentScript ||
+            route.params?.scriptText?.trim() ||
             fallbackScript ||
             'We gather in shared intention and focus for this live room.',
         );
         setEventDurationMinutes(
-          route.params?.durationMinutes ?? snapshotEvent.durationMinutes ?? 10,
+          route.params?.durationMinutes ??
+            snapshotContent?.durationMinutes ??
+            snapshotEvent.durationMinutes ??
+            10,
         );
         setEventStartAt(
           route.params?.scheduledStartAt?.trim() ||
             snapshotEvent.startsAt ||
             new Date().toISOString(),
         );
+        setEventOccurrenceContentId(snapshotContent?.id ?? null);
+        setPreferredVoiceIdOverride(recommendedVoiceId);
+        if (recommendedVoiceLabel) {
+          setSelectedVoice(recommendedVoiceLabel);
+        }
         setParticipantCount(snapshot.joinedCount);
         if (snapshot.occurrenceId) {
           setResolvedOccurrenceId(snapshot.occurrenceId);
@@ -729,12 +779,20 @@ export function EventRoomScreen() {
     prefetchPrayerAudio({
       allowGeneration: allowAudioGeneration,
       durationMinutes: eventDurationMinutes,
+      ...(eventOccurrenceContentId ? { eventOccurrenceContentId } : {}),
       language: 'en',
       script: nextScript,
       title: eventTitle,
-      voiceId: activeVoiceId,
+      voiceId: resolvedVoiceId,
     });
-  }, [activeVoiceId, allowAudioGeneration, eventDurationMinutes, eventScript, eventTitle]);
+  }, [
+    allowAudioGeneration,
+    eventDurationMinutes,
+    eventOccurrenceContentId,
+    eventScript,
+    eventTitle,
+    resolvedVoiceId,
+  ]);
 
   const activeTimedWordIndex = useMemo(
     () => findActiveTimedWordIndex(timedWords, activeElapsedMillis),
@@ -1416,6 +1474,7 @@ export function EventRoomScreen() {
                         key={voice}
                         onPress={(event) => {
                           event.stopPropagation();
+                          setPreferredVoiceIdOverride(null);
                           setSelectedVoice(voice);
                           setIsVoiceMenuOpen(false);
                         }}

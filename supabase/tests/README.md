@@ -42,3 +42,11 @@ psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/phase_5a_foundation
 ```
 
 This script also runs in a transaction and ends with `ROLLBACK`.
+
+Event library overhaul canonical dataset/materialization test:
+
+```bash
+psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/event_library_overhaul.sql
+```
+
+This script also runs in a transaction and ends with `ROLLBACK`.

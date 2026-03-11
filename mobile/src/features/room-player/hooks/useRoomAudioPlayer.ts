@@ -16,6 +16,7 @@ interface UseRoomAudioPlayerInput {
   activeAudioKey: string;
   allowAudioGeneration: boolean;
   durationMinutes: number;
+  eventOccurrenceContentId?: string;
   language?: string;
   prayerLibraryItemId?: string;
   scriptText: string;
@@ -65,6 +66,7 @@ export function useRoomAudioPlayer({
   activeAudioKey,
   allowAudioGeneration,
   durationMinutes,
+  eventOccurrenceContentId,
   language = 'en',
   prayerLibraryItemId,
   scriptText,
@@ -125,6 +127,7 @@ export function useRoomAudioPlayer({
         audioResponse = await generatePrayerAudio({
           allowGeneration: allowAudioGeneration,
           durationMinutes,
+          ...(eventOccurrenceContentId ? { eventOccurrenceContentId } : {}),
           language,
           ...(prayerLibraryItemId ? { prayerLibraryItemId } : {}),
           script: nextScript,
@@ -184,6 +187,7 @@ export function useRoomAudioPlayer({
     disposeActivePlayer,
     durationMinutes,
     isMuted,
+    eventOccurrenceContentId,
     language,
     prayerLibraryItemId,
     scriptText,

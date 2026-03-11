@@ -418,8 +418,6 @@ export function EventDetailsScreen() {
                     resolved_state: resolvedState,
                     room_id: occurrence.roomId ?? null,
                   });
-                  const roomScriptText =
-                    occurrence.seriesPurpose?.trim() || occurrence.seriesDescription?.trim() || '';
                   const roomParams: EventsStackParamList['EventRoom'] = {
                     durationMinutes: occurrence.durationMinutes,
                     eventTitle: occurrence.seriesName,
@@ -427,7 +425,6 @@ export function EventDetailsScreen() {
                     occurrenceKey: occurrence.occurrenceKey,
                     scheduledStartAt: occurrence.startsAtUtc,
                     ...(occurrence.roomId ? { roomId: occurrence.roomId } : {}),
-                    ...(roomScriptText ? { scriptText: roomScriptText } : {}),
                   };
                   navigation.navigate('EventRoom', roomParams);
                 }}

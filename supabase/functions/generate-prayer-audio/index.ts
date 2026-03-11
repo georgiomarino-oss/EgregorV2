@@ -5,6 +5,7 @@ import { corsHeaders } from "../_shared/cors.ts";
 interface PrayerAudioRequest {
   allowGeneration?: boolean;
   durationMinutes?: number;
+  eventOccurrenceContentId?: string;
   language?: string;
   prayerLibraryItemId?: string;
   prayerLibraryScriptId?: string;
@@ -344,14 +345,60 @@ async function upsertArtifact(
     word_timings: input.wordTimings,
   };
 
-  const { error } = await client
+  const { data, error } = await client
     .from("prayer_audio_artifacts")
     .upsert(payload, {
       onConflict: "voice_id,model_id,cache_version,script_hash",
-    });
+    })
+    .select(PRAYER_AUDIO_ARTIFACT_SELECT)
+    .maybeSingle();
+
+  if (error) {
+    if (isMissingTableError(error)) {
+      return null;
+    }
+
+    throw new Error(`Failed to upsert prayer audio artifact: ${error.message}`);
+  }
+
+  return (data as PrayerAudioArtifactRow | null) ?? null;
+}
+
+async function syncEventOccurrenceContentAudio(
+  client: SupabaseAdminClient,
+  input: {
+    audioArtifactId: string | null;
+    audioError: string | null;
+    audioGeneratedAtIso: string | null;
+    audioStatus: "failed" | "missing" | "pending" | "ready";
+    eventOccurrenceContentId: string | null;
+    hasWordTimings: boolean;
+    voiceId: string;
+    voiceLabel: string | null;
+  },
+) {
+  const eventOccurrenceContentId = input.eventOccurrenceContentId?.trim() || "";
+  if (!eventOccurrenceContentId) {
+    return;
+  }
+
+  const { error } = await client
+    .from("event_occurrence_content")
+    .update({
+      audio_artifact_id: input.audioArtifactId,
+      audio_error: input.audioError,
+      audio_generated_at: input.audioGeneratedAtIso,
+      audio_status: input.audioStatus,
+      has_word_timings: input.hasWordTimings,
+      voice_id: input.voiceId,
+      voice_label: input.voiceLabel,
+    })
+    .eq("id", eventOccurrenceContentId);
 
   if (error && !isMissingTableError(error)) {
-    throw new Error(`Failed to upsert prayer audio artifact: ${error.message}`);
+    throw new Error(
+      `Failed to update event occurrence content audio linkage: ${error.message}`,
+    );
   }
 }
 
@@ -645,6 +692,8 @@ Deno.serve(async (request) => {
     const durationMinutes = toPositiveInteger(payload.durationMinutes);
     const language = payload.language?.trim() || "en";
     const allowGeneration = payload.allowGeneration === true;
+    const eventOccurrenceContentId =
+      payload.eventOccurrenceContentId?.trim() || null;
     const prayerLibraryScriptId = payload.prayerLibraryScriptId?.trim() || null;
     const prayerLibraryItemId = payload.prayerLibraryItemId?.trim() || null;
     const title = payload.title?.trim() || null;
@@ -694,7 +743,7 @@ Deno.serve(async (request) => {
               timingObjectPath,
             );
 
-      await upsertArtifact(supabaseAdmin, {
+      const readyArtifact = await upsertArtifact(supabaseAdmin, {
         cacheVersion,
         contentType: artifact?.content_type || DEFAULT_CONTENT_TYPE,
         durationMinutes: durationMinutes ?? artifact?.duration_minutes ?? null,
@@ -716,6 +765,19 @@ Deno.serve(async (request) => {
         voiceLabel: voiceLabel ?? artifact?.voice_label ?? null,
         wordTimings: cachedWordTimings,
       });
+      await syncEventOccurrenceContentAudio(supabaseAdmin, {
+        audioArtifactId: readyArtifact?.id ?? artifact?.id ?? null,
+        audioError: null,
+        audioGeneratedAtIso:
+          readyArtifact?.generated_at ??
+          artifact?.generated_at ??
+          timezoneNowIso(),
+        audioStatus: "ready",
+        eventOccurrenceContentId,
+        hasWordTimings: cachedWordTimings.length > 0,
+        voiceId,
+        voiceLabel: voiceLabel ?? artifact?.voice_label ?? null,
+      });
 
       return new Response(
         JSON.stringify({
@@ -732,6 +794,18 @@ Deno.serve(async (request) => {
     }
 
     if (!allowGeneration) {
+      await syncEventOccurrenceContentAudio(supabaseAdmin, {
+        audioArtifactId: null,
+        audioError:
+          "No pre-generated audio artifact exists for this script and voice.",
+        audioGeneratedAtIso: null,
+        audioStatus: "missing",
+        eventOccurrenceContentId,
+        hasWordTimings: false,
+        voiceId,
+        voiceLabel,
+      });
+
       return new Response(
         JSON.stringify({
           error: "Audio artifact not found",
@@ -745,7 +819,7 @@ Deno.serve(async (request) => {
       );
     }
 
-    await upsertArtifact(supabaseAdmin, {
+    const pendingArtifact = await upsertArtifact(supabaseAdmin, {
       cacheVersion,
       contentType: DEFAULT_CONTENT_TYPE,
       durationMinutes,
@@ -764,6 +838,16 @@ Deno.serve(async (request) => {
       voiceId,
       voiceLabel,
       wordTimings: [],
+    });
+    await syncEventOccurrenceContentAudio(supabaseAdmin, {
+      audioArtifactId: pendingArtifact?.id ?? artifact?.id ?? null,
+      audioError: null,
+      audioGeneratedAtIso: null,
+      audioStatus: "pending",
+      eventOccurrenceContentId,
+      hasWordTimings: false,
+      voiceId,
+      voiceLabel,
     });
 
     const voiceSettings = await fetchVoiceSettings(elevenLabsApiKey, voiceId);
@@ -791,12 +875,13 @@ Deno.serve(async (request) => {
 
     if (!response.ok) {
       const errorText = await response.text();
+      const failedError = errorText.slice(0, 4000);
 
-      await upsertArtifact(supabaseAdmin, {
+      const failedArtifact = await upsertArtifact(supabaseAdmin, {
         cacheVersion,
         contentType: DEFAULT_CONTENT_TYPE,
         durationMinutes,
-        errorMessage: errorText.slice(0, 4000),
+        errorMessage: failedError,
         generatedAtIso: timezoneNowIso(),
         language,
         modelId,
@@ -811,6 +896,16 @@ Deno.serve(async (request) => {
         voiceId,
         voiceLabel,
         wordTimings: [],
+      });
+      await syncEventOccurrenceContentAudio(supabaseAdmin, {
+        audioArtifactId: failedArtifact?.id ?? pendingArtifact?.id ?? null,
+        audioError: failedError,
+        audioGeneratedAtIso: null,
+        audioStatus: "failed",
+        eventOccurrenceContentId,
+        hasWordTimings: false,
+        voiceId,
+        voiceLabel,
       });
 
       return new Response(
@@ -830,7 +925,7 @@ Deno.serve(async (request) => {
     const audioBase64 = timestampPayload.audio_base64?.trim();
 
     if (!audioBase64) {
-      await upsertArtifact(supabaseAdmin, {
+      const failedArtifact = await upsertArtifact(supabaseAdmin, {
         cacheVersion,
         contentType: DEFAULT_CONTENT_TYPE,
         durationMinutes,
@@ -849,6 +944,16 @@ Deno.serve(async (request) => {
         voiceId,
         voiceLabel,
         wordTimings: [],
+      });
+      await syncEventOccurrenceContentAudio(supabaseAdmin, {
+        audioArtifactId: failedArtifact?.id ?? pendingArtifact?.id ?? null,
+        audioError: "ElevenLabs response missing audio data",
+        audioGeneratedAtIso: null,
+        audioStatus: "failed",
+        eventOccurrenceContentId,
+        hasWordTimings: false,
+        voiceId,
+        voiceLabel,
       });
 
       return new Response(
@@ -886,7 +991,7 @@ Deno.serve(async (request) => {
     );
 
     if (!audioUrl) {
-      await upsertArtifact(supabaseAdmin, {
+      const failedArtifact = await upsertArtifact(supabaseAdmin, {
         cacheVersion,
         contentType: DEFAULT_CONTENT_TYPE,
         durationMinutes,
@@ -906,6 +1011,16 @@ Deno.serve(async (request) => {
         voiceLabel,
         wordTimings,
       });
+      await syncEventOccurrenceContentAudio(supabaseAdmin, {
+        audioArtifactId: failedArtifact?.id ?? pendingArtifact?.id ?? null,
+        audioError: "Failed to create signed audio URL after upload",
+        audioGeneratedAtIso: null,
+        audioStatus: "failed",
+        eventOccurrenceContentId,
+        hasWordTimings: wordTimings.length > 0,
+        voiceId,
+        voiceLabel,
+      });
 
       return new Response(
         JSON.stringify({
@@ -918,12 +1033,13 @@ Deno.serve(async (request) => {
       );
     }
 
-    await upsertArtifact(supabaseAdmin, {
+    const readyGeneratedAtIso = timezoneNowIso();
+    const readyArtifact = await upsertArtifact(supabaseAdmin, {
       cacheVersion,
       contentType: DEFAULT_CONTENT_TYPE,
       durationMinutes,
       errorMessage: null,
-      generatedAtIso: timezoneNowIso(),
+      generatedAtIso: readyGeneratedAtIso,
       language,
       modelId,
       prayerLibraryItemId,
@@ -937,6 +1053,17 @@ Deno.serve(async (request) => {
       voiceId,
       voiceLabel,
       wordTimings,
+    });
+    await syncEventOccurrenceContentAudio(supabaseAdmin, {
+      audioArtifactId: readyArtifact?.id ?? pendingArtifact?.id ?? null,
+      audioError: null,
+      audioGeneratedAtIso:
+        readyArtifact?.generated_at ?? readyGeneratedAtIso,
+      audioStatus: "ready",
+      eventOccurrenceContentId,
+      hasWordTimings: wordTimings.length > 0,
+      voiceId,
+      voiceLabel,
     });
 
     return new Response(

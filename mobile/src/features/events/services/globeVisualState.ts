@@ -1,9 +1,12 @@
 import type { ScheduledEventOccurrence } from '../types';
 
 const FLAGSHIP_SERIES_KEYS = new Set([
-  'admin-curated-special-moment',
+  'special-collective-moment',
+  'global-peace-circle',
+  'global-awakening-meditation',
+  'heart-coherence-circle',
+  'full-moon-gathering',
   'emergency-global-prayer',
-  'global-heartbeat',
 ]);
 const RITUAL_1111_SERIES_KEY = 'daily-1111-intention-reset';
 
