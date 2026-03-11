@@ -179,7 +179,7 @@ export function describeDeletionStatus(
       badgeLabel: 'No request',
       badgeTone: 'neutral',
       detail:
-        'Submitting a request starts an auditable support-reviewed deletion workflow. It is not instant.',
+        'Requesting deletion starts full account deletion, not deactivation. Support reviews requests, and limited records may be retained for legal, billing, fraud, or security obligations.',
       headline: 'No account deletion request is active.',
       requestDisabled: false,
     };
@@ -189,7 +189,8 @@ export function describeDeletionStatus(
     return {
       badgeLabel: 'Requested',
       badgeTone: 'warning',
-      detail: 'Your request was received and is waiting for support acknowledgement.',
+      detail:
+        'Your full account deletion request was received. Support will verify ownership and acknowledge next steps.',
       headline: 'Deletion request submitted.',
       requestDisabled: true,
     };
@@ -199,7 +200,8 @@ export function describeDeletionStatus(
     return {
       badgeLabel: 'Acknowledged',
       badgeTone: 'warning',
-      detail: 'Support has acknowledged your request and will continue review.',
+      detail:
+        'Support acknowledged your request. Your account remains inaccessible for repeated deletion requests while review continues.',
       headline: 'Deletion request acknowledged.',
       requestDisabled: true,
     };
@@ -209,7 +211,8 @@ export function describeDeletionStatus(
     return {
       badgeLabel: 'In review',
       badgeTone: 'warning',
-      detail: 'Support is actively reviewing your account deletion request.',
+      detail:
+        'Support is actively processing your deletion request. Completion timing depends on verification and legal obligations.',
       headline: 'Deletion request in review.',
       requestDisabled: true,
     };
@@ -219,7 +222,8 @@ export function describeDeletionStatus(
     return {
       badgeLabel: 'Completed',
       badgeTone: 'success',
-      detail: 'Your deletion request has been completed.',
+      detail:
+        'Your deletion request has been completed. Some records may remain only when required for legal, security, fraud, or audit reasons.',
       headline: 'Account deletion completed.',
       requestDisabled: true,
     };
@@ -239,7 +243,8 @@ export function describeDeletionStatus(
     return {
       badgeLabel: 'Rejected',
       badgeTone: 'danger',
-      detail: 'The request was closed by support. Contact support for details.',
+      detail:
+        'The request was closed by support. Open support for details and, if needed, submit a new request.',
       headline: 'Deletion request closed.',
       requestDisabled: false,
     };

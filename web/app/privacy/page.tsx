@@ -121,8 +121,9 @@ export default function PrivacyPolicyPage() {
         <ul>
           <li>Access, update, or correct profile information in the app.</li>
           <li>
-            Request account deletion from in-app settings or through our web
-            account deletion page.
+            Request full account deletion in app from{" "}
+            {siteConfig.accountDeletionPath}, or use our web account deletion
+            page if you cannot access the app.
           </li>
           <li>Opt out of optional notifications in app settings.</li>
           <li>

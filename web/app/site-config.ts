@@ -10,7 +10,7 @@
   companyAddress: "167-169 Great Portland Street, Fifth Floor, London, W1W 5PF",
   supportHours: "Monday-Friday, 9:00 AM-5:00 PM UK time",
   accountDeletionPath:
-    "Profile -> Account -> Delete account",
+    "Profile -> Settings -> Account deletion",
   appleSubscriptionTermsUrl: "/subscriptions",
   appleStandardEulaUrl:
     "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/"

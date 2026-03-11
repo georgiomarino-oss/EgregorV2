@@ -81,9 +81,12 @@ test('account deletion status presentation is transparent and idempotent-aware',
 
   assert.equal(none.requestDisabled, false);
   assert.equal(none.badgeLabel, 'No request');
+  assert.match(none.detail, /full account deletion/i);
+  assert.match(none.detail, /not deactivation/i);
 
   assert.equal(requested.requestDisabled, true);
   assert.equal(requested.badgeLabel, 'Requested');
+  assert.match(requested.detail, /verify ownership/i);
 
   assert.equal(inReview.requestDisabled, true);
   assert.equal(inReview.badgeLabel, 'In review');

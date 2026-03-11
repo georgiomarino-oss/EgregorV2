@@ -176,6 +176,7 @@ export const defaultSiteContent: SiteContent = {
       "Use this form for support, billing, legal, and partnership questions.",
     topics: [
       "Account access",
+      "Account deletion",
       "Subscriptions and billing",
       "Bug report",
       "Privacy and legal",

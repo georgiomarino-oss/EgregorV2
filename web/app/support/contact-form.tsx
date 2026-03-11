@@ -159,7 +159,9 @@ export default function ContactForm({ topics }: ContactFormProps) {
         >
           {buttonLabel}
         </button>
-        <p className="form-helper">Use this channel for account, billing, legal, and partnership topics.</p>
+        <p className="form-helper">
+          Use this channel for account access, account deletion, billing, legal, and partnership topics.
+        </p>
         {status.message ? (
           <p
             className={`form-status ${status.status === "error" ? "error" : "success"}`}

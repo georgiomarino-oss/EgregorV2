@@ -161,6 +161,24 @@ function formatRelativeSaveTime(timestamp: string | null) {
   })}`;
 }
 
+function formatDeletionRequestTime(timestamp: string | null) {
+  if (!timestamp) {
+    return null;
+  }
+
+  const value = new Date(timestamp).getTime();
+  if (!Number.isFinite(value)) {
+    return null;
+  }
+
+  return new Date(value).toLocaleString(undefined, {
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    month: 'short',
+  });
+}
+
 type ProfileScreenMode = 'profile' | 'settings';
 type ProfileNavigation = NativeStackNavigationProp<ProfileStackParamList>;
 
@@ -179,6 +197,7 @@ function ProfileScreenContent({ mode }: ProfileScreenContentProps) {
   const [summary, setSummary] = useState<ProfileSummary | null>(null);
   const [deletionStatus, setDeletionStatus] = useState<AccountDeletionState | null>(null);
   const [deletionError, setDeletionError] = useState<string | null>(null);
+  const [deletionInfoMessage, setDeletionInfoMessage] = useState<string | null>(null);
   const [loadingDeletionStatus, setLoadingDeletionStatus] = useState(false);
   const [submittingDeletionRequest, setSubmittingDeletionRequest] = useState(false);
   const [notificationSettings, setNotificationSettings] = useState<NotificationSettingsState>(
@@ -844,6 +863,7 @@ function ProfileScreenContent({ mode }: ProfileScreenContentProps) {
   const onRetryProfileLoad = () => {
     setError(null);
     setDeletionError(null);
+    setDeletionInfoMessage(null);
     setJournalError(null);
     setNotificationSettingsError(null);
     setPrivacySettingsError(null);
@@ -865,6 +885,7 @@ function ProfileScreenContent({ mode }: ProfileScreenContentProps) {
 
   const submitDeletionRequest = useCallback(async () => {
     if (activeDeletionRequest) {
+      setDeletionInfoMessage('A deletion request is already active. You can track status here.');
       return;
     }
 
@@ -872,10 +893,11 @@ function ProfileScreenContent({ mode }: ProfileScreenContentProps) {
       source: 'account_deletion',
       surface: 'profile',
     });
+    const previousRequestId = deletionStatus?.requestId ?? null;
 
     setSubmittingDeletionRequest(true);
     try {
-      await createAccountDeletionRequest({
+      const requestResult = await createAccountDeletionRequest({
         details: 'Initiated from in-app profile flow.',
         reason: 'user_initiated_in_app',
         supportMetadata: supportRouting.supportMetadata,
@@ -884,11 +906,24 @@ function ProfileScreenContent({ mode }: ProfileScreenContentProps) {
       const status = await getAccountDeletionStatus();
       setDeletionStatus(status);
       setDeletionError(null);
+      if (previousRequestId && previousRequestId === requestResult.requestId) {
+        setDeletionInfoMessage('A deletion request is already active and being reviewed.');
+      } else if (
+        requestResult.status === 'acknowledged' ||
+        requestResult.status === 'in_review'
+      ) {
+        setDeletionInfoMessage('A deletion request is already active and in progress.');
+      } else {
+        setDeletionInfoMessage(
+          'Deletion request submitted. Support will review it and you can track status here.',
+        );
+      }
       trackMobileEvent(MOBILE_ANALYTICS_EVENTS.ACCOUNT_DELETION_REQUESTED, {
         source: 'profile_account_deletion',
         status: status?.status ?? null,
       });
     } catch (nextError) {
+      setDeletionInfoMessage(null);
       setDeletionError(
         nextError instanceof Error
           ? nextError.message
@@ -897,16 +932,17 @@ function ProfileScreenContent({ mode }: ProfileScreenContentProps) {
     } finally {
       setSubmittingDeletionRequest(false);
     }
-  }, [activeDeletionRequest]);
+  }, [activeDeletionRequest, deletionStatus?.requestId]);
 
   const requestAccountDeletion = useCallback(() => {
     if (activeDeletionRequest) {
+      setDeletionInfoMessage('A deletion request is already active. You can track status here.');
       return;
     }
 
     Alert.alert(
-      'Request account deletion',
-      'This sends a support-reviewed deletion request. Your account is not deleted instantly. Continue?',
+      'Request full account deletion',
+      'This requests full account deletion, not deactivation. Support reviews requests before completion. Some records may be retained for legal, billing, fraud, or security obligations. Continue?',
       [
         {
           style: 'cancel',
@@ -953,6 +989,7 @@ function ProfileScreenContent({ mode }: ProfileScreenContentProps) {
           activeJournalPage?.updatedAt ?? activeJournalPage?.createdAt ?? null,
         );
   const saveStateTone = isSavingActivePage ? 'saving' : hasUnsavedChanges ? 'unsaved' : 'saved';
+  const deletionRequestedAtLabel = formatDeletionRequestTime(deletionStatus?.requestedAt ?? null);
 
   return (
     <Screen
@@ -1081,7 +1118,7 @@ function ProfileScreenContent({ mode }: ProfileScreenContentProps) {
           >
             <SectionHeader
               compact
-              subtitle="Move to Settings for notifications, privacy, safety, support, and account actions."
+              subtitle="Move to Settings for notifications, privacy, safety, support, and full account deletion."
               subtitleColor={profileSurface.utility.subtitle}
               title="Settings and safeguards"
               titleColor={profileSurface.utility.title}
@@ -1118,7 +1155,7 @@ function ProfileScreenContent({ mode }: ProfileScreenContentProps) {
               onPress={() => {
                 navigation.navigate('ProfileSettings');
               }}
-              title="Account deletion and support"
+              title="Open account deletion in settings"
             />
           </PremiumProfileTrustCardSurface>
         </>
@@ -1298,24 +1335,42 @@ function ProfileScreenContent({ mode }: ProfileScreenContentProps) {
             <Typography color={profileSurface.utility.subtitle} variant="Caption">
               {deletionStatusPresentation.detail}
             </Typography>
+            <Typography color={profileSurface.utility.subtitle} variant="Caption">
+              Requesting deletion removes your account and associated personal data where permitted. It
+              is a full deletion workflow, not account deactivation.
+            </Typography>
+            <Typography color={profileSurface.utility.subtitle} variant="Caption">
+              We may retain limited records only for legal, fraud, security, billing, or audit
+              obligations. We target completion within 7 business days after verification.
+            </Typography>
+            {deletionRequestedAtLabel ? (
+              <Typography color={profileSurface.utility.subtitle} variant="Caption">
+                Request created: {deletionRequestedAtLabel}
+              </Typography>
+            ) : null}
+            {deletionInfoMessage ? (
+              <Typography color={profileSurface.utility.subtitle} variant="Caption">
+                {deletionInfoMessage}
+              </Typography>
+            ) : null}
             <SecondaryButton
               disabled={deletionStatusPresentation.requestDisabled}
               loading={submittingDeletionRequest}
               onPress={requestAccountDeletion}
               title={
                 deletionStatusPresentation.requestDisabled
-                  ? 'Deletion request active'
-                  : 'Request account deletion'
+                  ? 'Deletion request in progress'
+                  : 'Request full account deletion'
               }
             />
             <SecondaryButton
               onPress={() => {
                 void openExternalUrl(
                   ACCOUNT_DELETION_WEB_URL,
-                  'Could not open account deletion policy.',
+                  'Could not open account deletion page.',
                 );
               }}
-              title="Open deletion policy"
+              title="Open account deletion page"
             />
             <SecondaryButton
               onPress={() => {
