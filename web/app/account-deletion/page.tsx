@@ -15,8 +15,8 @@ export default function AccountDeletionPage() {
         <span className="kicker-pill">Account and Retention</span>
         <h1>Account Deletion</h1>
         <p className="policy-meta">
-          You can request full account deletion in the app. If you cannot
-          access the app, you can submit the same request through support on
+          You can permanently delete your account directly in the app. If you
+          cannot access the app, you can request deletion through support on
           this website.
         </p>
         <div className="link-row">
@@ -33,20 +33,20 @@ export default function AccountDeletionPage() {
       </header>
 
       <section className="policy-section">
-        <h2>Start Deletion In The App (Primary Path)</h2>
+        <h2>Delete In The App (Primary Path)</h2>
         <ul>
           <li>Sign in to your account in the mobile app.</li>
           <li>Open {siteConfig.accountDeletionPath}.</li>
-          <li>Select <strong>Request full account deletion</strong> and confirm.</li>
+          <li>Select <strong>Delete account permanently</strong> and confirm.</li>
           <li>
-            Track request status in-app while support reviews and completes the
-            request.
+            Deletion runs immediately through a secure server-side workflow.
           </li>
+          <li>You are signed out right after successful deletion.</li>
         </ul>
       </section>
 
       <section className="policy-section">
-        <h2>Web Request Path (If You Cannot Access The App)</h2>
+        <h2>Web Path (If You Cannot Access The App)</h2>
         <ul>
           <li>
             Open <Link href="/support">Support</Link> and choose topic{" "}
@@ -61,7 +61,8 @@ export default function AccountDeletionPage() {
             confirming your request.
           </li>
           <li>
-            We will verify account ownership before completion.
+            We verify account ownership, then run the same deletion workflow on
+            your behalf.
           </li>
         </ul>
       </section>
@@ -101,10 +102,11 @@ export default function AccountDeletionPage() {
       </section>
 
       <section className="policy-section">
-        <h2>Review and Timeline</h2>
+        <h2>Timeline</h2>
         <p>
-          Requests are support-reviewed. We target completion within 7 business
-          days after verification, unless local law requires a shorter period.
+          In-app deletion is automated and starts immediately after
+          confirmation. If support must run deletion for an inaccessible
+          account, completion depends on verification timing.
         </p>
       </section>
     </article>

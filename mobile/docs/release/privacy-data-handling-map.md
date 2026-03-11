@@ -29,8 +29,8 @@ This map aligns app behavior with current policy/support/deletion web surfaces:
 - Purpose: report/block workflows, moderation audit trail
 
 5. Account deletion
-- Table: `account_deletion_requests`
-- Purpose: support-reviewed deletion workflow state
+- Tables: `account_deletion_requests`, `account_deletion_audit_logs`
+- Purpose: in-app true deletion execution + auditable backend deletion trail
 
 6. Observability
 - Tables: `mobile_analytics_events`
@@ -49,10 +49,11 @@ This map aligns app behavior with current policy/support/deletion web surfaces:
 
 ## 3) Deletion Flow Mapping
 
-1. In-app request calls `create_account_deletion_request`.
-2. Status is surfaced by `get_account_deletion_status`.
-3. Web page `web/app/account-deletion/page.tsx` remains external fallback path.
-4. Device targets are disabled in deletion flow (Phase 5A behavior retained).
+1. In-app deletion calls edge function `delete-account`.
+2. Edge function performs server-side cleanup and hard auth deletion.
+3. Deletion is audited in `account_deletion_audit_logs`.
+4. App signs out locally after successful deletion to leave authenticated UI immediately.
+5. Web page `web/app/account-deletion/page.tsx` remains Google Play compliance resource and fallback path.
 
 ## 4) Access Control Summary
 
@@ -64,5 +65,5 @@ This map aligns app behavior with current policy/support/deletion web surfaces:
 ## 5) Store Compliance Notes
 
 1. Privacy policy and terms URLs are published and linked.
-2. Account deletion is available in-app and on web fallback.
+2. True account deletion is available in-app and on web fallback.
 3. Permission rationale is documented separately in `mobile/docs/release/permissions-rationale.md`.

@@ -110,8 +110,10 @@ export default function PrivacyPolicyPage() {
             monitoring on a rolling schedule.
           </li>
           <li>
-            If you request account deletion, we remove or anonymize personal
-            data unless retention is required by law.
+            If you delete your account in-app, we remove account-linked data in
+            our automated deletion workflow. Some records may be retained where
+            required for legal, billing, fraud prevention, security, moderation,
+            or audit obligations.
           </li>
         </ul>
       </section>

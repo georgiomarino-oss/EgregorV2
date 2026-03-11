@@ -9,5 +9,8 @@ verify_jwt = true
 [functions.generate-event-occurrence-script]
 verify_jwt = true
 
+[functions.delete-account]
+verify_jwt = true
+
 [functions.dispatch-notification-queue]
 verify_jwt = false

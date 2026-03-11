@@ -54,7 +54,7 @@ export default async function SupportPage() {
             <li>Priority incidents: same day during support hours.</li>
             <li>Billing and account queries: usually within one business day.</li>
             <li>Legal or compliance requests: routed to the right contact quickly.</li>
-            <li>Account deletion requests: verification-first workflow.</li>
+            <li>Account deletion support requests: verification-first workflow.</li>
           </ul>
         </article>
       </section>
@@ -64,15 +64,18 @@ export default async function SupportPage() {
         <ul>
           <li>
             Primary path: open {siteConfig.accountDeletionPath} in the app and
-            request full account deletion.
+            choose <strong>Delete account permanently</strong>.
+          </li>
+          <li>
+            In-app deletion is automated and signs you out after completion.
           </li>
           <li>
             If you cannot access the app, submit this support form with topic{" "}
             <strong>Account deletion</strong> or email {siteConfig.supportEmail}.
           </li>
           <li>
-            We review each request and may ask for identity verification before
-            completion.
+            We may ask for identity verification before running deletion for
+            inaccessible accounts.
           </li>
         </ul>
       </section>

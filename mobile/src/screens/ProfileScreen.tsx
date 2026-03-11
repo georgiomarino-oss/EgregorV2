@@ -23,16 +23,13 @@ import { SafetySupportPanel } from '../features/profile/components/SafetySupport
 import { TrustHero } from '../features/profile/components/TrustHero';
 import { TrustMetricsPanel } from '../features/profile/components/TrustMetricsPanel';
 import {
-  describeDeletionStatus,
   describeNotificationPermissionState,
   describePrivacySettings,
   describeReminderState,
   describeSafetyActionFeedback,
 } from '../features/profile/services/accountTrustPresentation';
 import {
-  createAccountDeletionRequest,
-  getAccountDeletionStatus,
-  type AccountDeletionState,
+  deleteAccountPermanently,
 } from '../lib/api/accountDeletion';
 import {
   createUserJournalEntry,
@@ -64,7 +61,6 @@ import {
   ACCOUNT_DELETION_WEB_URL,
   PRIVACY_WEB_URL,
   SUPPORT_WEB_URL,
-  buildSupportRouteMetadata,
 } from '../lib/support';
 import { supabase } from '../lib/supabase';
 import { MOBILE_ANALYTICS_EVENTS, trackMobileEvent } from '../lib/observability';
@@ -161,24 +157,6 @@ function formatRelativeSaveTime(timestamp: string | null) {
   })}`;
 }
 
-function formatDeletionRequestTime(timestamp: string | null) {
-  if (!timestamp) {
-    return null;
-  }
-
-  const value = new Date(timestamp).getTime();
-  if (!Number.isFinite(value)) {
-    return null;
-  }
-
-  return new Date(value).toLocaleString(undefined, {
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    month: 'short',
-  });
-}
-
 type ProfileScreenMode = 'profile' | 'settings';
 type ProfileNavigation = NativeStackNavigationProp<ProfileStackParamList>;
 
@@ -195,11 +173,9 @@ function ProfileScreenContent({ mode }: ProfileScreenContentProps) {
   const [error, setError] = useState<string | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [summary, setSummary] = useState<ProfileSummary | null>(null);
-  const [deletionStatus, setDeletionStatus] = useState<AccountDeletionState | null>(null);
   const [deletionError, setDeletionError] = useState<string | null>(null);
   const [deletionInfoMessage, setDeletionInfoMessage] = useState<string | null>(null);
-  const [loadingDeletionStatus, setLoadingDeletionStatus] = useState(false);
-  const [submittingDeletionRequest, setSubmittingDeletionRequest] = useState(false);
+  const [deletingAccount, setDeletingAccount] = useState(false);
   const [notificationSettings, setNotificationSettings] = useState<NotificationSettingsState>(
     defaultNotificationSettingsState(),
   );
@@ -283,24 +259,6 @@ function ProfileScreenContent({ mode }: ProfileScreenContentProps) {
       setError(nextError instanceof Error ? nextError.message : 'Failed to load profile.');
     } finally {
       setLoadingProfile(false);
-    }
-  }, []);
-
-  const loadDeletionStatus = useCallback(async (nextUser: User | null) => {
-    if (!nextUser) {
-      setDeletionStatus(null);
-      setLoadingDeletionStatus(false);
-      return;
-    }
-
-    setLoadingDeletionStatus(true);
-    try {
-      const status = await getAccountDeletionStatus();
-      setDeletionStatus(status);
-    } catch {
-      setDeletionStatus(null);
-    } finally {
-      setLoadingDeletionStatus(false);
     }
   }, []);
 
@@ -607,7 +565,6 @@ function ProfileScreenContent({ mode }: ProfileScreenContentProps) {
       setUser(data.user);
       await loadProfile(data.user);
       await loadJournal(data.user);
-      await loadDeletionStatus(data.user);
       await loadNotificationSettings(data.user);
       await loadPrivacySettings(data.user);
       await loadBlockedUsers(data.user);
@@ -622,7 +579,6 @@ function ProfileScreenContent({ mode }: ProfileScreenContentProps) {
       setUser(nextUser);
       void loadProfile(nextUser);
       void loadJournal(nextUser);
-      void loadDeletionStatus(nextUser);
       void loadNotificationSettings(nextUser);
       void loadPrivacySettings(nextUser);
       void loadBlockedUsers(nextUser);
@@ -634,7 +590,6 @@ function ProfileScreenContent({ mode }: ProfileScreenContentProps) {
     };
   }, [
     loadBlockedUsers,
-    loadDeletionStatus,
     loadJournal,
     loadNotificationSettings,
     loadPrivacySettings,
@@ -870,79 +825,70 @@ function ProfileScreenContent({ mode }: ProfileScreenContentProps) {
     setSafetyError(null);
     void loadProfile(user);
     void loadJournal(user);
-    void loadDeletionStatus(user);
     void loadNotificationSettings(user);
     void loadPrivacySettings(user);
     void loadBlockedUsers(user);
   };
-
-  const activeDeletionRequest = Boolean(
-    deletionStatus &&
-      (deletionStatus.status === 'requested' ||
-        deletionStatus.status === 'acknowledged' ||
-        deletionStatus.status === 'in_review'),
-  );
-
-  const submitDeletionRequest = useCallback(async () => {
-    if (activeDeletionRequest) {
-      setDeletionInfoMessage('A deletion request is already active. You can track status here.');
+  const submitPermanentAccountDeletion = useCallback(async () => {
+    if (deletingAccount) {
+      setDeletionInfoMessage('Account deletion is already in progress.');
       return;
     }
 
-    const supportRouting = buildSupportRouteMetadata({
-      source: 'account_deletion',
-      surface: 'profile',
-    });
-    const previousRequestId = deletionStatus?.requestId ?? null;
+    setDeletionError(null);
+    setDeletionInfoMessage('Deleting your account now...');
+    setDeletingAccount(true);
 
-    setSubmittingDeletionRequest(true);
     try {
-      const requestResult = await createAccountDeletionRequest({
-        details: 'Initiated from in-app profile flow.',
-        reason: 'user_initiated_in_app',
-        supportMetadata: supportRouting.supportMetadata,
-        supportRoute: supportRouting.supportRoute,
+      const result = await deleteAccountPermanently({
+        confirmationText: 'DELETE',
+        requestSource: 'in_app_profile_settings',
+        requestedReason: 'user_initiated_true_deletion',
       });
-      const status = await getAccountDeletionStatus();
-      setDeletionStatus(status);
-      setDeletionError(null);
-      if (previousRequestId && previousRequestId === requestResult.requestId) {
-        setDeletionInfoMessage('A deletion request is already active and being reviewed.');
-      } else if (
-        requestResult.status === 'acknowledged' ||
-        requestResult.status === 'in_review'
-      ) {
-        setDeletionInfoMessage('A deletion request is already active and in progress.');
-      } else {
-        setDeletionInfoMessage(
-          'Deletion request submitted. Support will review it and you can track status here.',
-        );
-      }
+
       trackMobileEvent(MOBILE_ANALYTICS_EVENTS.ACCOUNT_DELETION_REQUESTED, {
+        mode: 'true_in_app_delete',
         source: 'profile_account_deletion',
-        status: status?.status ?? null,
+        status: result.alreadyDeleted ? 'already_deleted' : 'deleted',
       });
+
+      const { error: localSignOutError } = await supabase.auth.signOut({
+        scope: 'local',
+      });
+      if (localSignOutError) {
+        await supabase.auth.signOut();
+      }
+
+      Alert.alert(
+        'Account deleted',
+        'Your account and associated app data have been permanently deleted. You have been signed out.',
+      );
     } catch (nextError) {
-      setDeletionInfoMessage(null);
-      setDeletionError(
+      const message =
         nextError instanceof Error
           ? nextError.message
-          : 'Failed to request account deletion at this time.',
-      );
+          : 'Failed to delete your account at this time.';
+      if (/in progress/i.test(message)) {
+        setDeletionInfoMessage('Account deletion is already in progress.');
+        setDeletionError(null);
+      } else {
+        setDeletionInfoMessage(null);
+        setDeletionError(message);
+      }
     } finally {
-      setSubmittingDeletionRequest(false);
+      setDeletingAccount(false);
     }
-  }, [activeDeletionRequest, deletionStatus?.requestId]);
+  }, [deletingAccount]);
 
   const requestAccountDeletion = useCallback(() => {
-    if (activeDeletionRequest) {
-      setDeletionInfoMessage('A deletion request is already active. You can track status here.');
+    if (deletingAccount) {
+      setDeletionInfoMessage('Account deletion is already in progress.');
       return;
     }
 
     Alert.alert(
-      'Request full account deletion',
-      'This requests full account deletion, not deactivation. Support reviews requests before completion. Some records may be retained for legal, billing, fraud, or security obligations. Continue?',
+      'Delete account permanently',
+      'This permanently deletes your account and associated app data. This action is irreversible. Limited records may be retained for legal, billing, fraud prevention, security, moderation, or audit obligations. Continue now?',
       [
         {
           style: 'cancel',
@@ -950,16 +896,18 @@ function ProfileScreenContent({ mode }: ProfileScreenContentProps) {
         },
         {
           style: 'destructive',
-          text: 'Request deletion',
+          text: 'Delete permanently',
           onPress: () => {
-            void submitDeletionRequest();
+            void submitPermanentAccountDeletion();
           },
         },
       ],
     );
-  }, [activeDeletionRequest, submitDeletionRequest]);
+  }, [deletingAccount, submitPermanentAccountDeletion]);
 
-  const deletionStatusPresentation = describeDeletionStatus(deletionStatus?.status ?? null);
+  const deletionBadge = deletingAccount
+    ? { label: 'Deleting', tone: 'warning' as const }
+    : { label: 'Ready', tone: 'active' as const };
   const notificationPermissionPresentation = describeNotificationPermissionState(
     notificationPermissionState,
   );
@@ -989,7 +937,6 @@ function ProfileScreenContent({ mode }: ProfileScreenContentProps) {
           activeJournalPage?.updatedAt ?? activeJournalPage?.createdAt ?? null,
         );
   const saveStateTone = isSavingActivePage ? 'saving' : hasUnsavedChanges ? 'unsaved' : 'saved';
-  const deletionRequestedAtLabel = formatDeletionRequestTime(deletionStatus?.requestedAt ?? null);
 
   return (
     <Screen
@@ -1123,18 +1070,7 @@ function ProfileScreenContent({ mode }: ProfileScreenContentProps) {
               title="Settings and safeguards"
               titleColor={profileSurface.utility.title}
               trailing={
-                <Badge
-                  label={deletionStatusPresentation.badgeLabel}
-                  tone={
-                    deletionStatusPresentation.badgeTone === 'success'
-                      ? 'success'
-                      : deletionStatusPresentation.badgeTone === 'warning'
-                        ? 'warning'
-                        : deletionStatusPresentation.badgeTone === 'danger'
-                          ? 'error'
-                          : 'active'
-                  }
-                />
+                <Badge label={deletionBadge.label} tone={deletionBadge.tone} />
               }
             />
             <Typography color={profileSurface.utility.subtitle} variant="Caption">
@@ -1310,58 +1246,39 @@ function ProfileScreenContent({ mode }: ProfileScreenContentProps) {
             <SectionHeader
               compact
               subtitle={
-                loadingDeletionStatus
-                  ? 'Checking deletion workflow status...'
-                  : deletionStatusPresentation.headline
+                deletingAccount
+                  ? 'Deleting your account and associated app data now...'
+                  : 'This flow permanently deletes your account in-app.'
               }
               subtitleColor={profileSurface.utility.subtitle}
               title="Account deletion"
               titleColor={profileSurface.utility.title}
               trailing={
-                <Badge
-                  label={deletionStatusPresentation.badgeLabel}
-                  tone={
-                    deletionStatusPresentation.badgeTone === 'success'
-                      ? 'success'
-                      : deletionStatusPresentation.badgeTone === 'warning'
-                        ? 'warning'
-                        : deletionStatusPresentation.badgeTone === 'danger'
-                          ? 'error'
-                          : 'active'
-                  }
-                />
+                <Badge label={deletionBadge.label} tone={deletionBadge.tone} />
               }
             />
             <Typography color={profileSurface.utility.subtitle} variant="Caption">
-              {deletionStatusPresentation.detail}
+              This action deletes your account and associated app data. It is full deletion, not
+              deactivation.
             </Typography>
             <Typography color={profileSurface.utility.subtitle} variant="Caption">
-              Requesting deletion removes your account and associated personal data where permitted. It
-              is a full deletion workflow, not account deactivation.
+              Deletion runs through a secure server-side path and starts immediately after you
+              confirm.
             </Typography>
             <Typography color={profileSurface.utility.subtitle} variant="Caption">
-              We may retain limited records only for legal, fraud, security, billing, or audit
-              obligations. We target completion within 7 business days after verification.
+              We may retain limited records only for legal, billing, fraud prevention, security,
+              moderation, or audit obligations.
             </Typography>
-            {deletionRequestedAtLabel ? (
-              <Typography color={profileSurface.utility.subtitle} variant="Caption">
-                Request created: {deletionRequestedAtLabel}
-              </Typography>
-            ) : null}
             {deletionInfoMessage ? (
               <Typography color={profileSurface.utility.subtitle} variant="Caption">
                 {deletionInfoMessage}
               </Typography>
             ) : null}
             <SecondaryButton
-              disabled={deletionStatusPresentation.requestDisabled}
-              loading={submittingDeletionRequest}
+              disabled={deletingAccount}
+              loading={deletingAccount}
               onPress={requestAccountDeletion}
-              title={
-                deletionStatusPresentation.requestDisabled
-                  ? 'Deletion request in progress'
-                  : 'Request full account deletion'
-              }
+              title={deletingAccount ? 'Deleting account...' : 'Delete account permanently'}
             />
             <SecondaryButton
               onPress={() => {
@@ -1381,7 +1298,7 @@ function ProfileScreenContent({ mode }: ProfileScreenContentProps) {
             {deletionError ? (
               <InlineErrorCard
                 message={deletionError}
-                title="Deletion request issue"
+                title="Deletion issue"
                 tone="warning"
               />
             ) : null}

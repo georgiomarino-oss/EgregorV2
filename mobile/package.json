@@ -20,6 +20,7 @@
     "test:phase3b-live": "node ./scripts/run-phase3b-live-tests.mjs",
     "test:phase4b-visual": "node ./scripts/run-phase4b-visual-tests.mjs",
     "test:phase5b-account-trust": "node ./scripts/run-phase5b-account-trust-tests.mjs",
+    "test:account-deletion-security": "node --test ./tests/account-deletion-security.test.cjs",
     "test:phase6a-dispatch": "node ./scripts/run-phase6a-notification-dispatch-tests.mjs",
     "test:final-art-layout": "node ./scripts/run-final-art-layout-tests.mjs",
     "test:release-baseline": "npm run test:phase3b-live && npm run test:phase4b-visual && npm run test:phase5b-account-trust && npm run test:phase6a-dispatch",

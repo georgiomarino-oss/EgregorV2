@@ -1,91 +1,59 @@
 import { supabase } from '../supabase';
 import { toSupabaseErrorMessage } from './errors';
 
-export type AccountDeletionStatus =
-  | 'acknowledged'
-  | 'cancelled'
-  | 'completed'
-  | 'in_review'
-  | 'rejected'
-  | 'requested';
-
-interface AccountDeletionRequestRow {
-  request_id: string;
-  requested_at: string;
-  status: AccountDeletionStatus;
-  updated_at: string;
+interface DeleteAccountFunctionResponse {
+  alreadyDeleted?: boolean;
+  deleted?: boolean;
+  deletedAt?: string;
+  detail?: string;
+  error?: string;
+  retainedDataSummary?: string;
 }
 
-interface AccountDeletionStatusRow extends AccountDeletionRequestRow {
-  details: string | null;
-  reason: string | null;
-  support_metadata: Record<string, unknown> | null;
-  support_route: string | null;
+export interface DeleteAccountInput {
+  confirmationText?: string;
+  requestSource?: string;
+  requestedReason?: string;
 }
 
-export interface AccountDeletionRequestResult {
-  requestId: string;
-  requestedAt: string;
-  status: AccountDeletionStatus;
-  updatedAt: string;
+export interface DeleteAccountResult {
+  alreadyDeleted: boolean;
+  deleted: boolean;
+  deletedAt: string | null;
+  retainedDataSummary: string | null;
 }
 
-export interface AccountDeletionState extends AccountDeletionRequestResult {
-  details: string | null;
-  reason: string | null;
-  supportMetadata: Record<string, unknown>;
-  supportRoute: string | null;
-}
+export async function deleteAccountPermanently(
+  input?: DeleteAccountInput,
+): Promise<DeleteAccountResult> {
+  const confirmationText = input?.confirmationText?.trim() || 'DELETE';
+  const requestSource = input?.requestSource?.trim() || 'in_app_profile_settings';
+  const requestedReason = input?.requestedReason?.trim() || 'user_initiated_true_deletion';
 
-export async function createAccountDeletionRequest(input?: {
-  details?: string;
-  reason?: string;
-  supportMetadata?: Record<string, unknown>;
-  supportRoute?: string;
-}): Promise<AccountDeletionRequestResult> {
-  const { data, error } = await supabase.rpc('create_account_deletion_request', {
-    p_details: input?.details?.trim() || null,
-    p_reason: input?.reason?.trim() || null,
-    p_support_metadata: input?.supportMetadata ?? {},
-    p_support_route: input?.supportRoute?.trim() || null,
-  });
+  const { data, error } = await supabase.functions.invoke<DeleteAccountFunctionResponse>(
+    'delete-account',
+    {
+      body: {
+        confirmationText,
+        confirmPermanentDeletion: true,
+        requestSource,
+        requestedReason,
+      },
+    },
+  );
 
   if (error) {
-    throw new Error(toSupabaseErrorMessage(error, 'Failed to create account deletion request.'));
+    throw new Error(toSupabaseErrorMessage(error, 'Failed to delete account.'));
   }
 
-  const row = ((data ?? []) as AccountDeletionRequestRow[])[0];
-  if (!row) {
-    throw new Error('Account deletion request returned no result.');
+  if (!data?.deleted) {
+    throw new Error(data?.detail || data?.error || 'Account deletion did not complete.');
   }
 
   return {
-    requestId: row.request_id,
-    requestedAt: row.requested_at,
-    status: row.status,
-    updatedAt: row.updated_at,
-  };
-}
-
-export async function getAccountDeletionStatus(): Promise<AccountDeletionState | null> {
-  const { data, error } = await supabase.rpc('get_account_deletion_status');
-  if (error) {
-    throw new Error(toSupabaseErrorMessage(error, 'Failed to load account deletion status.'));
-  }
-
-  const row = ((data ?? []) as AccountDeletionStatusRow[])[0];
-  if (!row) {
-    return null;
-  }
-
-  return {
-    details: row.details,
-    reason: row.reason,
-    requestId: row.request_id,
-    requestedAt: row.requested_at,
-    status: row.status,
-    supportMetadata: row.support_metadata ?? {},
-    supportRoute: row.support_route,
-    updatedAt: row.updated_at,
+    alreadyDeleted: data.alreadyDeleted === true,
+    deleted: true,
+    deletedAt: data.deletedAt?.trim() || null,
+    retainedDataSummary: data.retainedDataSummary?.trim() || null,
   };
 }
