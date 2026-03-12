@@ -11,11 +11,9 @@ import { EventDetailsScreen } from '../../screens/EventDetailsScreen';
 import { EventRoomScreen } from '../../screens/EventRoomScreen';
 import { EventsScreen } from '../../screens/EventsScreen';
 import { InviteDecisionScreen } from '../../screens/InviteDecisionScreen';
-import { PrayerLibraryScreen } from '../../screens/PrayerLibraryScreen';
 import { ProfileScreen, ProfileSettingsScreen } from '../../screens/ProfileScreen';
 import { SoloLiveScreen } from '../../screens/SoloLiveScreen';
 import { SoloScreen } from '../../screens/SoloScreen';
-import { SoloSetupScreen } from '../../screens/SoloSetupScreen';
 import type {
   CaptureNavigationTarget,
   CommunityStackParamList,
@@ -48,8 +46,6 @@ function SoloStackNavigator({ initialRouteName, soloLiveInitialParams }: SoloSta
   return (
     <SoloStack.Navigator {...navigatorProps} screenOptions={sharedStackOptions}>
       <SoloStack.Screen name="SoloHome" component={SoloScreen} />
-      <SoloStack.Screen name="PrayerLibrary" component={PrayerLibraryScreen} />
-      <SoloStack.Screen name="SoloSetup" component={SoloSetupScreen} />
       <SoloStack.Screen name="SoloLive" component={SoloLiveScreen} {...soloLiveProps} />
     </SoloStack.Navigator>
   );

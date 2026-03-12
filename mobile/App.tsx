@@ -50,10 +50,8 @@ function parseCaptureTargetFromHash(): CaptureNavigationTarget | undefined {
   };
 
   const soloRouteMap: Record<string, CaptureNavigationTarget['soloRoute']> = {
-    prayerlibrary: 'PrayerLibrary',
     solohome: 'SoloHome',
     sololive: 'SoloLive',
-    solosetup: 'SoloSetup',
   };
 
   const eventsRouteMap: Record<string, CaptureNavigationTarget['eventsRoute']> = {

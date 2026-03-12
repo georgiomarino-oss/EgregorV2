@@ -11,7 +11,6 @@ export type MainTabParamList = {
 };
 
 export type SoloStackParamList = {
-  PrayerLibrary: undefined;
   SoloHome: undefined;
   SoloLive:
     | {
@@ -21,15 +20,6 @@ export type SoloStackParamList = {
         intention?: string;
         prayerLibraryItemId?: string;
         sharedSessionId?: string;
-        scriptPreset?: string;
-      }
-    | undefined;
-  SoloSetup:
-    | {
-        allowAudioGeneration?: boolean;
-        durationMinutes?: number;
-        intention?: string;
-        prayerLibraryItemId?: string;
         scriptPreset?: string;
       }
     | undefined;

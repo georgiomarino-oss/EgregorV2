@@ -94,7 +94,6 @@ const linking: LinkingOptions<RootStackParamList> = {
           },
           SoloTab: {
             screens: {
-              PrayerLibrary: 'solo/library',
               SoloHome: 'solo',
               SoloLive: {
                 parse: {
@@ -116,19 +115,6 @@ const linking: LinkingOptions<RootStackParamList> = {
                   sharedSessionId: (value: string) => value,
                 },
                 path: 'solo/live',
-              },
-              SoloSetup: {
-                parse: {
-                  allowAudioGeneration: (value: string) => value === 'true',
-                  durationMinutes: (value: string) => {
-                    const parsed = Number(value);
-                    return Number.isFinite(parsed) ? parsed : undefined;
-                  },
-                  intention: (value: string) => value,
-                  prayerLibraryItemId: (value: string) => value,
-                  scriptPreset: (value: string) => value,
-                },
-                path: 'solo/setup',
               },
             },
           },
