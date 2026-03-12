@@ -14,17 +14,12 @@ interface TrustHeroProps {
   loading: boolean;
   sessionsThisWeek: number;
   soloStreakDays: number;
-  weeklyImpactChangePercent: number;
+  weeklyCollectiveImpactScore: number;
 }
 
-function formatImpact(value: number) {
-  if (Math.abs(value) < 0.5) {
-    return '0%';
-  }
-  if (value > 0) {
-    return `+${value}%`;
-  }
-  return `${value}%`;
+function formatImpactScore(value: number) {
+  const normalized = Math.max(0, Math.min(100, Math.round(value)));
+  return `${normalized}%`;
 }
 
 export function TrustHero({
@@ -32,7 +27,7 @@ export function TrustHero({
   loading,
   sessionsThisWeek,
   soloStreakDays,
-  weeklyImpactChangePercent,
+  weeklyCollectiveImpactScore,
 }: TrustHeroProps) {
   const reduceMotionEnabled = useReducedMotion();
   const settle = useMemo(() => new Animated.Value(0), []);
@@ -113,7 +108,7 @@ export function TrustHero({
                 variant="Metric"
                 weight="bold"
               >
-                {formatImpact(weeklyImpactChangePercent)}
+                {formatImpactScore(weeklyCollectiveImpactScore)}
               </Typography>
               <Typography
                 color={profileSurface.hero.metricLabel}

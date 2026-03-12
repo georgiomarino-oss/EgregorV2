@@ -991,7 +991,7 @@ function ProfileScreenContent({ mode }: ProfileScreenContentProps) {
             loading={loadingProfile}
             sessionsThisWeek={summary?.sessionsThisWeek ?? 0}
             soloStreakDays={summary?.soloStreakDays ?? 0}
-            weeklyImpactChangePercent={summary?.weeklyImpactChangePercent ?? 0}
+            weeklyCollectiveImpactScore={summary?.weeklyCollectiveImpactScore ?? 0}
           />
 
           <TrustMetricsPanel
@@ -1001,6 +1001,8 @@ function ProfileScreenContent({ mode }: ProfileScreenContentProps) {
             minutesPrayed={summary?.minutesPrayed ?? 0}
             sessionsThisWeek={summary?.sessionsThisWeek ?? 0}
             soloStreakDays={summary?.soloStreakDays ?? 0}
+            weeklyEventImpactScore={summary?.weeklyEventImpactScore ?? 0}
+            weeklySoloImpactScore={summary?.weeklySoloImpactScore ?? 0}
           />
 
           <JournalPanel

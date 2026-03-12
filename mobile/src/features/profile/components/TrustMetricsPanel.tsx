@@ -16,6 +16,8 @@ interface TrustMetricsPanelProps {
   minutesPrayed: number;
   sessionsThisWeek: number;
   soloStreakDays: number;
+  weeklyEventImpactScore: number;
+  weeklySoloImpactScore: number;
 }
 
 export function TrustMetricsPanel({
@@ -25,6 +27,8 @@ export function TrustMetricsPanel({
   minutesPrayed,
   sessionsThisWeek,
   soloStreakDays,
+  weeklyEventImpactScore,
+  weeklySoloImpactScore,
 }: TrustMetricsPanelProps) {
   const reduceMotionEnabled = useReducedMotion();
   const settle = useMemo(() => new Animated.Value(0), []);
@@ -107,6 +111,7 @@ export function TrustMetricsPanel({
                 <MetricRow label="Minutes prayed" value={minutesPrayed.toString()} />
                 <MetricRow label="Sessions this week" value={sessionsThisWeek.toString()} />
                 <MetricRow label="Solo completion streak" value={`${soloStreakDays} days`} />
+                <MetricRow label="Solo impact score" value={`${weeklySoloImpactScore}%`} />
               </View>
             </View>
 
@@ -126,6 +131,7 @@ export function TrustMetricsPanel({
                   label="Event rooms joined this week"
                   value={eventsJoinedThisWeek.toString()}
                 />
+                <MetricRow label="Event impact score" value={`${weeklyEventImpactScore}%`} />
               </View>
             </View>
           </>

@@ -363,7 +363,9 @@ export interface ProfileSummary {
   minutesPrayed: number;
   sessionsThisWeek: number;
   soloStreakDays: number;
-  weeklyImpactChangePercent: number;
+  weeklyCollectiveImpactScore: number;
+  weeklyEventImpactScore: number;
+  weeklySoloImpactScore: number;
 }
 
 export interface SoloStats {
@@ -2099,15 +2101,42 @@ function calculateSoloStreakDays(completedDates: string[]) {
   return streak;
 }
 
-function calculateImpactChangePercent(thisWeekMinutes: number, previousWeekMinutes: number) {
-  if (previousWeekMinutes === 0) {
-    if (thisWeekMinutes === 0) {
-      return 0;
-    }
-    return 100;
+const SOLO_IMPACT_TARGET_MINUTES = 90;
+const EVENT_IMPACT_TARGET_JOINS = 5;
+const SOLO_IMPACT_WEIGHT = 0.5;
+const EVENT_IMPACT_WEIGHT = 0.5;
+
+function clampImpactScore(value: number) {
+  return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+function toWeeklyImpactScore(value: number, target: number) {
+  if (value <= 0 || target <= 0) {
+    return 0;
   }
 
-  return Math.round(((thisWeekMinutes - previousWeekMinutes) / previousWeekMinutes) * 100);
+  return clampImpactScore((value / target) * 100);
+}
+
+function calculateWeeklyImpactScores(input: { eventsJoinedThisWeek: number; thisWeekMinutes: number }) {
+  const weeklySoloImpactScore = toWeeklyImpactScore(input.thisWeekMinutes, SOLO_IMPACT_TARGET_MINUTES);
+  const weeklyEventImpactScore = toWeeklyImpactScore(
+    input.eventsJoinedThisWeek,
+    EVENT_IMPACT_TARGET_JOINS,
+  );
+  const weightTotal = SOLO_IMPACT_WEIGHT + EVENT_IMPACT_WEIGHT;
+  const normalizedWeightTotal = weightTotal > 0 ? weightTotal : 1;
+  const weeklyCollectiveImpactScore = clampImpactScore(
+    (weeklySoloImpactScore * SOLO_IMPACT_WEIGHT +
+      weeklyEventImpactScore * EVENT_IMPACT_WEIGHT) /
+      normalizedWeightTotal,
+  );
+
+  return {
+    weeklyCollectiveImpactScore,
+    weeklyEventImpactScore,
+    weeklySoloImpactScore,
+  };
 }
 
 export async function fetchProfileSummary(userId: string): Promise<ProfileSummary> {
@@ -2124,8 +2153,6 @@ export async function fetchProfileSummary(userId: string): Promise<ProfileSummar
     async () => {
       const now = new Date();
       const weekStart = startOfWeekMonday(now);
-      const previousWeekStart = new Date(weekStart);
-      previousWeekStart.setDate(previousWeekStart.getDate() - 7);
 
       const [preferences, membershipRes, roomParticipantRes, soloSessionsRes] = await Promise.all([
         fetchUserPreferences(normalizedUserId),
@@ -2235,20 +2262,20 @@ export async function fetchProfileSummary(userId: string): Promise<ProfileSummar
           .reduce((acc, row) => acc + (row.duration_seconds ?? 0), 0),
       );
 
-      const previousWeekMinutes = minutesFromSeconds(
-        completedSessionRows
-          .filter((row) => {
-            const completedAt = row.completed_at ? new Date(row.completed_at).getTime() : 0;
-            return completedAt >= previousWeekStart.getTime() && completedAt < weekStart.getTime();
-          })
-          .reduce((acc, row) => acc + (row.duration_seconds ?? 0), 0),
-      );
-
       const soloStreakDays = calculateSoloStreakDays(
         completedSessionRows
           .map((row) => row.completed_at)
           .filter((value): value is string => Boolean(value)),
       );
+
+      const {
+        weeklyCollectiveImpactScore,
+        weeklyEventImpactScore,
+        weeklySoloImpactScore,
+      } = calculateWeeklyImpactScores({
+        eventsJoinedThisWeek,
+        thisWeekMinutes,
+      });
 
       return {
         circleMembers,
@@ -2257,10 +2284,9 @@ export async function fetchProfileSummary(userId: string): Promise<ProfileSummar
         minutesPrayed,
         sessionsThisWeek,
         soloStreakDays,
-        weeklyImpactChangePercent: calculateImpactChangePercent(
-          thisWeekMinutes,
-          previousWeekMinutes,
-        ),
+        weeklyCollectiveImpactScore,
+        weeklyEventImpactScore,
+        weeklySoloImpactScore,
       };
     },
   );
