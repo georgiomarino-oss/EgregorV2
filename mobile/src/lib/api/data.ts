@@ -104,12 +104,6 @@ interface SoloSessionRow {
   id: string;
 }
 
-interface UserIntentionRow {
-  created_at: string;
-  id: string;
-  intention: string;
-}
-
 interface UserJournalEntryRow {
   content: string;
   created_at: string;
@@ -205,25 +199,6 @@ interface EventFeedRow {
   visibility_scope: EventVisibilityScope;
 }
 
-interface EventSeriesRow {
-  access_mode: EventAccessMode;
-  category: string;
-  created_at: string;
-  default_duration_minutes: number;
-  description: string | null;
-  id: string;
-  is_active: boolean;
-  is_emergency: boolean;
-  is_special: boolean;
-  key: string;
-  metadata: Record<string, unknown> | null;
-  name: string;
-  purpose: string | null;
-  schedule_type: CanonicalEventScheduleType;
-  subtitle: string | null;
-  visibility_scope: EventVisibilityScope;
-}
-
 interface ActiveOccurrencePresenceRow {
   last_seen_at: string;
   occurrence_id: string;
@@ -247,18 +222,6 @@ interface RoomParticipantSummaryRow {
   presence_state: 'active' | 'idle' | 'left';
   role: 'host' | 'moderator' | 'participant';
   room_id: string;
-  user_id: string;
-}
-
-interface ReminderPreferenceRow {
-  channel: 'email' | 'in_app' | 'push';
-  enabled: boolean;
-  lead_minutes: number;
-  occurrence_id: string | null;
-  reminder_id: string;
-  room_id: string | null;
-  series_id: string | null;
-  target_type: 'occurrence' | 'room' | 'series';
   user_id: string;
 }
 
@@ -476,7 +439,6 @@ export interface UserJournalEntry {
 
 const PRAYER_LIBRARY_CACHE_TTL_MS = 45_000;
 const EVENTS_CACHE_TTL_MS = 30_000;
-const EVENT_BY_ID_CACHE_TTL_MS = 30_000;
 const COMMUNITY_SNAPSHOT_CACHE_TTL_MS = 20_000;
 const EVENT_FEED_CACHE_TTL_MS = 20_000;
 const EVENT_OCCURRENCE_CONTENT_CACHE_TTL_MS = 20_000;
@@ -504,7 +466,6 @@ interface TimedCacheEntry<T> {
 const eventsCache = new Map<string, TimedCacheEntry<AppEvent[]>>();
 const eventsRequestCache = new Map<string, Promise<AppEvent[]>>();
 const eventByIdCache = new Map<string, TimedCacheEntry<AppEvent | null>>();
-const eventByIdRequestCache = new Map<string, Promise<AppEvent | null>>();
 const eventFeedCache = new Map<string, TimedCacheEntry<CanonicalEventOccurrence[]>>();
 const eventFeedRequestCache = new Map<string, Promise<CanonicalEventOccurrence[]>>();
 const eventOccurrenceContentCache = new Map<string, TimedCacheEntry<EventOccurrenceContent | null>>();
@@ -632,31 +593,11 @@ export function getCachedPrayerLibraryItems() {
   return cache.items;
 }
 
-export function getCachedEvents(limit = 8) {
-  return readFreshTimedCache(eventsCache, `${limit}`, EVENTS_CACHE_TTL_MS)?.value ?? null;
-}
-
 export function getCachedEventFeed(input?: { horizonHours?: number; timezone?: string }) {
   const horizonHours = Math.max(1, Math.min(Math.round(input?.horizonHours ?? 72), 336));
   const timezone = input?.timezone?.trim() ?? '';
   const cacheKey = `${horizonHours}|${timezone}`;
   return readFreshTimedCache(eventFeedCache, cacheKey, EVENT_FEED_CACHE_TTL_MS)?.value ?? null;
-}
-
-export function getCachedEventById(eventId: string) {
-  const normalizedEventId = eventId.trim();
-  if (!normalizedEventId) {
-    return undefined;
-  }
-
-  return readFreshTimedCache(eventByIdCache, normalizedEventId, EVENT_BY_ID_CACHE_TTL_MS)?.value;
-}
-
-export function getCachedCommunitySnapshot() {
-  return (
-    readFreshTimedCache(communitySnapshotCache, 'default', COMMUNITY_SNAPSHOT_CACHE_TTL_MS)
-      ?.value ?? null
-  );
 }
 
 export function getCachedActiveEventUsers(activeWindowMinutes = 15) {
@@ -1068,27 +1009,6 @@ function mapCanonicalOccurrenceToAppEvent(occurrence: CanonicalEventOccurrence):
   };
 }
 
-function mapEventSeriesRow(row: EventSeriesRow): CanonicalEventSeries {
-  return {
-    accessMode: row.access_mode,
-    category: row.category,
-    createdAt: row.created_at,
-    defaultDurationMinutes: row.default_duration_minutes,
-    description: row.description,
-    id: row.id,
-    isActive: Boolean(row.is_active),
-    isEmergency: Boolean(row.is_emergency),
-    isSpecial: Boolean(row.is_special),
-    key: row.key,
-    metadata: row.metadata ?? {},
-    name: row.name,
-    purpose: row.purpose,
-    scheduleType: row.schedule_type,
-    subtitle: row.subtitle,
-    visibilityScope: row.visibility_scope,
-  };
-}
-
 function mapSharedSoloSessionRow(row: SharedSoloSessionRow): SharedSoloSession {
   return {
     createdAt: row.created_at,
@@ -1195,81 +1115,6 @@ export async function listEventFeed(input?: {
       return occurrences;
     },
   );
-}
-
-export async function listLiveEventSections(input?: {
-  horizonHours?: number;
-  timezone?: string;
-}) {
-  const feed = await listEventFeed(input);
-  const grouped = new Map<string, CanonicalEventOccurrence[]>();
-
-  for (const occurrence of feed) {
-    const key = occurrence.category || 'Collective';
-    const current = grouped.get(key) ?? [];
-    current.push(occurrence);
-    grouped.set(key, current);
-  }
-
-  return Array.from(grouped.entries())
-    .map(([category, occurrences]) => ({
-      category,
-      occurrences: occurrences.slice().sort((left, right) => {
-        return (
-          new Date(left.startsAtUtc).getTime() - new Date(right.startsAtUtc).getTime()
-        );
-      }),
-    }))
-    .sort((left, right) => left.category.localeCompare(right.category));
-}
-
-export async function getEventSeries(input: {
-  seriesId?: string;
-  seriesKey?: string;
-}): Promise<CanonicalEventSeries | null> {
-  const seriesId = input.seriesId?.trim() || null;
-  const seriesKey = input.seriesKey?.trim() || null;
-  if (!seriesId && !seriesKey) {
-    return null;
-  }
-
-  const query = supabase
-    .from('event_series')
-    .select(
-      'id,key,name,subtitle,description,category,purpose,schedule_type,default_duration_minutes,visibility_scope,access_mode,is_active,is_emergency,is_special,metadata,created_at',
-    )
-    .limit(1);
-  const { data, error } = await (seriesId
-    ? query.eq('id', seriesId).maybeSingle()
-    : query.eq('key', seriesKey ?? '').maybeSingle());
-
-  if (error) {
-    throw new Error(toSupabaseErrorMessage(error, 'Failed to load event series.'));
-  }
-
-  if (!data) {
-    return null;
-  }
-
-  return mapEventSeriesRow(data as EventSeriesRow);
-}
-
-export async function getEventOccurrence(occurrenceId: string): Promise<CanonicalEventOccurrence | null> {
-  const normalizedId = occurrenceId.trim();
-  if (!normalizedId) {
-    return null;
-  }
-
-  const { data, error } = await supabase.rpc('get_event_occurrence', {
-    p_occurrence_id: normalizedId,
-  });
-
-  if (error) {
-    throw new Error(toSupabaseErrorMessage(error, 'Failed to load event occurrence.'));
-  }
-
-  const row = ((data ?? []) as EventFeedRow[])[0];
-  return row ? mapCanonicalOccurrenceRow(row) : null;
 }
 
 export async function fetchEventOccurrenceContent(
@@ -1440,32 +1285,6 @@ export async function getRoomPresenceSummary(roomId: string): Promise<CanonicalR
   };
 }
 
-export async function saveEventReminderPreference(input: {
-  channel?: 'email' | 'in_app' | 'push';
-  enabled: boolean;
-  leadMinutes?: number;
-  occurrenceId?: string;
-  roomId?: string;
-  seriesId?: string;
-  targetType: 'occurrence' | 'room' | 'series';
-}): Promise<ReminderPreferenceRow | null> {
-  const { data, error } = await supabase.rpc('save_event_reminder_preference', {
-    p_channel: input.channel ?? 'push',
-    p_enabled: input.enabled,
-    p_lead_minutes: input.leadMinutes ?? 15,
-    p_occurrence_id: input.occurrenceId?.trim() || null,
-    p_room_id: input.roomId?.trim() || null,
-    p_series_id: input.seriesId?.trim() || null,
-    p_target_type: input.targetType,
-  });
-
-  if (error) {
-    throw new Error(toSupabaseErrorMessage(error, 'Failed to save event reminder preference.'));
-  }
-
-  return (((data ?? []) as ReminderPreferenceRow[])[0] ?? null) as ReminderPreferenceRow | null;
-}
-
 export async function fetchEvents(limit = 8): Promise<AppEvent[]> {
   const cacheKey = `${limit}`;
   return loadWithTimedCache(
@@ -1497,38 +1316,6 @@ export async function fetchEvents(limit = 8): Promise<AppEvent[]> {
       }
 
       return mappedEvents;
-    },
-  );
-}
-
-export async function fetchEventById(eventId: string): Promise<AppEvent | null> {
-  const normalizedEventId = eventId.trim();
-  if (!normalizedEventId) {
-    return null;
-  }
-
-  return loadWithTimedCache(
-    eventByIdCache,
-    eventByIdRequestCache,
-    normalizedEventId,
-    EVENT_BY_ID_CACHE_TTL_MS,
-    async () => {
-      let occurrence = await getEventOccurrenceByJoinTarget({
-        occurrenceId: normalizedEventId,
-        ...(normalizedEventId.includes('|') ? { occurrenceKey: normalizedEventId } : {}),
-      });
-
-      if (!occurrence && isUuid(normalizedEventId)) {
-        occurrence = await getEventOccurrenceByJoinTarget({
-          roomId: normalizedEventId,
-        });
-      }
-
-      if (!occurrence) {
-        return null;
-      }
-
-      return mapCanonicalOccurrenceToAppEvent(occurrence);
     },
   );
 }
@@ -2215,38 +2002,6 @@ export function prefetchPrayerScriptVariantByTitle(input: {
   });
 }
 
-export async function fetchLatestIntention(userId: string): Promise<string> {
-  const { data, error } = await supabase
-    .from('user_intentions')
-    .select('id,intention,created_at')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (error) {
-    throw new Error(toSupabaseErrorMessage(error, 'Failed to load your latest intention.'));
-  }
-
-  return ((data as UserIntentionRow | null)?.intention ?? '').trim();
-}
-
-export async function saveIntention(userId: string, intention: string) {
-  const trimmed = intention.trim();
-  if (!trimmed) {
-    return;
-  }
-
-  const { error } = await supabase.from('user_intentions').insert({
-    intention: trimmed,
-    user_id: userId,
-  });
-
-  if (error) {
-    throw new Error(toSupabaseErrorMessage(error, 'Failed to save intention.'));
-  }
-}
-
 export async function fetchUserPreferences(userId: string): Promise<UserPreferences> {
   const normalizedUserId = userId.trim();
   if (!normalizedUserId) {
@@ -2509,25 +2264,6 @@ export async function fetchProfileSummary(userId: string): Promise<ProfileSummar
       };
     },
   );
-}
-
-export async function setHighContrastMode(userId: string, enabled: boolean) {
-  const normalizedUserId = userId.trim();
-  if (!normalizedUserId) {
-    return;
-  }
-
-  const { error } = await supabase
-    .from('profiles')
-    .update({ high_contrast_mode: enabled })
-    .eq('id', normalizedUserId);
-
-  if (error) {
-    throw new Error(toSupabaseErrorMessage(error, 'Failed to update accessibility preference.'));
-  }
-
-  userPreferencesCache.delete(normalizedUserId);
-  profileSummaryCache.delete(normalizedUserId);
 }
 
 export async function fetchSoloStats(userId: string): Promise<SoloStats> {

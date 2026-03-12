@@ -1,6 +1,6 @@
-﻿# Egregor v2
+# Egregor
 
-Clean rebuild scaffold for Egregor v2.
+Clean rebuild scaffold for Egregor.
 
 ## Structure
 
@@ -58,3 +58,4 @@ supabase secrets set OPENAI_API_KEY=... ELEVENLABS_API_KEY=... NOTIFICATION_DISP
 Phase 6A release/operator docs live in:
 
 - `mobile/docs/release/`
+

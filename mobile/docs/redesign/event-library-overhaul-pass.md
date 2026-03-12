@@ -192,9 +192,6 @@ New scripts:
 5. Combined canonical prewarm (prayers + events)
 - `supabase/scripts/prewarm-canonical-content.mjs`
 
-Compatibility shim:
-- `supabase/scripts/prewarm-event-library-audio-artifacts.mjs` now delegates to canonical occurrence audio prewarm script and logs deprecation.
-
 Prayer prewarm remains in place:
 - `supabase/scripts/generate-prayer-library-scripts.mjs`
 - `supabase/scripts/prewarm-prayer-audio-artifacts.mjs`
@@ -241,7 +238,6 @@ Primary touched areas:
   - `supabase/scripts/backfill-missing-event-artifacts.mjs` (new)
   - `supabase/scripts/prewarm-canonical-content.mjs` (new)
   - `supabase/scripts/event-library-cleanup-summary.sql` (new)
-  - `supabase/scripts/prewarm-event-library-audio-artifacts.mjs` (deprecated shim)
   - `supabase/scripts/lunar-phase-reference.2026-2028.json` (updated)
 
 - Mobile runtime:

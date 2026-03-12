@@ -45,7 +45,7 @@ Scope: Canonical content/data/pipeline overhaul for event library only.
    - `EVENT_LIBRARY_CATALOG` seed fallback
 6. Obsolete operational script:
    - `supabase/functions/generate-news-driven-events`
-   - `supabase/scripts/prewarm-event-library-audio-artifacts.mjs`
+   - `supabase/scripts/prewarm-event-library-audio-artifacts.mjs` (removed in cleanup; canonical replacement is `prewarm-event-occurrence-audio-artifacts.mjs`)
 
 ## Canonical vs Obsolete Table/Row Classification
 

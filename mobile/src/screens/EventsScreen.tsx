@@ -17,7 +17,6 @@ import { useEventNotifications } from '../features/events/hooks/useEventNotifica
 import { useEventsData } from '../features/events/hooks/useEventsData';
 import { useOccurrenceFeed } from '../features/events/hooks/useOccurrenceFeed';
 import type { ScheduledEventOccurrence } from '../features/events/types';
-import type { AppEvent } from '../lib/api/data';
 import { getDeviceTimeZoneLabel } from '../lib/dateTime';
 import { spacing } from '../theme/tokens';
 
@@ -54,7 +53,6 @@ export function EventsScreen() {
     const uniqueUsers = new Set(activePresence.map((entry) => entry.userId));
     return uniqueUsers.size;
   }, [activePresence]);
-  const legacyGlobeEvents = useMemo<AppEvent[]>(() => [], []);
 
   const uiError = operationError ?? occurrencesError ?? activePresenceError;
 
@@ -125,7 +123,7 @@ export function EventsScreen() {
         activePresence={activePresence}
         allScheduledEvents={allScheduledEvents}
         error={null}
-        events={legacyGlobeEvents}
+        events={[]}
         loading={loading}
         newsSyncError={null}
         nowTick={nowTick}
@@ -137,7 +135,7 @@ export function EventsScreen() {
         }}
         onOpenOccurrence={onOpenOccurrence}
         onOpenOccurrenceDetails={onOpenOccurrenceDetails}
-        visibleEvents={legacyGlobeEvents}
+        visibleEvents={[]}
       />
 
       {uiError ? (
