@@ -84,6 +84,7 @@ interface PrayerLibraryScriptRow {
   duration_minutes: number;
   id: string;
   language: string;
+  prayer_library_item_id?: string;
   script_text: string;
 }
 
@@ -158,6 +159,8 @@ export interface PrayerLibraryItem {
   category: string | null;
   durationMinutes: number;
   id: string;
+  maxDurationMinutes: number;
+  minDurationMinutes: number;
   startsCount: number;
   subtitle: string;
   title: string;
@@ -700,6 +703,17 @@ function formatDurationMinutes(minutes: number) {
     return '1 min';
   }
   return `${minutes} min`;
+}
+
+function formatDurationRangeMinutes(minMinutes: number, maxMinutes: number) {
+  const normalizedMin = Math.max(1, Math.round(minMinutes));
+  const normalizedMax = Math.max(normalizedMin, Math.round(maxMinutes));
+
+  if (normalizedMin === normalizedMax) {
+    return formatDurationMinutes(normalizedMin);
+  }
+
+  return `${normalizedMin}-${normalizedMax} min`;
 }
 
 function minutesFromSeconds(totalSeconds: number) {
@@ -1415,19 +1429,65 @@ export async function fetchPrayerLibraryItems(): Promise<PrayerLibraryItem[]> {
     }
 
     const rows = (data ?? []) as PrayerLibraryRow[];
+    const itemIds = rows
+      .map((row) => row.id?.trim())
+      .filter((value): value is string => Boolean(value));
+
+    const durationRangeByItemId = new Map<string, { max: number; min: number }>();
+    if (itemIds.length > 0) {
+      const { data: scriptData, error: scriptError } = await supabase
+        .from('prayer_library_scripts')
+        .select('prayer_library_item_id,duration_minutes')
+        .eq('language', 'en')
+        .in('prayer_library_item_id', itemIds);
+
+      if (!scriptError) {
+        const scriptRows = (scriptData ?? []) as Array<{
+          duration_minutes: number | null;
+          prayer_library_item_id: string | null;
+        }>;
+
+        for (const scriptRow of scriptRows) {
+          const itemId = scriptRow.prayer_library_item_id?.trim();
+          const durationValue = Number(scriptRow.duration_minutes ?? 0);
+          const scriptDuration = Math.max(1, Math.round(durationValue));
+
+          if (!itemId || !Number.isFinite(scriptDuration) || scriptDuration <= 0) {
+            continue;
+          }
+
+          const existingRange = durationRangeByItemId.get(itemId);
+          if (!existingRange) {
+            durationRangeByItemId.set(itemId, { max: scriptDuration, min: scriptDuration });
+            continue;
+          }
+
+          durationRangeByItemId.set(itemId, {
+            max: Math.max(existingRange.max, scriptDuration),
+            min: Math.min(existingRange.min, scriptDuration),
+          });
+        }
+      }
+    }
     const items = rows.map((row) => {
       const duration = row.duration_minutes ?? 5;
       const starts = row.starts_count ?? 0;
       const category = row.category?.trim();
-      const categoryPart = category ? `${category} • ` : '';
+      const categoryPart = category ? `${category} - ` : '';
+      const durationRange = durationRangeByItemId.get(row.id);
+      const minDurationMinutes = durationRange?.min ?? duration;
+      const maxDurationMinutes = durationRange?.max ?? duration;
+      const durationLabel = formatDurationRangeMinutes(minDurationMinutes, maxDurationMinutes);
 
       return {
         body: row.body,
         category: category ?? null,
         durationMinutes: duration,
         id: row.id,
+        maxDurationMinutes,
+        minDurationMinutes,
         startsCount: starts,
-        subtitle: `${categoryPart}${formatDurationMinutes(duration)} • ${starts} starts`,
+        subtitle: `${categoryPart}${durationLabel} - ${starts} starts`,
         title: row.title,
       };
     });
@@ -2975,3 +3035,4 @@ export function subscribeSharedSoloSession(input: {
     void supabase.removeChannel(channel);
   };
 }
+

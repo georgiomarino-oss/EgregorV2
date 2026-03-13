@@ -81,11 +81,22 @@ export function PrayerCard({
         ],
       };
 
+  const minDurationMinutes = Math.max(1, item.minDurationMinutes ?? item.durationMinutes);
+  const maxDurationMinutes = Math.max(minDurationMinutes, item.maxDurationMinutes ?? item.durationMinutes);
+  const durationLabel =
+    minDurationMinutes === maxDurationMinutes
+      ? `${minDurationMinutes} min`
+      : `${minDurationMinutes}-${maxDurationMinutes} min`;
+  const durationAccessibilityLabel =
+    minDurationMinutes === maxDurationMinutes
+      ? `${minDurationMinutes} minute`
+      : `${minDurationMinutes} to ${maxDurationMinutes} minutes`;
+
   return (
     <Animated.View style={settleStyle}>
       <Pressable
         accessibilityHint="Opens this prayer in your solo room."
-        accessibilityLabel={`${item.title}. ${item.durationMinutes} minutes. ${categoryLabel}. ${item.startsCount} starts.`}
+        accessibilityLabel={`${item.title}. ${durationAccessibilityLabel}. ${categoryLabel}. ${item.startsCount} starts.`}
         accessibilityRole="button"
         onPress={onStartPrayer}
         style={({ pressed }) => [!reduceMotionEnabled && pressed && styles.cardPressed]}
@@ -131,7 +142,7 @@ export function PrayerCard({
           </Typography>
 
           <Typography color={soloSurface.card.detail} variant="Body" weight="bold">
-            {`${item.durationMinutes} min - ${categoryLabel}`}
+            {`${durationLabel} - ${categoryLabel}`}
           </Typography>
           <Typography color={soloSurface.card.meta} variant="Caption">
             {`${item.startsCount} starts`}
