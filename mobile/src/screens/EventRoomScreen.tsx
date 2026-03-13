@@ -288,8 +288,6 @@ export function EventRoomScreen() {
     ensureAudioPlayer,
     isMuted,
     isRunning,
-    loadingAudio,
-    pause,
     play,
     positionMillis: playerPositionMillis,
     seekTo,
@@ -312,8 +310,6 @@ export function EventRoomScreen() {
     [participantCount],
   );
   const isCollectiveRoomLive = hasStarted && !hasEnded;
-  const isPlaybackDisabled =
-    loadingEvent || loadingAudio || !eventScript.trim() || !hasStarted || hasEnded;
   const progress = durationMillis > 0 ? Math.min(1, activeElapsedMillis / durationMillis) : 0;
 
   const elapsedLabel = formatClock(activeElapsedMillis / 1000);
@@ -406,31 +402,6 @@ export function EventRoomScreen() {
     await play();
     setError(null);
   }, [durationMillis, ensureAudioPlayer, hasEnded, hasStarted, nowTick, play, seekTo, startMillis]);
-
-  const onTogglePlayback = useCallback(async () => {
-    closeAllSelectors();
-
-    if (!hasStarted) {
-      setError('This live room has not started yet.');
-      return;
-    }
-
-    if (hasEnded) {
-      setError('This live room has already ended.');
-      return;
-    }
-
-    if (isRunning) {
-      pause();
-      return;
-    }
-
-    try {
-      await startPlaybackAtScheduleOffset();
-    } catch (nextError) {
-      setError(toEventRoomSafeErrorMessage(nextError, 'Unable to start room audio right now.'));
-    }
-  }, [closeAllSelectors, hasEnded, hasStarted, isRunning, pause, startPlaybackAtScheduleOffset]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -1545,65 +1516,61 @@ export function EventRoomScreen() {
             stageIntroStyle,
           ]}
         >
-          <Pressable
-            accessibilityHint="Starts or pauses live room audio."
-            accessibilityLabel={isRunning ? 'Pause live room audio' : 'Play live room audio'}
-            accessibilityRole="button"
-            accessibilityState={{
-              busy: loadingAudio || loadingEvent,
-              disabled: isPlaybackDisabled,
-              selected: isRunning,
-            }}
-            disabled={isPlaybackDisabled}
-            onPress={() => {
-              void onTogglePlayback();
-            }}
-            style={({ pressed }) => [
-              styles.playPulseTap,
-              !reduceMotionEnabled && pressed && styles.playPressed,
+          <Animated.View
+            accessible={false}
+            importantForAccessibility="no-hide-descendants"
+            style={[
+              styles.centerFocalStack,
+              useCompactLayout && styles.centerFocalStackCompact,
+              isVeryCompactHeight && styles.centerFocalStackVeryCompact,
+              centerOrbStyle,
             ]}
           >
-            <Animated.View
+            <View
+              accessible={false}
+              importantForAccessibility="no-hide-descendants"
               style={[
-                styles.centerFocalStack,
-                useCompactLayout && styles.centerFocalStackCompact,
-                isVeryCompactHeight && styles.centerFocalStackVeryCompact,
-                centerOrbStyle,
+                styles.centerHaloOuter,
+                useCompactLayout && styles.centerHaloOuterCompact,
+                isVeryCompactHeight && styles.centerHaloOuterVeryCompact,
+              ]}
+            />
+            <View
+              accessible={false}
+              importantForAccessibility="no-hide-descendants"
+              style={[
+                styles.centerHaloInner,
+                useCompactLayout && styles.centerHaloInnerCompact,
+                isVeryCompactHeight && styles.centerHaloInnerVeryCompact,
+              ]}
+            />
+            <View
+              style={[
+                styles.liveStatusCore,
+                useCompactLayout && styles.liveStatusCoreCompact,
+                isVeryCompactHeight && styles.liveStatusCoreVeryCompact,
               ]}
             >
-              <View
-                accessible={false}
-                importantForAccessibility="no-hide-descendants"
-                style={[
-                  styles.centerHaloOuter,
-                  useCompactLayout && styles.centerHaloOuterCompact,
-                  isVeryCompactHeight && styles.centerHaloOuterVeryCompact,
-                ]}
+              <MaterialCommunityIcons
+                color={roomAtmosphere.collective.transportFill}
+                name="broadcast"
+                size={28}
               />
-              <View
-                accessible={false}
-                importantForAccessibility="no-hide-descendants"
+              <Typography
+                allowFontScaling={false}
+                color={roomAtmosphere.collective.transportFill}
                 style={[
-                  styles.centerHaloInner,
-                  useCompactLayout && styles.centerHaloInnerCompact,
-                  isVeryCompactHeight && styles.centerHaloInnerVeryCompact,
+                  styles.liveStatusText,
+                  useCompactLayout && styles.liveStatusTextCompact,
+                  isVeryCompactHeight && styles.liveStatusTextVeryCompact,
                 ]}
-              />
-              <View
-                style={[
-                  styles.playButtonCore,
-                  useCompactLayout && styles.playButtonCoreCompact,
-                  isVeryCompactHeight && styles.playButtonCoreVeryCompact,
-                ]}
+                variant="Label"
+                weight="bold"
               >
-                <MaterialCommunityIcons
-                  color={roomAtmosphere.collective.transportFill}
-                  name={isRunning ? 'pause' : 'play'}
-                  size={36}
-                />
-              </View>
-            </Animated.View>
-          </Pressable>
+                {roomStateLabel}
+              </Typography>
+            </View>
+          </Animated.View>
 
           <Animated.View style={scriptPanelFocusStyle}>
             <View
@@ -2071,30 +2038,38 @@ const styles = StyleSheet.create({
   noMotion: {
     opacity: 1,
   },
-  playButtonCore: {
+  liveStatusCore: {
     alignItems: 'center',
     backgroundColor: roomAtmosphere.collective.panelBackground,
     borderColor: roomAtmosphere.collective.panelBorder,
     borderRadius: radii.pill,
     borderWidth: 0.7,
-    height: 84,
+    gap: spacing.xxs / 2,
+    height: 88,
     justifyContent: 'center',
-    width: 84,
+    width: 88,
   },
-  playButtonCoreCompact: {
-    height: 74,
-    width: 74,
+  liveStatusCoreCompact: {
+    height: 78,
+    width: 78,
   },
-  playButtonCoreVeryCompact: {
+  liveStatusCoreVeryCompact: {
     height: 64,
     width: 64,
   },
-  playPulseTap: {
-    alignItems: 'center',
-    justifyContent: 'center',
+  liveStatusText: {
+    fontSize: 11,
+    letterSpacing: 0.22,
+    lineHeight: 12,
+    textTransform: 'uppercase',
   },
-  playPressed: {
-    transform: [{ scale: 0.98 }],
+  liveStatusTextCompact: {
+    fontSize: 10,
+    lineHeight: 11,
+  },
+  liveStatusTextVeryCompact: {
+    fontSize: 9,
+    lineHeight: 10,
   },
   prayerTitle: {
     lineHeight: 31,
